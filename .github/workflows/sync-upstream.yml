@@ -1,0 +1,56 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Add upstream remote
+        run: |
+          git remote remove upstream 2>/dev/null || true
+          git remote add upstream https://github.com/xxxscarlxrd404/qq-farm-bot.git
+
+      - name: Fetch upstream
+        run: git fetch upstream
+
+      - name: Merge upstream/main
+        id: merge
+        continue-on-error: true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git merge upstream/main --no-edit
+
+      - name: Push merged result
+        if: steps.merge.outcome == 'success'
+        run: git push origin main
+
+      - name: Rollback on conflict
+        if: steps.merge.outcome == 'failure'
+        run: |
+          git merge --abort
+          echo "上游代码与本地改动发生冲突，已自动回滚，main 未被修改。"
+
+      - name: Open conflict issue
+        if: steps.merge.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "上游同步冲突，需要手动处理" \
+            --body "自动同步上游 https://github.com/xxxscarlxrd404/qq-farm-bot 时发生冲突，已回滚。请本地执行：\n\`git fetch upstream && git merge upstream/main\`\n手动解决冲突后提交推送。冲突可能来自上游改动了本地保留的登录/卡密相关文件。" \
+            || true
