@@ -133,6 +133,11 @@ const landTextureUrl = computed(() => {
   return `/game-config/land_images/${landTextureName.value}.png`
 })
 
+const shouldRotateLandTexture = computed(() => {
+  const level = Number(land.value?.level) || 1
+  return level === 5
+})
+
 const mutantEffects = computed(() => {
   const effects = Array.isArray(land.value?.mutantEffects) ? land.value.mutantEffects : []
   return effects
@@ -341,7 +346,10 @@ function getIsometricBubbleClass(targetLand: any) {
       <img
         :src="landTextureUrl"
         alt=""
-        :class="Number(land.plantSize) > 1 ? 'land-ground-merged' : 'land-ground-single'"
+        :class="[
+          Number(land.plantSize) > 1 ? 'land-ground-merged' : 'land-ground-single',
+          { 'land-ground-rotated': shouldRotateLandTexture },
+        ]"
       >
     </div>
 
@@ -1339,6 +1347,11 @@ function getIsometricBubbleClass(targetLand: any) {
   transform: translate(-50%, -50%);
   opacity: 0.82;
   filter: saturate(1.05) drop-shadow(0 3px 4px rgba(71, 53, 35, 0.16));
+}
+
+.land-ground-single.land-ground-rotated,
+.land-ground-merged.land-ground-rotated {
+  transform: translate(-50%, -50%) rotate(180deg);
 }
 
 .land-card.col-span-2 .land-ground-layer,

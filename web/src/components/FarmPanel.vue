@@ -264,6 +264,11 @@ function getLandTextureUrl(land: any) {
   return `/game-config/land_images/${land?.needWater ? `land_dry${level}` : `land_valid${level}`}.png`
 }
 
+function shouldRotateLandTexture(land: any) {
+  const level = Number(land?.level) || 1
+  return level === 5
+}
+
 function loadCanvasImage(src: string) {
   const cached = imageCache.get(src)
   if (cached)
@@ -311,7 +316,16 @@ async function drawFarmCanvas() {
     const large = Number(land?.plantSize) > 1
     const width = large ? MERGED_LAND_WIDTH : SINGLE_LAND_WIDTH
     const height = large ? MERGED_LAND_HEIGHT : SINGLE_LAND_HEIGHT
-    context.drawImage(texture, x - width / 2, y - height / 2, width, height)
+    if (shouldRotateLandTexture(land)) {
+      context.save()
+      context.translate(x, y)
+      context.rotate(Math.PI)
+      context.drawImage(texture, -width / 2, -height / 2, width, height)
+      context.restore()
+    }
+    else {
+      context.drawImage(texture, x - width / 2, y - height / 2, width, height)
+    }
   })
 }
 
