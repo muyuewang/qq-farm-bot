@@ -2,6 +2,7 @@ import { storeToRefs } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import api from '@/api'
 import { useSettingStore } from '@/stores/setting'
+import { useUserStore } from '@/stores/user'
 
 interface DeviceProtocolConfig {
   enabled: boolean
@@ -96,13 +97,21 @@ const CHANNEL_DOCS: Record<string, string> = {
 }
 
 export function useUserSettings(showAlert: (message: string, type?: AlertType) => void) {
+  const userStore = useUserStore()
   const settingStore = useSettingStore()
   const { settings } = storeToRefs(settingStore)
 
+  const passwordSaving = ref(false)
   const offlineSaving = ref(false)
   const offlineTesting = ref(false)
   const deviceProtocolLoading = ref(false)
   const deviceProtocolSaving = ref(false)
+
+  const passwordForm = ref({
+    old: '',
+    new: '',
+    confirm: '',
+  })
 
   const deviceProtocolPresetOptions = computed(() =>
     DEVICE_PROTOCOL_PRESETS.map(item => ({ label: item.label, value: item.value })),
@@ -295,6 +304,41 @@ export function useUserSettings(showAlert: (message: string, type?: AlertType) =
     syncLocalOfflineSettings()
   }, { deep: true })
 
+  async function handleChangePassword() {
+    if (!passwordForm.value.old || !passwordForm.value.new) {
+      showAlert('请填写完整', 'danger')
+      return
+    }
+    if (passwordForm.value.new !== passwordForm.value.confirm) {
+      showAlert('两次密码输入不一致', 'danger')
+      return
+    }
+    if (passwordForm.value.new.length < 4) {
+      showAlert('密码长度至少4位', 'danger')
+      return
+    }
+
+    passwordSaving.value = true
+    try {
+      const res = await userStore.changePassword(passwordForm.value.old, passwordForm.value.new)
+
+      if (res.ok) {
+        showAlert('密码修改成功，请重新登录', 'primary')
+        passwordForm.value = { old: '', new: '', confirm: '' }
+        setTimeout(() => {
+          userStore.logout()
+          window.location.href = '/login'
+        }, 1500)
+      }
+      else {
+        showAlert(`修改失败: ${res.error || '未知错误'}`, 'danger')
+      }
+    }
+    finally {
+      passwordSaving.value = false
+    }
+  }
+
   async function handleSaveOffline() {
     offlineSaving.value = true
     try {
@@ -333,10 +377,12 @@ export function useUserSettings(showAlert: (message: string, type?: AlertType) =
   }
 
   return {
+    passwordSaving,
     offlineSaving,
     offlineTesting,
     deviceProtocolLoading,
     deviceProtocolSaving,
+    passwordForm,
     deviceProtocolPresetOptions,
     selectedDevicePreset,
     deviceProtocolForm,
@@ -352,6 +398,7 @@ export function useUserSettings(showAlert: (message: string, type?: AlertType) =
     fetchDeviceProtocol,
     syncLocalOfflineSettings,
     handleSaveDeviceProtocol,
+    handleChangePassword,
     handleSaveOffline,
     handleTestOffline,
   }

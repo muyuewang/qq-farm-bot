@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import DeviceProtocolCard from '@/components/settings/DeviceProtocolCard.vue'
 import OfflineReminderCard from '@/components/settings/OfflineReminderCard.vue'
+import PasswordChangeCard from '@/components/settings/PasswordChangeCard.vue'
 
 interface SelectOption<T = string | number> {
   label: string
@@ -15,6 +16,12 @@ interface DeviceProtocolConfig {
   deviceMac: string
   deviceId: string
   imei: string
+}
+
+interface PasswordForm {
+  old: string
+  new: string
+  confirm: string
 }
 
 interface OfflineReminderConfig {
@@ -38,6 +45,7 @@ defineProps<{
   deviceProtocolLoading: boolean
   deviceProtocolSaving: boolean
   deviceProtocolPresetOptions: SelectOption[]
+  passwordSaving: boolean
   channelOptions: SelectOption[]
   currentChannelDocUrl: string
   offlineSaving: boolean
@@ -50,6 +58,7 @@ const emit = defineEmits<{
   randomDeviceId: []
   randomImei: []
   saveDeviceProtocol: []
+  changePassword: []
   openDocs: []
   testOffline: []
   saveOffline: []
@@ -57,13 +66,14 @@ const emit = defineEmits<{
 
 const deviceProtocolForm = defineModel<DeviceProtocolConfig>('deviceProtocolForm', { required: true })
 const selectedDevicePreset = defineModel<string>('selectedDevicePreset', { required: true })
+const passwordForm = defineModel<PasswordForm>('passwordForm', { required: true })
 const offlineConfig = defineModel<OfflineReminderConfig>('offlineConfig', { required: true })
 </script>
 
 <template>
   <div class="space-y-4">
     <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
-      设备与通知
+      用户管理
     </h3>
 
     <div class="space-y-4">
@@ -78,6 +88,12 @@ const offlineConfig = defineModel<OfflineReminderConfig>('offlineConfig', { requ
         @random-device-id="emit('randomDeviceId')"
         @random-imei="emit('randomImei')"
         @save="emit('saveDeviceProtocol')"
+      />
+
+      <PasswordChangeCard
+        v-model:form="passwordForm"
+        :saving="passwordSaving"
+        @save="emit('changePassword')"
       />
 
       <OfflineReminderCard

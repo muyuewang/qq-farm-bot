@@ -3,7 +3,8 @@
  * QQ Farm Automation Bot - 管理面板服务器
  *
  * 提供 Express + Socket.IO 管理面板后端：
- * - 默认管理员会话
+ * - 用户认证（登录/注册/密码修改/密码重置）
+ * - 卡密管理（创建/查询/续费/领取记录）
  * - 账号管理（增删改查/启动停止/备注）
  * - 农场操作（种植/施肥/铲除/收获）
  * - 好友管理（列表/操作/拉黑）
@@ -35,6 +36,7 @@ const { registerAdminAnalyticsRoutes } = require("./admin-analytics-routes");
 const { createAdminAccountAccess } = require("./admin-account-access");
 const { registerAdminAuthRoutes } = require("./admin-auth-routes");
 const { registerAdminBagRoutes } = require("./admin-bag-routes");
+const { registerAdminCardRoutes } = require("./admin-card-routes");
 const { registerAdminCareerRoutes } = require("./admin-career-routes");
 const { registerAdminCaptureRoutes, setEmbeddedCapture } = require("./admin-capture-routes");
 const { createCaptureCore } = require("../capture/index");
@@ -47,6 +49,7 @@ const {
 } = require("./admin-farm-resource-routes");
 const { registerAdminFriendRoutes } = require("./admin-friend-routes");
 const { registerAdminIllustratedRoutes } = require("./admin-illustrated-routes");
+const { registerAdminLoginLogRoutes } = require("./admin-login-log-routes");
 const {
   registerAdminPlantBlacklistRoutes,
 } = require("./admin-plant-blacklist-routes");
@@ -57,7 +60,9 @@ const { createAdminRouteHelpers } = require("./admin-route-helpers");
 const { registerAdminSettingsRoutes } = require("./admin-settings-routes");
 const { registerAdminShopRoutes } = require("./admin-shop-routes");
 const { createAdminSessionManager } = require("./admin-session-manager");
+const { registerAdminSuperAdminRoutes } = require("./admin-super-admin-routes");
 const { registerAdminSystemRoutes } = require("./admin-system-routes");
+const { registerAdminUserRoutes } = require("./admin-user-routes");
 const userStore = require("../models/user-store");
 
 const adminLogger = createModuleLogger("admin");
@@ -68,12 +73,19 @@ const DEFAULT_ALLOWED_ORIGINS = [
 ];
 const PUBLIC_API_PATHS = new Set([
   "/login",
-  "/auto-login",
   "/qr/create",
   "/qr/check",
+  "/card-claim/status",
+  "/card-claim/claim",
   "/game-version",
   "/public/login-links",
+  "/user-count",
+  "/super-admin-announcement",
+  "/super-admin-announcement/verify",
   "/changelog",
+  "/public/renew",
+  "/public/reset-password/verify",
+  "/public/reset-password/confirm",
   "/health",
 ]);
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -353,6 +365,9 @@ function startAdminServer(dataProvider) {
     getProvider: () => provider,
   });
   const {
+    checkAccountLimit,
+    checkAccountLimitInterval,
+    getAdminUserMutationError,
     requireAdminRole,
     requireDangerConfirmation,
     requireSuperAdminRole,
@@ -382,6 +397,7 @@ function startAdminServer(dataProvider) {
   );
   app.use("/login-assets", (req, res) => res.sendStatus(404));
   setInterval(cleanupInvalidAdminSessions, FIVE_MINUTES_MS);
+  setInterval(checkAccountLimitInterval, ONE_MINUTE_MS);
 
   registerAdminAuthRoutes({
     app,
@@ -491,6 +507,16 @@ function startAdminServer(dataProvider) {
     canAccessAccount,
     requireDangerConfirmation,
   });
+  registerAdminSuperAdminRoutes({
+    app,
+    store,
+    userStore,
+    logger: adminLogger,
+    requireAdminToken,
+    requireSuperAdminRole,
+    requireDangerConfirmation,
+    checkAccountLimit,
+  });
   registerAdminSystemRoutes({
     app,
     store,
@@ -515,6 +541,26 @@ function startAdminServer(dataProvider) {
     requireDangerConfirmation,
     canAccessAccount,
     resolveAccountReference,
+  });
+  registerAdminCardRoutes({
+    app,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+    userStore,
+    adminLogger,
+  });
+  registerAdminUserRoutes({
+    app,
+    requireAdminToken,
+    requireAdminRole,
+    requireSuperAdminRole,
+    requireDangerConfirmation,
+    getAdminUserMutationError,
+    userStore,
+    adminLogger,
+    invalidateAdminSessions,
+    updateAdminSessions,
   });
   registerAdminCurrentUserRoutes({
     app,
@@ -542,6 +588,14 @@ function startAdminServer(dataProvider) {
   });
   registerAdminQrLoginRoutes({ app });
   registerAdminProxyRoutes({ app, logger: adminLogger });
+  registerAdminLoginLogRoutes({
+    app,
+    userStore,
+    logger: adminLogger,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+  });
   registerSpaFallback(app, webDist);
 
   const subscribeSocketToAccount = (socket, accountRef = "") => {

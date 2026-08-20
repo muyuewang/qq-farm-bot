@@ -6,7 +6,7 @@
 
 🌱 一位会自己浇水、除草、收菜的 QQ 农场小帮手
 
-[能做什么](#-能做什么) · [微信扫码](#-微信扫码登录) · [开始种田](#-开始种田) · [Docker 部署](#-docker-部署) · [更新记录](docs/CHANGELOG.md) · [使用文档](#-使用文档) · [支持项目](#-支持项目)
+[能做什么](#-能做什么) · [微信扫码](#-微信扫码登录) · [开始种田](#-开始种田) · [Docker 部署](#-docker-部署) · [更新记录](docs/CHANGELOG.md) · [使用文档](#-使用文档) · [赛博义父](#-赛博义父)
 
 </div>
 
@@ -25,9 +25,26 @@
 
 > 🌱 想看看这片农场是怎么一步步长大的吗？前往[农场成长记录](docs/CHANGELOG.md)查看最新更新和完整历史。
 
+> 🐛 问题反馈？可加QQ群：1105296443。或点击链接加入：https://qm.qq.com/q/L3E9Yp03Ys
+
 ## <th><img src="https://cdn.simpleicons.org/wechat/07C160" height="20" alt="微信" /></th> 微信扫码登录
 
 微信玩家可直接在“添加账号 → 微信扫码”中完成登录。扫码链路已内置到 Bot 进程，通过应用宝 OAuth 获取微信会话，并使用内置 MMTLS 协议换取农场短时效 Code，无需额外部署 YYB-GO、第三方登录 API 或代理容器。
+
+扫码添加成功后会：
+
+- 保存 `loginBuffer` 及滚动刷新凭证，并避免将敏感凭证返回浏览器。
+- 默认启动账号，并自动开启“自动刷新获取 Code”，默认间隔为 60 分钟。
+- 每 30 分钟主动滚动保活微信凭证；手动启动、程序启动及定时刷新前都会获取新 Code。
+- 微信账号的 WebSocket 返回 400 时，由主进程调用同一套内置应用宝协议刷新凭据和 Code，成功后自动重启账号；同账号的并发刷新会合并为一次，避免滚动 Token 被旧值覆盖。
+- Worker 每 30 秒响应一次主进程存活探测；超过 90 秒无响应会自动重启，一小时内已自动重启 3 次仍未恢复则停止账号，等待人工检查。
+- 自动恢复按账号限制为每日最多 8 次；连续刷新失败 3 次后熔断，避免网络异常、凭据失效或手机端占线时无限重登。
+- 管理接口禁止直接提交 `loginBuffer`、Refresh Token 和 Access Token；更换 `wxid` 会清除旧凭据，必须通过当前面板用户的有效扫码会话重新写入。
+- 掉线后按账号的自动刷新间隔延迟重登，避免旧 Code 反复重连。
+
+旧版外部 API 配置仍作为缺少内置凭证的兼容回退；新扫码账号始终优先使用进程内协议。正常情况下不需要代理池。如确需使用代理，应优先采用账号固定出口，避免随机切换 IP 导致微信会话环境变化。
+
+> 本轮自愈只处理登录凭据刷新、Worker 无响应和重登熔断；尚未引入业务请求合并、心跳请求容量预留或资源包完整性校验。
 
 ## 🧺 小推车里装了什么
 
@@ -187,9 +204,36 @@ qq-farm-bot/
 - 日志、缓存和临时文件
 - `node_modules/` 与构建产物
 
-## 💖 支持项目
+## ☕ 赛博义父
 
-如果这个项目对你有帮助，可以通过[爱发电支持 xxxscarlxrd404](https://afdian.com/a/xxxscarlxrd404)。支持完全自愿，不影响项目功能与正常使用。
+本项目会一直保持免费开源。如果这位农场小帮手替你省下了一点时间，欢迎赛博义父打赏作者。赞助完全自愿，不附带功能承诺、优先服务或专属权益；点一颗 Star、提一次建议，也都是很棒的鼓励。
+
+<table align="center" style="border-collapse: collapse; border: none;">
+  <tr>
+    <!-- 左侧：微信 -->
+    <th style="padding: 10px 20px 5px 20px; border: none; text-align: center; font-size: 16px; font-weight: bold; color: #333;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+        <img src="https://cdn.simpleicons.org/wechat/07C160" height="28" alt="微信" />
+        <span>微信</span>
+      </div>
+    </th>
+    <!-- 右侧：支付宝 -->
+    <th style="padding: 10px 20px 5px 20px; border: none; text-align: center; font-size: 16px; font-weight: bold; color: #333;">
+      <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+        <img src="https://cdn.simpleicons.org/alipay/1677FF" height="28" alt="支付宝" />
+        <span>支付宝</span>
+      </div>
+    </th>
+  </tr>
+  <tr>
+    <td style="padding: 5px 15px 15px 15px; border: none; text-align: center;">
+      <img src="docs/images/sponsor-wechat.png" width="220" alt="微信收款码" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+    </td>
+    <td style="padding: 5px 15px 15px 15px; border: none; text-align: center;">
+      <img src="docs/images/sponsor-alipay.png" width="220" alt="支付宝收款码" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+    </td>
+  </tr>
+</table>
 
 ## 📌 免责声明
 
