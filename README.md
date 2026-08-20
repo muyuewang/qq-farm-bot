@@ -25,8 +25,6 @@
 
 > 🌱 想看看这片农场是怎么一步步长大的吗？前往[农场成长记录](docs/CHANGELOG.md)查看最新更新和完整历史。
 
-> 🐛 问题反馈？可加QQ群：1105296443。或点击链接加入：https://qm.qq.com/q/L3E9Yp03Ys
-
 ## <th><img src="https://cdn.simpleicons.org/wechat/07C160" height="20" alt="微信" /></th> 微信扫码登录
 
 微信玩家可直接在“添加账号 → 微信扫码”中完成登录。扫码链路已内置到 Bot 进程，通过应用宝 OAuth 获取微信会话，并使用内置 MMTLS 协议换取农场短时效 Code，无需额外部署 YYB-GO、第三方登录 API 或代理容器。
@@ -203,37 +201,6 @@ qq-farm-bot/
 - `.env` 及其他密钥文件
 - 日志、缓存和临时文件
 - `node_modules/` 与构建产物
-
-## ☕ 赛博义父
-
-本项目会一直保持免费开源。如果这位农场小帮手替你省下了一点时间，欢迎赛博义父打赏作者。赞助完全自愿，不附带功能承诺、优先服务或专属权益；点一颗 Star、提一次建议，也都是很棒的鼓励。
-
-<table align="center" style="border-collapse: collapse; border: none;">
-  <tr>
-    <!-- 左侧：微信 -->
-    <th style="padding: 10px 20px 5px 20px; border: none; text-align: center; font-size: 16px; font-weight: bold; color: #333;">
-      <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-        <img src="https://cdn.simpleicons.org/wechat/07C160" height="28" alt="微信" />
-        <span>微信</span>
-      </div>
-    </th>
-    <!-- 右侧：支付宝 -->
-    <th style="padding: 10px 20px 5px 20px; border: none; text-align: center; font-size: 16px; font-weight: bold; color: #333;">
-      <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
-        <img src="https://cdn.simpleicons.org/alipay/1677FF" height="28" alt="支付宝" />
-        <span>支付宝</span>
-      </div>
-    </th>
-  </tr>
-  <tr>
-    <td style="padding: 5px 15px 15px 15px; border: none; text-align: center;">
-      <img src="docs/images/sponsor-wechat.png" width="220" alt="微信收款码" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-    </td>
-    <td style="padding: 5px 15px 15px 15px; border: none; text-align: center;">
-      <img src="docs/images/sponsor-alipay.png" width="220" alt="支付宝收款码" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
-    </td>
-  </tr>
-</table>
 
 ## 📌 免责声明
 
