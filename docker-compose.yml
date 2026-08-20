@@ -1,0 +1,39 @@
+services:
+  qq-farm-bot:
+    build:
+      context: .
+      dockerfile: core/Dockerfile
+    image: qq-farm-bot:latest
+    container_name: qq-farm-bot
+    restart: unless-stopped
+
+    ports:
+      - "3007:3007"               # 管理面板
+      - "18000-18999:18000-18999" # 抓包登录 MITM 代理端口池（iPhone Wi-Fi 代理连入）
+
+    volumes:
+      - ../data:/app/core/data
+
+    environment:
+      TZ: Asia/Shanghai
+      NODE_ENV: production
+      ADMIN_PORT: "3007"
+      FARM_DATA_DIR: /app/core/data
+      CAPTURE_ADVERTISE_IPS: "${CAPTURE_ADVERTISE_IPS:-auto}"
+      # 抓包服务已嵌入本进程，无需单独启动；可按需调整代理端口池：
+      # CAPTURE_PORTS: "18000-18999"
+      # 需要固定对外地址时，在 .env 中设置（局域网 / Tailscale 可同时填写）：
+      # CAPTURE_ADVERTISE_IPS=192.168.1.100,100.64.0.2
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3007/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

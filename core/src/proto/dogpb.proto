@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package gamepb.dogpb;
+
+import "corepb.proto";
+
+message DogInfo {
+    int64 id = 1;
+    int64 expire_time = 3;
+    int32 status = 4;
+    int32 level = 5;
+    int32 active = 7;
+}
+
+message GetDogInfoRequest {
+    int64 host_gid = 1;
+}
+
+message GetDogInfoReply {
+    repeated DogInfo dogs = 1;
+    int64 coin = 3;
+    int64 protect_time = 4;
+    repeated DogFood foods = 5;
+    int64 pending_gift_count = 7;
+}
+
+message ClaimSkillGiftsRequest {}
+
+message ClaimSkillGiftsReply {
+    corepb.Item item = 1;
+    int64 claimed_count = 3;
+}
+
+message PendingGiftCountNotify {
+    int64 count = 1;
+}
+
+message DogFood {
+    int64 id = 1;
+    int64 duration = 2;
+    int32 count = 3;
+}

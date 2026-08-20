@@ -1,0 +1,263 @@
+syntax = "proto3";
+
+package gamepb.activitypb;
+
+import "corepb.proto";
+
+service ActivityService {
+    rpc List(ListRequest) returns (ListReply);
+    rpc GetGroup(GetGroupRequest) returns (GetGroupReply);
+    rpc Operate(OperateRequest) returns (OperateReply);
+}
+
+message ListRequest {}
+
+message GetGroupRequest {
+    int64 id = 1;
+    string uid = 2;
+}
+
+message DrawParams {
+    int64 id = 1;
+    int64 count = 2;
+    corepb.Item cost = 3;
+}
+
+message RandomShopOperateParams {
+    int64 id = 1;
+    int64 count = 2;
+}
+
+message ExchangeShopOperateParams {
+    int64 id = 1;
+    int64 count = 2;
+}
+
+message HeluPaidDrawParams {
+    int64 type = 1;
+    int64 count = 2;
+}
+
+message QingmeiClaimParams {
+    int32 type = 1;
+}
+
+message QingmeiWineStartParams {
+    repeated corepb.Item items = 1;
+}
+
+message QingmeiWineBrewParams {
+}
+
+message QingmeiWineSellParams {
+    int32 multiple = 1;
+}
+
+message QixiGiftParams {
+    int64 friend_gid = 1;
+    int32 gift_id = 2;
+}
+
+message OperateRequest {
+    int64 id = 1;
+    int64 cmd = 2;
+    DrawParams draw = 3;
+    ExchangeShopOperateParams exchange_shop_operate = 101;
+    RandomShopOperateParams random_shop_operate = 102;
+    QingmeiClaimParams qingmei_claim_params = 103;
+    HeluPaidDrawParams helu_paid_draw = 107;
+    QingmeiWineStartParams qingmei_wine_start = 112;
+    QingmeiWineBrewParams qingmei_wine_brew = 113;
+    QingmeiWineSellParams qingmei_wine_sell = 114;
+    QixiGiftParams qixi_gift = 124;
+}
+
+message RandomShopItem {
+    int32 id = 1;
+    string name = 2;
+    corepb.Item item = 4;
+    corepb.Item cost = 5;
+    int32 stock_count = 6;
+    int32 bought_count = 7;
+    bool special = 8;
+}
+
+message RandomShopInfo {
+    repeated RandomShopItem items = 1;
+    int64 next_refresh_time = 2;
+    int32 manual_refresh_cost = 3;
+    int32 manual_refresh_currency_id = 4;
+    int32 manual_refresh_extra_value = 5;
+    int32 max_manual_refresh_count = 6;
+    int32 manual_refresh_used_count = 7;
+}
+
+message ExchangeShopItem {
+    int32 id = 1;
+    corepb.Item item = 2;
+    corepb.Item cost = 3;
+    int32 status = 4;
+    bool owned = 5;
+    int32 sort = 6;
+    string name = 7;
+    string extra = 8;
+}
+
+message ExchangeShopInfo {
+    repeated ExchangeShopItem items = 1;
+}
+
+message DrawPoolItem {
+    int32 id = 1;
+    int32 rarity = 2;
+    corepb.Item item = 3;
+    int32 flag = 4;
+    string probability = 6;
+}
+
+message DrawInfo {
+    int32 free_remaining_count = 1;
+    int32 max_free_count = 2;
+    int32 paid_remaining_count = 3;
+    int32 max_paid_count = 4;
+    int32 paid_currency_id = 5;
+    int32 paid_price = 6;
+    int32 fallback_price = 7;
+    repeated DrawPoolItem rewards = 8;
+}
+
+message DrawReward {
+    int32 slot_id = 1;
+    corepb.Item item = 2;
+    int32 flag = 4;
+}
+
+message DrawResult {
+    repeated DrawReward rewards = 1;
+    repeated corepb.Item items = 2;
+    corepb.Item cost = 3;
+}
+
+message QingmeiPreviewResult {
+    int64 price = 1;
+}
+
+message QingmeiBrewResult {
+    int32 wine_type = 1;
+    int64 cost = 2;
+    int64 price = 3;
+    bool can_double = 4;
+}
+
+message QingmeiSellResult {
+    int32 multiple = 1;
+    int64 gold = 2;
+    corepb.Item item = 3;
+}
+
+message QingmeiClaimResult {
+    repeated corepb.Item items = 1;
+}
+
+message ActivityInfo {
+    int64 id = 1;
+    int64 parent_id = 2;
+    int32 type = 3;
+    string title = 4;
+    string payload = 5;
+    int64 start_time = 6;
+    int64 end_time = 7;
+    int32 sort = 8;
+    bool visible = 20;
+    int32 status = 21;
+    bool enabled = 22;
+    RandomShopInfo random_shop = 101;
+    ExchangeShopInfo exchange_shop = 102;
+    DrawInfo draw_info = 105;
+}
+
+message QixiBridgeStage {
+    int32 id = 1;
+    corepb.Item cost = 2;
+    repeated corepb.Item rewards = 3;
+    int32 status = 4;
+}
+
+message QixiBridgeInfo {
+    repeated corepb.Item balances = 1;
+    repeated QixiBridgeStage stages = 2;
+    int32 last_built_stage_id = 3;
+}
+
+message QixiGiftRule {
+    corepb.Item cost = 1;
+    corepb.Item reward = 2;
+    bool enabled = 3;
+    bool visible = 4;
+}
+
+message QixiGiftInfo {
+    int32 sent_count = 1;
+    int32 received_count = 2;
+    int32 max_count = 3;
+    QixiGiftRule rule = 4;
+}
+
+message ActivityNode {
+    ActivityInfo activity = 1;
+    repeated ActivityNode children = 2;
+    RandomShopInfo random_shop = 101;
+    ExchangeShopInfo exchange_shop = 102;
+    DrawInfo draw_info = 105;
+    StarRecordInfo star_record = 110;
+    QixiBridgeInfo qixi_bridge = 112;
+    QixiGiftInfo qixi_gift = 113;
+}
+
+message ListReply {
+    repeated ActivityNode groups = 1;
+}
+
+message GetGroupReply {
+    ActivityNode group = 1;
+}
+
+message StarRecordReward {
+    int32 id = 1;
+    bool unlocked = 2;
+    bool claimed = 3;
+    repeated corepb.Item rewards = 5;
+}
+
+message StarRecordConfig {
+    int32 id = 1;
+    bool featured = 2;
+    string title = 3;
+    string graph = 4;
+    string extra = 5;
+}
+
+message StarRecordInfo {
+    int32 status = 1;
+    int32 opened_days = 2;
+    repeated StarRecordReward records = 4;
+    repeated StarRecordConfig configs = 5;
+}
+
+message StarRecordClaimResult {
+    repeated int32 record_ids = 1;
+    repeated corepb.Item rewards = 2;
+}
+
+message OperateReply {
+    int64 id = 1;
+    int32 cmd = 2;
+    ActivityNode group = 3;
+    DrawResult draw_result = 108;
+    QingmeiPreviewResult qingmei_preview = 113;
+    QingmeiBrewResult qingmei_brew = 114;
+    QingmeiSellResult qingmei_sell = 115;
+    QingmeiClaimResult qingmei_claim = 104;
+    StarRecordClaimResult star_record_claim = 120;
+    corepb.Item qixi_gift_result = 125;
+}

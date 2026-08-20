@@ -1,0 +1,16 @@
+[
+  { "id": 1029003, "seed_id": 29003, "fruit_id": 49003, "asset_name": "Crop_9003", "name": "星语铃花", "size": 2, "grow_phases": "种子:8640;发芽:8640;小叶子:8640;大叶子:8640;开花:8640;成熟:0;", "all_state_spine": "spine/v2/xiyouzhongzi/xingyulinghua/1029003" },
+  { "id": 1021353, "seed_id": 21353, "fruit_id": 41353, "asset_name": "Crop_1353", "name": "粉樱花" },
+  { "id": 1020264, "seed_id": 20264, "fruit_id": 40264, "asset_name": "Crop_264", "name": "红色郁金香" },
+  { "id": 1021404, "seed_id": 21404, "fruit_id": 41404, "asset_name": "Crop_1404", "name": "白牵牛花" },
+  { "id": 1020108, "seed_id": 20108, "fruit_id": 40108, "asset_name": "Crop_108", "name": "铃兰" },
+  { "id": 1021037, "seed_id": 21037, "fruit_id": 41037, "asset_name": "Crop_1037", "name": "银星海棠", "grow_phases": "种子:8640;发芽:8640;小叶子:8640;大叶子:8640;初熟:8640;成熟:0;" },
+  { "id": 1060032, "seed_id": 26032, "fruit_id": 46032, "asset_name": "Crop_6032", "name": "金盏花" },
+  { "id": 1021050, "seed_id": 21050, "fruit_id": 41050, "asset_name": "Crop_1050", "name": "卷丹百合" },
+  { "id": 1021251, "seed_id": 21251, "fruit_id": 41251, "asset_name": "Crop_1251", "name": "紫玫瑰" },
+  { "id": 1021380, "seed_id": 21380, "fruit_id": 41380, "asset_name": "Crop_1380", "name": "米兰花" },
+  { "id": 1020129, "seed_id": 20129, "fruit_id": 40129, "asset_name": "Crop_129", "name": "勿忘我" },
+  { "id": 1020375, "seed_id": 20375, "fruit_id": 40375, "asset_name": "Crop_375", "name": "木槿" },
+  { "id": 1020207, "seed_id": 20207, "fruit_id": 40207, "asset_name": "Crop_207", "name": "绣球花" },
+  { "id": 1020329, "seed_id": 20329, "fruit_id": 40329, "asset_name": "Crop_329", "name": "发财红包" }
+]
