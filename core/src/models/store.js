@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getDataFile, ensureDataDir } = require('../config/runtime-paths');
 const { readTextFile, readJsonFile, writeJsonFileAtomic } = require('../services/json-db');
+const { compareBagSeedGameOrder } = require('../utils/bag-seed-order');
 
 // ==================== 文件路径 ====================
 
@@ -165,7 +166,7 @@ function deleteAccountCaches(accountId) {
 // ==================== 允许的策略 ====================
 
 const ALLOWED_PLANTING_STRATEGIES = [
-    'preferred', 'level', 'max_exp', 'max_fert_exp',
+    'level', 'max_exp', 'max_fert_exp',
     'max_profit', 'max_fert_profit', 'bag_priority'
 ];
 const ALLOWED_BAG_SEED_FALLBACK_STRATEGIES = ALLOWED_PLANTING_STRATEGIES.filter(s => s !== 'bag_priority');
@@ -265,7 +266,6 @@ const DEFAULT_ACCOUNT_CONFIG = {
         intervalMinutes: 60
     },
     plantingStrategy: 'max_exp',
-    preferredSeedId: 0,
     prioritize2x2Crops: false,
     friendBadRetryDate: '',
     intervals: DEFAULT_INTERVALS,
@@ -313,6 +313,46 @@ function normalizeBagSeedPriority(rawList) {
         result.push(seedId);
     }
     return result;
+}
+
+function syncBagSeedPriority(accountId, bagSeeds, options = {}) {
+    const cfg = getAccountConfigSnapshot(accountId);
+    const currentSeeds = (Array.isArray(bagSeeds) ? bagSeeds : [])
+        .map(seed => ({
+            ...seed,
+            seedId: Number(seed && seed.seedId) || 0,
+            count: Number(seed && seed.count) || 0,
+            requiredLevel: Number(seed && seed.requiredLevel) || 0,
+            rarity: Number(seed && seed.rarity) || 0,
+            plantExp: Number(seed && seed.plantExp) || 0,
+            plantSize: Number(seed && seed.plantSize) || 1,
+        }))
+        .filter(seed => seed.seedId > 0 && seed.count > 0 && seed.plantSize === 1)
+        .sort(compareBagSeedGameOrder);
+    const currentIds = currentSeeds.map(seed => seed.seedId);
+    const priority = normalizeBagSeedPriority(cfg.bagSeedPriority);
+    const knownIds = normalizeBagSeedPriority(cfg.bagSeedKnownIds);
+    const nextPriority = [...currentIds];
+
+    const nextKnownIds = [...new Set([...knownIds, ...priority, ...currentIds])];
+    const changed = JSON.stringify(nextPriority) !== JSON.stringify(priority)
+        || JSON.stringify(nextKnownIds) !== JSON.stringify(knownIds);
+    if (changed) {
+        applyConfigSnapshot({
+            bagSeedPriority: nextPriority,
+            bagSeedKnownIds: nextKnownIds,
+        }, {
+            accountId,
+            persist: options.persist !== false,
+        });
+    }
+
+    return {
+        seeds: currentSeeds,
+        priority: nextPriority,
+        knownIds: nextKnownIds,
+        changed,
+    };
 }
 
 function normalizeBagSeedFallbackStrategy(rawStrategy, fallback = 'level') {
@@ -468,7 +508,6 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         friendBlacklist: friendBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
         plantingStrategy: ALLOWED_PLANTING_STRATEGIES.includes(String(config.plantingStrategy || ''))
             ? String(config.plantingStrategy) : DEFAULT_ACCOUNT_CONFIG.plantingStrategy,
-        preferredSeedId: Math.max(0, Number.parseInt(config.preferredSeedId, 10) || 0),
         prioritize2x2Crops: config.prioritize2x2Crops === true,
         plantBlacklist: plantBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
         stealDelaySeconds: Math.max(0, Math.min(60, Number(config.stealDelaySeconds) || 1)),
@@ -577,10 +616,6 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
         cfg.plantingStrategy = input.plantingStrategy;
     }
 
-    // 首选种子
-    if (input.preferredSeedId !== undefined && input.preferredSeedId !== null) {
-        cfg.preferredSeedId = Math.max(0, Number.parseInt(input.preferredSeedId, 10) || 0);
-    }
     if (input.prioritize2x2Crops !== undefined && input.prioritize2x2Crops !== null) {
         cfg.prioritize2x2Crops = input.prioritize2x2Crops === true;
     }
@@ -679,7 +714,6 @@ function pickDefaultPlanConfig(raw) {
         automation: { ...cfg.automation },
         autoCodeRefresh: { ...cfg.autoCodeRefresh },
         plantingStrategy: cfg.plantingStrategy,
-        preferredSeedId: cfg.preferredSeedId,
         prioritize2x2Crops: cfg.prioritize2x2Crops === true,
         intervals: { ...cfg.intervals },
         friendQuietHours: { ...cfg.friendQuietHours },
@@ -1014,7 +1048,6 @@ function getConfigSnapshot(accountId) {
         automation: auto,
         autoCodeRefresh: { ...cfg.autoCodeRefresh },
         plantingStrategy: cfg.plantingStrategy,
-        preferredSeedId: cfg.preferredSeedId,
         prioritize2x2Crops: cfg.prioritize2x2Crops === true,
         friendBadRetryDate: String(cfg.friendBadRetryDate || ''),
         intervals: { ...cfg.intervals },
@@ -1030,6 +1063,8 @@ function getConfigSnapshot(accountId) {
         fertilizerBuyCheckIntervalMinutes: Math.max(1, Math.min(1440, Number(cfg.fertilizerBuyCheckIntervalMinutes) || 60)),
         goldenBugKeepCount: Math.max(0, Math.min(9999, Number(cfg.goldenBugKeepCount) || 0)),
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(cfg.goldenBugRoundLimit) || 24)),
+        bagSeedPriority: [...cfg.bagSeedPriority || []],
+        bagSeedKnownIds: [...cfg.bagSeedKnownIds || []],
         ui
     };
 }
@@ -1067,9 +1102,6 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
 
     if (patch.plantingStrategy && ALLOWED_PLANTING_STRATEGIES.includes(patch.plantingStrategy)) {
         cfg.plantingStrategy = patch.plantingStrategy;
-    }
-    if (patch.preferredSeedId !== undefined && patch.preferredSeedId !== null) {
-        cfg.preferredSeedId = Math.max(0, Number.parseInt(patch.preferredSeedId, 10) || 0);
     }
     if (patch.prioritize2x2Crops !== undefined && patch.prioritize2x2Crops !== null) {
         cfg.prioritize2x2Crops = patch.prioritize2x2Crops === true;
@@ -1181,10 +1213,6 @@ function setAutoCodeRefresh(accountId, config) {
 
 function isAutomationOn(key, accountId) {
     return !!getAccountConfigSnapshot(accountId).automation[key];
-}
-
-function getPreferredSeed(accountId) {
-    return getAccountConfigSnapshot(accountId).preferredSeedId;
 }
 
 function getPlantingStrategy(accountId) {
@@ -1792,11 +1820,11 @@ module.exports = {
     getAutoCodeRefresh,
     setAutoCodeRefresh,
     isAutomationOn,
-    getPreferredSeed,
     getPlantingStrategy,
     getPrioritize2x2Crops,
     getFriendBadRetryDate,
     getBagSeedPriority,
+    syncBagSeedPriority,
     getBagSeedFallbackStrategy,
     getIntervals,
     getFriendQuietHours,

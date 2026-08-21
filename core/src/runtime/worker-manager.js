@@ -539,6 +539,19 @@ function createWorkerManager(deps) {
                     });
                 }
             }
+        } else if (msg.type === 'bag_seed_priority_sync') {
+            const store = require('../models/store');
+            store.applyConfigSnapshot({
+                bagSeedPriority: msg.priority,
+                bagSeedKnownIds: msg.knownIds
+            }, { accountId });
+            const currentWrk = workers[accountId];
+            if (currentWrk && currentWrk.process) {
+                currentWrk.process.send({
+                    type: 'config_sync',
+                    config: buildConfigSnapshotForAccount(accountId)
+                });
+            }
         } else if (msg.type === 'api_response') {
             // API 响应
             const { id, result, error } = msg;

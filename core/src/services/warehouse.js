@@ -22,6 +22,7 @@ const { isAutomationOn } = require('../models/store');
 const { sendMsgAsync, networkEvents, getUserState } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, log, logWarn, sleep } = require('../utils/utils');
+const { compareBagSeedGameOrder } = require('../utils/bag-seed-order');
 const { updateStatusGold } = require('./status');
 
 // ---- 常量 ----
@@ -441,6 +442,11 @@ async function getBagDetail() {
         sellable: Boolean(directSell || getPlantByFruitId(id)),
         usable: Number(info && info.can_use) === 1 || interactionType === 'use',
         level: info ? Number(info.level) || 0 : 0,
+        rarity: seedPlant ? Math.max(
+          seedPlant.special_fruit ? 3 : 0,
+          Number(info && info.rarity) || 0
+        ) : 0,
+        plantExp: seedPlant ? Math.max(0, Number(seedPlant.exp) || 0) : 0,
         plantSize: seedPlant ? Math.max(1, Number(seedPlant.size || 1)) : 1,
         interactionType,
         hoursText: '',
@@ -461,6 +467,9 @@ async function getBagDetail() {
   // 排序：按物品类型排序，同类型按数量降序
   const typeOrder = new Map([[1, 1], [2, 2], [4, 3]]);
   resultItems.sort((a, b) => {
+    if (a.category === 'seed' && b.category === 'seed')
+      return compareBagSeedGameOrder(a, b);
+
     const typeA = Number(a.itemType || 0);
     const typeB = Number(b.itemType || 0);
     const orderA = typeOrder.has(typeA) ? typeOrder.get(typeA) : (typeA > 0 ? 1000 + typeA : Number.MAX_SAFE_INTEGER);
@@ -656,9 +665,9 @@ async function getBagSeeds() {
 
     const rawName = plant && plant.name ? String(plant.name) : String(info && info.name || `??#${id}`);
     const name = rawName.endsWith('??') ? rawName.slice(0, -2) : rawName;
-    const requiredLevel = plant
-      ? Math.max(0, Number(plant.land_level_need || 0))
-      : Math.max(0, Number(info && info.level || getSeedLevel(id) || 0));
+    const requiredLevel = Math.max(0, Number(
+      getSeedLevel(id) || (info && info.level) || (plant && plant.land_level_need) || 0
+    ));
     const plantSize = plant ? Math.max(1, Number(plant.size || 1)) : 1;
 
     const existing = seedMap.get(id) || {
@@ -666,6 +675,11 @@ async function getBagSeeds() {
       name,
       count: 0,
       requiredLevel,
+      rarity: Math.max(
+        plant && plant.special_fruit ? 3 : 0,
+        Number(info && info.rarity) || 0
+      ),
+      plantExp: Math.max(0, Number(plant && plant.exp) || 0),
       image: getSeedImageBySeedId(id) || getItemImageById(id),
       plantSize,
     };

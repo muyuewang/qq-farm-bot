@@ -5,7 +5,6 @@ const { CONFIG } = require('../config/config');
 const { getLevelExpProgress } = require('../config/gameConfig');
 const {
     getAutomation,
-    getPreferredSeed,
     getConfigSnapshot,
     applyConfigSnapshot
 } = require('../models/store');
@@ -1553,7 +1552,6 @@ function syncStatus() {
         friendRemainSec: Math.max(helpRemainSec, stealRemainSec)
     };
     stats.automation = getAutomation();
-    stats.preferredSeed = getPreferredSeed();
     stats.levelProgress = levelProgress;
     stats.configRevision = appliedConfigRevision;
 

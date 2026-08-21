@@ -101,6 +101,7 @@ async function sellMergedBagItems(provider, accountId, items) {
 function registerAdminBagRoutes({
   app,
   provider,
+  store,
   emitRealtimeLog,
   getAccountIdFromRequest,
   canAccessAccount,
@@ -189,7 +190,17 @@ function registerAdminBagRoutes({
 
     try {
       const seeds = await provider.getBagSeeds(accountId);
-      res.json({ ok: true, data: seeds });
+      const result = store.syncBagSeedPriority(accountId, seeds);
+      if (result.changed && typeof provider.syncAccountConfig === "function")
+        provider.syncAccountConfig(accountId);
+      res.json({
+        ok: true,
+        data: {
+          seeds: result.seeds,
+          priority: result.priority,
+          knownIds: result.knownIds,
+        },
+      });
     }
     catch (error) {
       sendProviderError(res, error);

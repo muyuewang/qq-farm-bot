@@ -502,6 +502,7 @@ function startAdminServer(dataProvider) {
   registerAdminBagRoutes({
     app,
     provider,
+    store,
     emitRealtimeLog,
     getAccountIdFromRequest,
     canAccessAccount,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 const props = defineProps<{
   label?: string
@@ -16,16 +16,41 @@ const model = defineModel<string | number>()
 
 const isOpen = ref(false)
 const containerRef = ref<HTMLElement | null>(null)
+const triggerRef = ref<HTMLElement | null>(null)
+const dropdownDirection = ref<'down' | 'up'>('down')
+const dropdownMaxHeight = ref(240)
 
 const selectedLabel = computed(() => {
   const selected = props.options?.find(opt => opt.value === model.value)
   return selected ? selected.label : (props.placeholder || '请选择')
 })
 
-function toggleDropdown() {
+function updateDropdownPlacement() {
+  const trigger = triggerRef.value
+  if (!trigger)
+    return
+
+  const triggerRect = trigger.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || document.documentElement.clientHeight
+  const gap = 8
+  const preferredHeight = 240
+  const spaceBelow = viewportHeight - triggerRect.bottom - gap
+  const spaceAbove = triggerRect.top - gap
+  const shouldOpenUp = spaceBelow < preferredHeight && spaceAbove > spaceBelow
+  const availableHeight = shouldOpenUp ? spaceAbove : spaceBelow
+
+  dropdownDirection.value = shouldOpenUp ? 'up' : 'down'
+  dropdownMaxHeight.value = Math.max(120, Math.min(preferredHeight, Math.floor(availableHeight)))
+}
+
+async function toggleDropdown() {
   if (props.disabled)
     return
   isOpen.value = !isOpen.value
+  if (isOpen.value) {
+    await nextTick()
+    updateDropdownPlacement()
+  }
 }
 
 function selectOption(value: string | number) {
@@ -40,12 +65,21 @@ function closeDropdown(e: MouseEvent) {
   }
 }
 
+function handleViewportChange() {
+  if (isOpen.value)
+    updateDropdownPlacement()
+}
+
 onMounted(() => {
   document.addEventListener('click', closeDropdown)
+  document.addEventListener('scroll', handleViewportChange, true)
+  window.addEventListener('resize', handleViewportChange)
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', closeDropdown)
+  document.removeEventListener('scroll', handleViewportChange, true)
+  window.removeEventListener('resize', handleViewportChange)
 })
 </script>
 
@@ -57,6 +91,7 @@ onUnmounted(() => {
     <div class="relative">
       <!-- Trigger -->
       <div
+        ref="triggerRef"
         class="base-select-trigger w-full flex cursor-pointer items-center justify-between border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none transition-all duration-200 dark:border-gray-700 dark:text-white"
         :class="{
           'bg-gray-50 text-gray-400 cursor-not-allowed dark:bg-gray-800/50': disabled,
@@ -79,7 +114,9 @@ onUnmounted(() => {
       >
         <div
           v-if="isOpen"
-          class="glass-panel absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-lg py-1"
+          class="glass-panel absolute left-0 right-0 z-[70] overflow-auto rounded-lg py-1"
+          :class="dropdownDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'"
+          :style="{ maxHeight: `${dropdownMaxHeight}px` }"
         >
           <template v-if="options?.length">
             <div

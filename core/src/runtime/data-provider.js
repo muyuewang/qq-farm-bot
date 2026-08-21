@@ -224,7 +224,6 @@ function createDataProvider(deps) {
             const s = settings && typeof settings === 'object' ? settings : {};
             const patch = {
                 plantingStrategy: s.plantingStrategy !== undefined ? s.plantingStrategy : s.strategy,
-                preferredSeedId: s.preferredSeedId !== undefined ? s.preferredSeedId : s.seedId,
                 prioritize2x2Crops: s.prioritize2x2Crops,
                 intervals: s.intervals,
                 friendQuietHours: s.friendQuietHours,
@@ -238,8 +237,6 @@ function createDataProvider(deps) {
                 goldenBugKeepCount: s.goldenBugKeepCount,
                 goldenBugRoundLimit: s.goldenBugRoundLimit,
                 autoAcceptFriendMinLevel: s.autoAcceptFriendMinLevel,
-                bagSeedPriority: s.bagSeedPriority,
-                bagSeedKnownIds: s.bagSeedKnownIds,
                 bagSeedFallbackStrategy: s.bagSeedFallbackStrategy,
             };
             store.applyConfigSnapshot(patch, { accountId: id });
@@ -250,7 +247,6 @@ function createDataProvider(deps) {
             }
             return {
                 strategy: store.getPlantingStrategy(id),
-                preferredSeed: store.getPreferredSeed(id),
                 prioritize2x2Crops: store.getPrioritize2x2Crops(id),
                 intervals: store.getIntervals(id),
                 friendQuietHours: store.getFriendQuietHours(id),
@@ -268,6 +264,14 @@ function createDataProvider(deps) {
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(id),
                 configRevision: rev
             };
+        },
+
+        syncAccountConfig: (ref) => {
+            const id = resolveAccountId(ref);
+            if (!id) return false;
+            nextConfigRevision();
+            broadcastConfigToWorkers(id);
+            return true;
         },
 
         saveAutoCodeRefresh: async (ref, config) => {

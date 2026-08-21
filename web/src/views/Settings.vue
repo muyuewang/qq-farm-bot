@@ -176,18 +176,7 @@ const {
   localStrategySettings,
   plantingStrategyOptions,
   bagFallbackStrategyOptions,
-  bagSeeds,
-  bagSeedsLoading,
-  bagSeedsError,
-  sortedBagSeeds,
-  preferredSeedOptions,
   strategyPreviewLabel,
-  resetBagSeedPriority,
-  moveBagSeed,
-  removeBagSeedPriority,
-  startBagSeedDrag,
-  dragOverBagSeed,
-  dropBagSeed,
   loadStrategyData,
   resetStrategyState,
 } = useStrategySettings({
@@ -410,22 +399,11 @@ onMounted(async () => {
           :loading="settingsLoading"
           :saving="accountSettingsSaving"
           :planting-strategy-options="plantingStrategyOptions"
-          :preferred-seed-options="preferredSeedOptions"
           :bag-fallback-strategy-options="bagFallbackStrategyOptions"
           :strategy-preview-label="strategyPreviewLabel"
-          :bag-seeds="bagSeeds"
-          :sorted-bag-seeds="sortedBagSeeds"
-          :bag-seeds-loading="bagSeedsLoading"
-          :bag-seeds-error="bagSeedsError"
           :fertilizer-land-type-options="fertilizerLandTypeOptions"
           :fertilizer-options="fertilizerOptions"
           @save="saveCurrentAccountSettings"
-          @reset-bag-seed-priority="resetBagSeedPriority"
-          @move-bag-seed="moveBagSeed"
-          @remove-bag-seed="removeBagSeedPriority"
-          @start-bag-seed-drag="startBagSeedDrag"
-          @drag-over-bag-seed="dragOverBagSeed"
-          @drop-bag-seed="dropBagSeed"
         />
 
         <div v-else-if="activeTab === 'notification'" class="space-y-4">

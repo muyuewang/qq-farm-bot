@@ -524,7 +524,8 @@ useIntervalFn(loadBag, 60000)
             <span v-if="item.uid">UID: {{ item.uid }}</span>
             <span>
               类型: {{ item.itemType || 0 }}
-              <span v-if="item.level > 0"> · Lv{{ item.level }}</span>
+              <span v-if="getItemCategory(item) === 'seed' && Number(item.rarity) >= 2"> · 稀有</span>
+              <span v-else-if="item.level > 0"> · Lv{{ item.level }}</span>
               <span v-if="item.price > 0" :class="getPriceClass(item)"> · {{ item.price }}{{ item.priceUnit || '金' }}</span>
             </span>
           </div>

@@ -1,11 +1,11 @@
 const { sendMsgAsync, getUserState, getWsErrorState } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toNum, toLong, toTimeSec, getServerTimeSec, log, logWarn, sleep } = require('../utils/utils');
+const { compareBagSeedGameOrder } = require('../utils/bag-seed-order');
 const { getPlantNameBySeedId, getPlantGrowTime, formatGrowTime, getAllSeeds, getPlantBySeedId, getPlantById } = require('../config/gameConfig');
 const {
   getPlantingStrategy,
-  getPreferredSeed,
-  getBagSeedPriority,
+  syncBagSeedPriority,
   getBagSeedFallbackStrategy,
   getPrioritize2x2Crops,
 } = require('../models/store');
@@ -29,7 +29,6 @@ const TWO_BY_TWO_CLEAR_TIME_TOLERANCE_SEC = 60;
 // ─── 种植策略标签 ───
 
 const PLANTING_STRATEGY_LABELS = {
-  preferred: '优先种植种子',
   level: '最高等级作物',
   max_exp: '最大经验/时',
   max_fert_exp: '最大普通肥经验/时',
@@ -280,10 +279,10 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
   }
   const userState = getUserState();
   const userLevel = Number(userState && userState.level) || 0;
-  const sortedSize2Seeds = sortBagSeedsForPlanting(
-    bagSeeds.filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 2),
-    getBagSeedPriority(accountId)
-  ).map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
+  const sortedSize2Seeds = bagSeeds
+    .filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 2)
+    .sort(compareBagSeedGameOrder)
+    .map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
   const lockedByLevelSeeds = sortedSize2Seeds.filter(seed => isSeedLockedByLevel(seed, userLevel));
   const size2Seeds = sortedSize2Seeds.filter(seed => !isSeedLockedByLevel(seed, userLevel));
 
@@ -529,24 +528,22 @@ async function plantFromBagSeeds(emptyLandIds, accountId = getCurrentAccountId()
 
   const bagSeeds = await getBagSeeds();
   const allSeeds = Array.isArray(bagSeeds) ? bagSeeds : [];
-  const seedPriority = getBagSeedPriority(accountId);
-  const prioritySet = new Set(
-    Array.isArray(seedPriority) ? seedPriority.map(id => Number(id)) : []
-  );
-  const hasCustomPriority = prioritySet.size > 0;
+  const syncedPriority = syncBagSeedPriority(accountId, allSeeds, { persist: false });
+  if (syncedPriority.changed && typeof process.send === 'function') {
+    try {
+      process.send({
+        type: 'bag_seed_priority_sync',
+        priority: syncedPriority.priority,
+        knownIds: syncedPriority.knownIds,
+      });
+    } catch { }
+  }
+  const seedPriority = syncedPriority.priority;
 
-  const usableBagSeeds = allSeeds.filter(s =>
-    Number(s && s.count) > 0 &&
-    Number(s && s.plantSize) === 1
-  );
-  const customPrioritySeeds = hasCustomPriority
-    ? usableBagSeeds.filter(s => prioritySet.has(Number(s.seedId)))
-    : [];
-
-  // ??????????????????????????? 1x1 ?????
+  // The synchronized list is the same order shown in the settings page.
   const availableSeeds = sortBagSeedsForPlanting(
-    customPrioritySeeds.length > 0 ? customPrioritySeeds : usableBagSeeds,
-    customPrioritySeeds.length > 0 ? seedPriority : []
+    syncedPriority.seeds,
+    seedPriority
   );
 
   if (availableSeeds.length === 0) {
@@ -707,17 +704,7 @@ async function findBestSeed(overrideStrategy, accountId = getCurrentAccountId())
     return candidates.sort((a, b) => b.requiredLevel - a.requiredLevel)[0];
   }
 
-  if (strategy === 'preferred') {
-    const preferredSeed = getPreferredSeed(accountId);
-    if (preferredSeed > 0) {
-      const match = candidates.find(c => c.seedId === preferredSeed);
-      if (match) return match;
-      logWarn('商店', `优先种子 ${preferredSeed} 当前不可购买，回退自动选择`);
-    }
-    candidates.sort((a, b) => b.requiredLevel - a.requiredLevel);
-  } else {
-    candidates.sort((a, b) => b.requiredLevel - a.requiredLevel);
-  }
+  candidates.sort((a, b) => b.requiredLevel - a.requiredLevel);
 
   return candidates[0];
 }
@@ -768,15 +755,6 @@ async function findBestSeedFromLocal(overrideStrategy, accountId = getCurrentAcc
   }
 
   const strategy = overrideStrategy || getPlantingStrategy(accountId);
-
-  // 优先种子策略
-  if (strategy === 'preferred') {
-    const preferredSeed = getPreferredSeed(accountId);
-    if (preferredSeed > 0) {
-      const match = availableSeeds.find(s => s.seedId === preferredSeed && s.requiredLevel <= userState.level);
-      if (match) return match;
-    }
-  }
 
   const rankingStrategies = {
     max_exp: 'exp',

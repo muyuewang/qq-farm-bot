@@ -92,7 +92,6 @@ export interface AutoCodeRefreshConfig {
 
 export interface SettingsState {
   plantingStrategy: string
-  preferredSeedId: number
   prioritize2x2Crops: boolean
   bagSeedPriority: number[]
   bagSeedKnownIds: number[]
@@ -150,7 +149,6 @@ function normalizeOfflineReminder(input: Partial<OfflineConfig> | null | undefin
 export const useSettingStore = defineStore('setting', () => {
   const settings = ref<SettingsState>({
     plantingStrategy: 'max_exp',
-    preferredSeedId: 0,
     prioritize2x2Crops: false,
     bagSeedPriority: [],
     bagSeedKnownIds: [],
@@ -183,7 +181,6 @@ export const useSettingStore = defineStore('setting', () => {
   function clearSettingsState() {
     settings.value = {
       plantingStrategy: 'max_exp',
-      preferredSeedId: 0,
       prioritize2x2Crops: false,
       bagSeedPriority: [],
       bagSeedKnownIds: [],
@@ -222,7 +219,6 @@ export const useSettingStore = defineStore('setting', () => {
       if (data && data.ok && data.data) {
         const d = data.data
         settings.value.plantingStrategy = d.plantingStrategy || d.strategy || 'max_exp'
-        settings.value.preferredSeedId = d.preferredSeedId || d.preferredSeed || 0
         settings.value.prioritize2x2Crops = d.prioritize2x2Crops === true
         settings.value.intervals = d.intervals || {}
         settings.value.friendQuietHours = d.friendQuietHours || { enabled: false, start: '23:00', end: '07:00' }
@@ -260,7 +256,6 @@ export const useSettingStore = defineStore('setting', () => {
     try {
       const settingsPayload = {
         plantingStrategy: newSettings.plantingStrategy,
-        preferredSeedId: newSettings.preferredSeedId,
         prioritize2x2Crops: newSettings.prioritize2x2Crops === true,
         bagSeedPriority: newSettings.bagSeedPriority ?? [],
         bagSeedKnownIds: newSettings.bagSeedKnownIds ?? [],

@@ -76,22 +76,22 @@ function loadConfigs() {
             const eventPlants = JSON.parse(fs.readFileSync(eventPlantPath, 'utf8'));
             for (const entry of eventPlants) {
                 if (isInvalidPlant(entry)) continue;
-                const existing = plantMap.get(Number(entry.id));
+                const plantId = Number(entry.id);
+                const seedId = Number(entry.seed_id);
+                if (plantMap.has(plantId) || seedToPlant.has(seedId)) continue;
                 const plant = {
-                    ...(existing || {}),
-                    id: Number(entry.id),
+                    id: plantId,
                     name: entry.name,
                     asset_name: entry.asset_name,
-                    seed_id: Number(entry.seed_id),
+                    seed_id: seedId,
                     fruit: {
-                        ...(existing && existing.fruit || {}),
                         id: Number(entry.fruit_id),
-                        count: Number(entry.fruit_count) || Number(existing && existing.fruit && existing.fruit.count) || 0,
+                        count: Number(entry.fruit_count) || 0,
                     },
-                    size: Math.max(1, Number(entry.size) || Number(existing && existing.size) || 1),
-                    seasons: Number(entry.seasons) || Number(existing && existing.seasons) || 1,
-                    grow_phases: entry.grow_phases || existing && existing.grow_phases || '',
-                    exp: Number(entry.exp) || Number(existing && existing.exp) || 0,
+                    size: Math.max(1, Number(entry.size) || 1),
+                    seasons: Number(entry.seasons) || 1,
+                    grow_phases: entry.grow_phases || '',
+                    exp: Number(entry.exp) || 0,
                 };
                 plantMap.set(plant.id, plant);
                 seedToPlant.set(plant.seed_id, plant);
@@ -129,34 +129,45 @@ function loadConfigs() {
             for (const entry of eventPlants) {
                 if (isInvalidPlant(entry)) continue;
                 const seedId = Number(entry.seed_id);
-                const fruitId = Number(entry.fruit_id);
+                const plant = seedToPlant.get(seedId);
+                const fruitId = Number(plant && plant.fruit && plant.fruit.id) || Number(entry.fruit_id);
+                const name = plant && plant.name || entry.name;
+                const assetName = plant && plant.asset_name || entry.asset_name;
                 const baseItem = {
-                    asset_name: entry.asset_name,
-                    level: Number(entry.level) || 1,
-                    rarity: Number(entry.rarity) || 3,
+                    asset_name: assetName,
+                    level: Number(entry.level) || Number(plant && plant.land_level_need) || 1,
+                    rarity: Math.max(3, Number(entry.rarity) || 0),
                     rarity_color: entry.rarity_color || 'EEC55A',
                 };
-                if (!itemInfoMap.has(seedId)) {
+                const existingSeedItem = itemInfoMap.get(seedId);
+                if (!existingSeedItem || plant) {
                     const seedItem = {
                         ...baseItem,
+                        ...(existingSeedItem || {}),
                         id: seedId,
                         type: 5,
-                        name: `${entry.name}种子`,
+                        name: `${name}种子`,
+                        asset_name: assetName,
+                        rarity: Math.max(1, Number(existingSeedItem && existingSeedItem.rarity) || 3),
                         interaction_type: 'plant',
                         max_count: 9999,
                         max_own: 9999,
-                        desc: `种植后，可以收获一定数量的${entry.name}。`,
-                        effectDesc: entry.name,
+                        desc: `种植后，可以收获一定数量的${name}。`,
+                        effectDesc: name,
                     };
                     itemInfoMap.set(seedId, seedItem);
                     seedItemMap.set(seedId, seedItem);
                 }
-                if (!itemInfoMap.has(fruitId)) {
+                const existingFruitItem = itemInfoMap.get(fruitId);
+                if (!existingFruitItem || plant) {
                     itemInfoMap.set(fruitId, {
                         ...baseItem,
+                        ...(existingFruitItem || {}),
                         id: fruitId,
                         type: 4,
-                        name: entry.name,
+                        name,
+                        asset_name: assetName,
+                        rarity: Math.max(1, Number(existingFruitItem && existingFruitItem.rarity) || 3),
                         max_count: 99999,
                         max_own: 999990,
                         layer: Number(entry.layer) || 0,
@@ -414,7 +425,7 @@ function getAllSeeds() {
     return Array.from(seedToPlant.values()).map(plant => ({
         seedId: plant.seed_id,
         name: plant.name,
-        requiredLevel: Number(plant.land_level_need) || 0,
+        requiredLevel: getSeedLevel(plant.seed_id) || Number(plant.land_level_need) || 0,
         price: getSeedPrice(plant.seed_id),
         image: getSeedImageBySeedId(plant.seed_id)
     }));

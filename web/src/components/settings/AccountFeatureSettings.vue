@@ -16,25 +16,14 @@ const props = defineProps<{
   loading: boolean
   saving: boolean
   plantingStrategyOptions: any[]
-  preferredSeedOptions: any[]
   bagFallbackStrategyOptions: any[]
   strategyPreviewLabel: string | null
-  bagSeeds: any[]
-  sortedBagSeeds: any[]
-  bagSeedsLoading: boolean
-  bagSeedsError: string | null
   fertilizerLandTypeOptions: any[]
   fertilizerOptions: any[]
 }>()
 
 const emit = defineEmits<{
   save: [module: ModuleKey, quiet?: boolean]
-  resetBagSeedPriority: []
-  moveBagSeed: [seedId: number, direction: -1 | 1]
-  removeBagSeed: [seedId: number]
-  startBagSeedDrag: [seedId: number, event: DragEvent]
-  dragOverBagSeed: [seedId: number, event: DragEvent]
-  dropBagSeed: [seedId: number, event: DragEvent]
 }>()
 
 const strategy = defineModel<any>('strategy', { required: true })
@@ -359,19 +348,8 @@ watch(() => props.currentAccountId, loadQixiFriends)
                   timing-section="planting"
                   title="选种策略与巡田频率"
                   :planting-strategy-options="plantingStrategyOptions"
-                  :preferred-seed-options="preferredSeedOptions"
                   :bag-fallback-strategy-options="bagFallbackStrategyOptions"
                   :strategy-preview-label="strategyPreviewLabel"
-                  :bag-seeds="bagSeeds"
-                  :sorted-bag-seeds="sortedBagSeeds"
-                  :bag-seeds-loading="bagSeedsLoading"
-                  :bag-seeds-error="bagSeedsError"
-                  @reset-bag-seed-priority="emit('resetBagSeedPriority')"
-                  @move-bag-seed="(id, direction) => emit('moveBagSeed', id, direction)"
-                  @remove-bag-seed="id => emit('removeBagSeed', id)"
-                  @start-bag-seed-drag="(id, event) => emit('startBagSeedDrag', id, event)"
-                  @drag-over-bag-seed="(id, event) => emit('dragOverBagSeed', id, event)"
-                  @drop-bag-seed="(id, event) => emit('dropBagSeed', id, event)"
                 />
               </section>
             </div>

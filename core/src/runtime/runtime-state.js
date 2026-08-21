@@ -46,7 +46,6 @@ function createRuntimeState(deps) {
         return {
             automation: store.getAutomation(accountId),
             plantingStrategy: store.getPlantingStrategy(accountId),
-            preferredSeedId: store.getPreferredSeed(accountId),
             prioritize2x2Crops: store.getPrioritize2x2Crops(accountId),
             intervals: store.getIntervals(accountId),
             friendQuietHours: store.getFriendQuietHours(accountId),
@@ -54,6 +53,7 @@ function createRuntimeState(deps) {
             plantBlacklist: store.getPlantBlacklist(accountId),
             knownFriendGids: store.getKnownFriendGids(accountId),
             bagSeedPriority: store.getBagSeedPriority(accountId),
+            bagSeedKnownIds: store.getConfigSnapshot(accountId).bagSeedKnownIds,
             bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(accountId),
             autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(accountId),
             __revision: configRevision
@@ -170,7 +170,6 @@ function createRuntimeState(deps) {
             limits: {},
             wsError: null,
             automation: store.getAutomation(aid),
-            preferredSeed: store.getPreferredSeed(aid),
             expProgress: { current: 0, needed: 0, level: 0 },
             configRevision,
             accountId: aid
