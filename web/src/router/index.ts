@@ -64,7 +64,7 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach(async () => {
   NProgress.start()
   await ensureAdminSession()
   return true

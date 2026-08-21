@@ -9,6 +9,7 @@ import AccountSettingsTab from '@/components/settings/AccountSettingsTab.vue'
 import AutoCodeRefreshCard from '@/components/settings/AutoCodeRefreshCard.vue'
 import DeviceProtocolCard from '@/components/settings/DeviceProtocolCard.vue'
 import OfflineReminderCard from '@/components/settings/OfflineReminderCard.vue'
+import PasswordChangeCard from '@/components/settings/PasswordChangeCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { useAccountSettings } from '@/composables/settings/useAccountSettings'
 import { useAutomationSettings } from '@/composables/settings/useAutomationSettings'
@@ -106,6 +107,8 @@ const {
   deviceProtocolLoading,
   deviceProtocolSaving,
   passwordForm,
+  passwordSaving,
+  handleChangePassword,
   deviceProtocolPresetOptions,
   selectedDevicePreset,
   deviceProtocolForm,
@@ -448,6 +451,12 @@ onMounted(async () => {
             :show-save="false"
             @open-docs="openChannelDocs"
             @test="handleTestOffline"
+          />
+
+          <PasswordChangeCard
+            v-model:form="passwordForm"
+            :saving="passwordSaving"
+            @save="handleChangePassword"
           />
         </div>
 
