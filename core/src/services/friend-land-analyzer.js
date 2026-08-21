@@ -198,13 +198,6 @@ async function batchGetFriendDogInfo(friends) {
     })
     .filter(e => e.gid > 0);
 
-  log('好友', `batchGetFriendDogInfo 开始: 共 ${entries.length} 个好友`, {
-    module: 'friend',
-    event: 'batchGetFriendDogInfo',
-    step: 'start',
-    count: entries.length,
-  });
-
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     const gid = entry.gid;
@@ -232,18 +225,6 @@ async function batchGetFriendDogInfo(friends) {
       await sleep(BATCH_SLEEP_MS);
     }
   }
-
-  log('好友',
-    `batchGetFriendDogInfo 完成: 成功获取 ${dogMap.size} 个好友的狗信息，无狗 ${noDogCount} 个，黑名单 ${blacklistCount} 个`,
-    {
-      module: 'friend',
-      event: 'batchGetFriendDogInfo',
-      step: 'done',
-      resultCount: dogMap.size,
-      failCount: noDogCount,
-      blacklistCount,
-    }
-  );
 
   return { map: dogMap, failCount: noDogCount, blacklistCount };
 }
@@ -382,23 +363,15 @@ async function fetchFriendsDogInfo() {
   // Persist guard dog info to disk cache
   if (accountId && Object.keys(guardDogFriends).length > 0) {
     writeFriendDogInfoCache(accountId, guardDogFriends);
-    log('好友',
-      `已保存 ${Object.keys(guardDogFriends).length} 个护主犬好友信息到本地缓存`,
-      {
-        module: 'friend',
-        event: '保存护主犬好友缓存',
-        count: Object.keys(guardDogFriends).length,
-      }
-    );
   }
 
   const guardDogCount = friends.filter(f => f.dogId === 90021).length;
 
   log('好友',
-    `获取好友狗信息完成: 共 ${friends.length} 个好友，护主犬 ${guardDogCount} 个，无狗 ${failCount} 个，黑名单 ${blacklistCount} 个`,
+    `获取完成：共 ${friends.length} 个好友，护主犬 ${guardDogCount} 个，无狗 ${failCount} 个，黑名单 ${blacklistCount} 个`,
     {
       module: 'friend',
-      event: '获取好友狗信息',
+      event: '狗信息',
       result: 'ok',
       count: friends.length,
       guardDogCount,

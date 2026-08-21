@@ -58,7 +58,7 @@ function createCaptureApi({ config, ca, sessionStore, proxyManager, log = () => 
             data: {
               uptime: Math.floor((Date.now() - startedAt) / 1000),
               sessions: sessionStore.listSessions().length,
-              portPool: [],
+              portPool: [config.proxyPortFrom],
             },
           },
         };

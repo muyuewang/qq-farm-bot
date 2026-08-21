@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -12,6 +13,34 @@ function makeDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'capture-core-test-'));
 }
 
+function getFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+async function makeDataDirWithProxyPort() {
+  const dataDir = makeDataDir();
+  const port = await getFreePort();
+  const captureDir = path.join(dataDir, 'capture');
+  fs.mkdirSync(captureDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(captureDir, 'config.json'),
+    `${JSON.stringify({
+      proxyBind: ['127.0.0.1'],
+      proxyPortFrom: port,
+      proxyPortTo: port,
+    })}\n`,
+    'utf8',
+  );
+  return { dataDir, port };
+}
+
 test('createCaptureCore exposes ready and getCaCertDer', async () => {
   const core = createCaptureCore({ dataDir: makeDataDir(), log: noop });
   await core.ready;
@@ -21,8 +50,19 @@ test('createCaptureCore exposes ready and getCaCertDer', async () => {
   await core.stop();
 });
 
-test('handleApiRequest implements the full session lifecycle in-process', async () => {
-  const core = createCaptureCore({ dataDir: makeDataDir(), log: noop });
+test('handleApiRequest implements the full session lifecycle in-process', async (t) => {
+  let prepared;
+  try {
+    prepared = await makeDataDirWithProxyPort();
+  } catch (error) {
+    if (error && error.code === 'EPERM') {
+      t.skip('当前环境不允许监听本地端口');
+      return;
+    }
+    throw error;
+  }
+  const { dataDir, port } = prepared;
+  const core = createCaptureCore({ dataDir, log: noop });
   await core.ready;
 
   // 健康检查
@@ -44,7 +84,7 @@ test('handleApiRequest implements the full session lifecycle in-process', async 
   );
   assert.equal(started.body.ok, true);
   const snapshot = started.body.data;
-  assert.ok(snapshot.publicInfo.mitmPort > 0);
+  assert.equal(snapshot.publicInfo.mitmPort, port);
   assert.ok(snapshot.publicInfo.addresses.length > 0);
   assert.equal(snapshot.proxy.running, true);
 

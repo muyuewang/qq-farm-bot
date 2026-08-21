@@ -6,13 +6,11 @@ const {
 function createAdminAccountAccess({ store, getProvider }) {
   function getAccountsForUser(username = null) {
     try {
-      const globalWxConfig = store.getGlobalWxConfig();
-      const userIsolation = globalWxConfig.userIsolation !== false;
       const provider = typeof getProvider === 'function' ? getProvider() : null;
       if (provider && typeof provider.getAccounts === 'function') {
         const providerAccounts = provider.getAccounts();
         if (providerAccounts && Array.isArray(providerAccounts.accounts)) {
-          if (username && userIsolation) {
+          if (username) {
             return providerAccounts.accounts.filter(
               account => account.username === username,
             );
@@ -30,9 +28,7 @@ function createAdminAccountAccess({ store, getProvider }) {
     let accounts = Array.isArray(storedAccounts.accounts)
       ? storedAccounts.accounts
       : [];
-    const globalWxConfig = store.getGlobalWxConfig();
-    const userIsolation = globalWxConfig.userIsolation !== false;
-    if (username && userIsolation) {
+    if (username) {
       accounts = accounts.filter(account => account.username === username);
     }
     return accounts;

@@ -133,23 +133,16 @@ const { pause: stopWxCheck, resume: startWxCheck } = useIntervalFn(async () => {
       const codeResult = await wxLoginStore.getFarmCode(result.wxid)
       if (codeResult.success && codeResult.code) {
         const name = wxAccountName.value.trim() || result.nickname || `微信账号${Date.now()}`
-        if (wxLoginStore.config.autoAddAccount) {
-          await addAccount({
-            id: props.editData?.id,
-            name: props.editData ? (props.editData.name || name) : name,
-            code: codeResult.code,
-            platform: 'wx',
-            loginType: 'wx_qr',
-            wxid: result.wxid,
-            avatar: result.avatar,
-            wxSessionId: wxLoginStore.uuid,
-          })
-        }
-        else {
-          form.code = codeResult.code
-          form.platform = 'wx'
-          activeTab.value = 'manual'
-        }
+        await addAccount({
+          id: props.editData?.id,
+          name: props.editData ? (props.editData.name || name) : name,
+          code: codeResult.code,
+          platform: 'wx',
+          loginType: 'wx_qr',
+          wxid: result.wxid,
+          avatar: result.avatar,
+          wxSessionId: wxLoginStore.uuid,
+        })
       }
     }
   }
@@ -183,9 +176,13 @@ async function loadCaptureConfig() {
   try {
     const { data } = await api.get('/api/capture/config')
     captureEnabled.value = data?.ok && data.data?.enabled === true
+    if (!captureEnabled.value && activeTab.value === 'capture')
+      activeTab.value = 'manual'
   }
   catch {
     captureEnabled.value = false
+    if (activeTab.value === 'capture')
+      activeTab.value = 'manual'
   }
 }
 
@@ -440,6 +437,10 @@ watch(() => props.show, (newVal) => {
 })
 
 watch(activeTab, (tab) => {
+  if (tab === 'capture' && !captureEnabled.value) {
+    activeTab.value = 'manual'
+    return
+  }
   if (tab === 'wx')
     loadWxQRCode()
   if (tab !== 'capture')

@@ -101,6 +101,7 @@ let app = null;
 let server = null;
 let provider = null;
 let io = null;
+let embeddedCaptureCore = null;
 
 function emitRealtimeStatus(accountId, status) {
   if (!io) return;
@@ -140,7 +141,7 @@ function configureCorsMiddleware(expressApp) {
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, PUT");
     res.header(
       "Access-Control-Allow-Headers",
-      "Content-Type, x-account-id, x-admin-token, x-proxy-api-key, x-proxy-api-url, x-proxy-app-id",
+      "Content-Type, x-account-id, x-admin-token",
     );
     res.header("Access-Control-Allow-Credentials", "true");
     res.header("Access-Control-Max-Age", "86400");
@@ -296,30 +297,52 @@ function getSocketHandshakeToken(socket) {
 }
 
 /**
- * 启动嵌入本进程的抓包服务核心（默认模式）。
+ * 启动嵌入本进程的抓包服务核心。
  * 需要 CA 生成与 proto 加载，均在后台上完成（core.ready）。
  */
 function startEmbeddedCaptureService() {
   try {
     const captureConfig = store.getCaptureConfig();
+    if (captureConfig.enabled !== true) {
+      adminLogger.info("抓包服务未启动（enabled=false）");
+      return null;
+    }
     if (captureConfig.embedded === false) {
       adminLogger.info("抓包服务未嵌入本进程（embedded=false，使用独立服务）");
       return null;
     }
+    if (embeddedCaptureCore) return embeddedCaptureCore;
     const captureLog = (level, message, extra) => {
       const fn = adminLogger[level] || adminLogger.info;
       fn.call(adminLogger, message, extra);
     };
     const core = createCaptureCore({ log: captureLog });
+    embeddedCaptureCore = core;
     setEmbeddedCapture(core);
     core.ready.catch((error) => {
       adminLogger.warn("抓包服务嵌入初始化失败", { error: error.message });
     });
-    adminLogger.info("抓包服务已嵌入本进程：面板开启“允许使用抓包登录”后可直接使用，无需单独启动服务");
+    adminLogger.info("抓包服务已嵌入本进程：手机代理端口 18000");
     return core;
   } catch (error) {
     adminLogger.warn("抓包服务嵌入启动失败", { error: error.message });
     return null;
+  }
+}
+
+function ensureEmbeddedCaptureService() {
+  return startEmbeddedCaptureService();
+}
+
+async function stopEmbeddedCaptureService() {
+  const core = embeddedCaptureCore;
+  embeddedCaptureCore = null;
+  setEmbeddedCapture(null);
+  if (!core || typeof core.stop !== "function") return;
+  try {
+    await core.stop();
+  } catch (error) {
+    adminLogger.warn("抓包服务嵌入停止失败", { error: error.message });
   }
 }
 
@@ -529,8 +552,7 @@ function startAdminServer(dataProvider) {
     getRuntimeConfig,
     updateRuntimeConfig,
   });
-  // 抓包服务嵌入本进程：无需独立进程/端口（手机只需连 MITM 代理端口）
-  startEmbeddedCaptureService();
+  adminLogger.info("抓包服务默认关闭，未随管理面板启动运行");
   registerAdminCaptureRoutes({
     app,
     store,
@@ -541,6 +563,8 @@ function startAdminServer(dataProvider) {
     requireDangerConfirmation,
     canAccessAccount,
     resolveAccountReference,
+    ensureEmbeddedCaptureService,
+    stopEmbeddedCaptureService,
   });
   registerAdminCardRoutes({
     app,

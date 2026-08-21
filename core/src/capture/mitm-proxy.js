@@ -1,8 +1,8 @@
 /**
  * 选择性 MITM 代理
  *
- * 每个抓包会话在端口池中分配一个独立端口，按配置的 IP（局域网 / Tailscale）
- * 监听。处理 iPhone 的 HTTP 代理连接：
+ * 每次抓包会话只使用配置的单个代理端口（默认 18000），按配置的 IP
+ * （局域网 / Tailscale）监听。处理 iPhone 的 HTTP 代理连接：
  *
  * - CONNECT 到抓取域名（captureHosts）→ TLS 中间人，解析 HTTP 头提取登录 code，
  *   升级为 WebSocket 后解析二进制帧提取好友 GID；
@@ -73,7 +73,7 @@ function findHeadEnd(buffer) {
 /**
  * 创建 MITM 代理管理器
  * @param {object} deps
- * @param {object} deps.config - 抓包服务配置（proxyBind/proxyPortFrom/proxyPortTo/autoStopSec/captureHosts）
+ * @param {object} deps.config - 抓包服务配置（proxyBind/proxyPortFrom/autoStopSec/captureHosts）
  * @param {object} deps.ca - CA 模块（getSecureContextForHost）
  * @param {object} deps.friendExtractor - createFriendExtractor() 的结果
  * @param {object} deps.sessionStore - 会话存储
@@ -83,45 +83,35 @@ function createMitmProxyManager(deps = {}) {
   const { config, ca, friendExtractor, sessionStore, log = () => {} } = deps;
   const activeServers = new Map(); // sessionId -> { port, servers, stop, autoStopTimer }
 
-  async function listenOnPortPool(bindTargets, handler) {
-    const candidates = [];
-    for (let port = config.proxyPortFrom; port <= config.proxyPortTo; port += 1) {
-      candidates.push(port);
-    }
-    candidates.push(0); // 池内端口全部被占用时回退系统随机端口
+  async function listenOnConfiguredPort(bindTargets, handler) {
+    const port = Number(config.proxyPortFrom) || 18000;
+    const servers = [];
 
-    for (const port of candidates) {
-      const servers = [];
-      let failed = false;
-      for (const bindIp of bindTargets) {
-        const server = net.createServer(handler);
-        server.on('error', () => {});
-        try {
-          await new Promise((resolve, reject) => {
-            const onError = (error) => {
-              server.removeListener('listening', onListening);
-              reject(error);
-            };
-            const onListening = () => {
-              server.removeListener('error', onError);
-              resolve();
-            };
-            server.once('error', onError);
-            server.once('listening', onListening);
-            server.listen(port, bindIp);
-          });
-          servers.push(server);
-        } catch {
-          failed = true;
-          for (const s of servers) s.close();
-          break;
-        }
+    for (const bindIp of bindTargets) {
+      const server = net.createServer(handler);
+      server.on('error', () => {});
+      try {
+        await new Promise((resolve, reject) => {
+          const onError = (error) => {
+            server.removeListener('listening', onListening);
+            reject(error);
+          };
+          const onListening = () => {
+            server.removeListener('error', onError);
+            resolve();
+          };
+          server.once('error', onError);
+          server.once('listening', onListening);
+          server.listen(port, bindIp);
+        });
+        servers.push(server);
+      } catch (error) {
+        for (const s of servers) s.close();
+        throw new Error(`代理端口 ${port} 不可用: ${error.message}`);
       }
-      if (failed) continue;
-      const actualPort = servers[0] ? servers[0].address().port : 0;
-      return { port: actualPort, servers };
     }
-    throw new Error('无法分配代理端口');
+
+    return { port, servers };
   }
 
   /**
@@ -141,7 +131,7 @@ function createMitmProxyManager(deps = {}) {
 
     const handler = rawSocket => handleClient(rawSocket, session, bypass);
 
-    const { port, servers } = await listenOnPortPool(bindTargets, handler);
+    const { port, servers } = await listenOnConfiguredPort(bindTargets, handler);
     const startedAt = new Date().toISOString();
 
     const entry = { port, servers, startedAt, autoStopTimer: null };

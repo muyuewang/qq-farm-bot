@@ -74,6 +74,14 @@ function isAlreadyClaimedError(err) {
   return msg.includes('code=1021002') || msg.includes('今日已领取') || msg.includes('已领取');
 }
 
+/**
+ * 判断当前账号是否不具备 QQ 会员资格
+ */
+function isNotVipError(err) {
+  const msg = String(err && err.message || '');
+  return msg.includes('code=1021001') || msg.includes('非QQ会员') || msg.includes('非 QQ 会员');
+}
+
 // ---- RPC 调用 ----
 
 async function refreshVipInfo() {
@@ -177,6 +185,18 @@ async function performDailyVipGift(force = false) {
     lastResult = 'ok';
     return true;
   } catch (err) {
+    // 非 QQ 会员属于正常的资格判断，不展示为领取失败，也不再当日重试
+    if (isNotVipError(err)) {
+      markDoneToday();
+      lastResult = 'none';
+      lastHasGift = false;
+      lastCanClaim = false;
+      log('会员', '当前账号不是 QQ 会员，已跳过会员礼包领取', {
+        module: 'task', event: DAILY_KEY, result: 'none',
+      });
+      return false;
+    }
+
     // 如果已经领取过，也标记完成
     if (isAlreadyClaimedError(err)) {
       markDoneToday();
@@ -198,6 +218,7 @@ module.exports = {
   performDailyVipGift,
   getAvailableVipTypes,
   getVipRewardLabels,
+  isNotVipError,
   getVipDailyState: () => ({
     key: DAILY_KEY,
     doneToday: isDoneToday(),

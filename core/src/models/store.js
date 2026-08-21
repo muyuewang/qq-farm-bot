@@ -204,6 +204,7 @@ const DEFAULT_AUTOMATION = {
     farm_push: true,
     land_upgrade: false,
     friend: true,
+    friend_auto_accept: true,
     friend_help_exp_limit: true,
     friend_steal: true,
     friend_help: true,
@@ -211,6 +212,7 @@ const DEFAULT_AUTOMATION = {
     friend_golden_bug: false,
     task: true,
     star_passport_claim: false,
+    star_solar_claim: false,
     star_record_claim: false,
     qingmei_seed_claim: false,
     qingmei_wine_brew: false,
@@ -272,8 +274,6 @@ const DEFAULT_ACCOUNT_CONFIG = {
     friendBlacklist: [],
     plantBlacklist: DEFAULT_PLANT_BLACKLIST,
     stealDelaySeconds: 1,
-    plantOrderRandom: true,
-    plantDelaySeconds: 2,
     fertilizerBuyOrganicCount: 1,
     fertilizerBuyOrganicThresholdHours: 10,
     fertilizerBuyNormalCount: 1,
@@ -472,8 +472,6 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         prioritize2x2Crops: config.prioritize2x2Crops === true,
         plantBlacklist: plantBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
         stealDelaySeconds: Math.max(0, Math.min(60, Number(config.stealDelaySeconds) || 1)),
-        plantOrderRandom: !!config.plantOrderRandom,
-        plantDelaySeconds: Math.max(0, Math.min(60, Number(config.plantDelaySeconds) || 2)),
         fertilizerBuyOrganicCount: Math.max(0, Math.min(999, Number(config.fertilizerBuyOrganicCount) || 1)),
         fertilizerBuyOrganicThresholdHours: Math.max(0, Math.min(720, Number(config.fertilizerBuyOrganicThresholdHours) || 10)),
         fertilizerBuyNormalCount: Math.max(0, Math.min(999, Number(config.fertilizerBuyNormalCount) || 1)),
@@ -536,7 +534,6 @@ const globalConfig = {
     superAdminAnnouncement: { content: '', password: '', updatedAt: 0 },
     systemConfig: null,
     loginLinks: null,
-    globalWxConfig: null,
     captureConfig: null,
     deviceProtocol: null,
     userDeviceProtocols: {},
@@ -632,16 +629,6 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
         cfg.stealDelaySeconds = Math.max(0, Math.min(60, Number.parseInt(input.stealDelaySeconds, 10) || 1));
     }
 
-    // 种植顺序随机
-    if (input.plantOrderRandom !== undefined && input.plantOrderRandom !== null) {
-        cfg.plantOrderRandom = !!input.plantOrderRandom;
-    }
-
-    // 种植延迟
-    if (input.plantDelaySeconds !== undefined && input.plantDelaySeconds !== null) {
-        cfg.plantDelaySeconds = Math.max(0, Math.min(60, Number(input.plantDelaySeconds) || 2));
-    }
-
     // 肥料购买配置
     if (input.fertilizerBuyOrganicCount !== undefined && input.fertilizerBuyOrganicCount !== null) {
         cfg.fertilizerBuyOrganicCount = Math.max(0, Math.min(999, Number(input.fertilizerBuyOrganicCount) || 1));
@@ -697,8 +684,6 @@ function pickDefaultPlanConfig(raw) {
         intervals: { ...cfg.intervals },
         friendQuietHours: { ...cfg.friendQuietHours },
         stealDelaySeconds: cfg.stealDelaySeconds,
-        plantOrderRandom: cfg.plantOrderRandom,
-        plantDelaySeconds: cfg.plantDelaySeconds,
         fertilizerBuyOrganicCount: cfg.fertilizerBuyOrganicCount,
         fertilizerBuyOrganicThresholdHours: cfg.fertilizerBuyOrganicThresholdHours,
         fertilizerBuyNormalCount: cfg.fertilizerBuyNormalCount,
@@ -865,19 +850,6 @@ function loadGlobalConfig() {
                 registerSubtitle: String(data.loginLinks.registerSubtitle || DEFAULT_LOGIN_LINKS.registerSubtitle).trim(),
                 purchaseUrl: String(data.loginLinks.purchaseUrl ?? '').trim(),
                 qqGroupUrl: String(data.loginLinks.qqGroupUrl ?? '').trim()
-            };
-        }
-
-        // 微信配置
-        if (data.globalWxConfig && typeof data.globalWxConfig === 'object') {
-            globalConfig.globalWxConfig = {
-                enabled: data.globalWxConfig.enabled !== false,
-                apiBase: String(data.globalWxConfig.apiBase || 'https://code.z74d.top/api').trim(),
-                apiKey: String(data.globalWxConfig.apiKey || '').trim(),
-                proxyApiUrl: String(data.globalWxConfig.proxyApiUrl || 'https://code.z74d.top/api').trim(),
-                appId: String(data.globalWxConfig.appId || 'wx5306c5978fdb76e4').trim(),
-                autoAddAccount: data.globalWxConfig.autoAddAccount !== false,
-                userIsolation: data.globalWxConfig.userIsolation !== false
             };
         }
 
@@ -1051,8 +1023,6 @@ function getConfigSnapshot(accountId) {
         friendBlacklist: [...cfg.friendBlacklist || []],
         plantBlacklist: [...cfg.plantBlacklist || []],
         stealDelaySeconds: Math.max(0, Math.min(60, Number(cfg.stealDelaySeconds) || 1)),
-        plantOrderRandom: !!cfg.plantOrderRandom,
-        plantDelaySeconds: Math.max(0, Math.min(60, Number(cfg.plantDelaySeconds) || 2)),
         fertilizerBuyOrganicCount: Math.max(0, Math.min(999, Number(cfg.fertilizerBuyOrganicCount) || 1)),
         fertilizerBuyOrganicThresholdHours: Math.max(0, Math.min(720, Number(cfg.fertilizerBuyOrganicThresholdHours) || 10)),
         fertilizerBuyNormalCount: Math.max(0, Math.min(999, Number(cfg.fertilizerBuyNormalCount) || 1)),
@@ -1136,12 +1106,6 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     }
     if (patch.stealDelaySeconds !== undefined && patch.stealDelaySeconds !== null) {
         cfg.stealDelaySeconds = Math.max(0, Math.min(60, Number(patch.stealDelaySeconds) || 1));
-    }
-    if (patch.plantOrderRandom !== undefined && patch.plantOrderRandom !== null) {
-        cfg.plantOrderRandom = !!patch.plantOrderRandom;
-    }
-    if (patch.plantDelaySeconds !== undefined && patch.plantDelaySeconds !== null) {
-        cfg.plantDelaySeconds = Math.max(0, Math.min(60, Number(patch.plantDelaySeconds) || 2));
     }
     if (patch.fertilizerBuyOrganicCount !== undefined && patch.fertilizerBuyOrganicCount !== null) {
         cfg.fertilizerBuyOrganicCount = Math.max(0, Math.min(999, Number(patch.fertilizerBuyOrganicCount) || 1));
@@ -1294,14 +1258,6 @@ function addFriendToBlacklist(accountId, gid) {
 
 function getStealDelaySeconds(accountId) {
     return Math.max(0, Math.min(60, Number(getAccountConfigSnapshot(accountId).stealDelaySeconds) || 1));
-}
-
-function getPlantOrderRandom(accountId) {
-    return !!getAccountConfigSnapshot(accountId).plantOrderRandom;
-}
-
-function getPlantDelaySeconds(accountId) {
-    return Math.max(0, Math.min(60, Number(getAccountConfigSnapshot(accountId).plantDelaySeconds) || 2));
 }
 
 function getAutoAcceptFriendMinLevel(accountId) {
@@ -1675,39 +1631,6 @@ function setLoginLinks(config) {
     return { ...globalConfig.loginLinks };
 }
 
-// ==================== 微信配置 ====================
-
-const DEFAULT_WX_CONFIG = {
-    enabled: true,
-    apiBase: 'https://code.z74d.top/api',
-    apiKey: '',
-    proxyApiUrl: 'https://code.z74d.top/api',
-    appId: 'wx5306c5978fdb76e4',
-    autoAddAccount: true,
-    userIsolation: true
-};
-
-function getGlobalWxConfig() {
-    return globalConfig.globalWxConfig
-        ? { ...globalConfig.globalWxConfig }
-        : { ...DEFAULT_WX_CONFIG };
-}
-
-function setGlobalWxConfig(config) {
-    if (!config || typeof config !== 'object') return null;
-    globalConfig.globalWxConfig = {
-        enabled: config.enabled !== false,
-        apiBase: String(config.apiBase || DEFAULT_WX_CONFIG.apiBase).trim(),
-        apiKey: String(config.apiKey || '').trim(),
-        proxyApiUrl: String(config.proxyApiUrl || DEFAULT_WX_CONFIG.proxyApiUrl).trim(),
-        appId: String(config.appId || DEFAULT_WX_CONFIG.appId).trim(),
-        autoAddAccount: config.autoAddAccount !== false,
-        userIsolation: config.userIsolation !== false
-    };
-    saveGlobalConfig();
-    return { ...globalConfig.globalWxConfig };
-}
-
 // ==================== Code/GID 抓取服务配置 ====================
 
 function getCaptureConfig() {
@@ -1883,8 +1806,6 @@ module.exports = {
     setFriendBlacklist,
     addFriendToBlacklist,
     getStealDelaySeconds,
-    getPlantOrderRandom,
-    getPlantDelaySeconds,
     getAutoAcceptFriendMinLevel,
     getFertilizerBuyOrganicCount,
     getFertilizerBuyOrganicThresholdHours,
@@ -1925,9 +1846,6 @@ module.exports = {
     getLoginLinks,
     setLoginLinks,
     DEFAULT_LOGIN_LINKS,
-    getGlobalWxConfig,
-    setGlobalWxConfig,
-    DEFAULT_WX_CONFIG,
     getCaptureConfig,
     setCaptureConfig,
     DEFAULT_CAPTURE_CONFIG,

@@ -25,6 +25,7 @@ defineProps<{
   currentChannelDocUrl: string
   saving: boolean
   testing: boolean
+  showSave?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -173,6 +174,7 @@ const config = defineModel<OfflineReminderConfig>('config', { required: true })
         测试通知
       </BaseButton>
       <BaseButton
+        v-if="showSave !== false"
         variant="primary"
         size="sm"
         :loading="saving"

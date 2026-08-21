@@ -8,33 +8,35 @@ import 'nprogress/nprogress.css'
 NProgress.configure({ showSpinner: false })
 
 const adminToken = useStorage('admin_token', '')
-let validatedToken = ''
-let validatingPromise: Promise<boolean> | null = null
+const userInfo = useStorage('user_info', '')
+let sessionPromise: Promise<boolean> | null = null
+let sessionBootstrapAttempted = false
 
-async function ensureTokenValid() {
-  const token = String(adminToken.value || '').trim()
-  if (!token)
-    return false
-
-  if (validatedToken && validatedToken === token)
+async function ensureAdminSession() {
+  // 管理页面采用宽松鉴权：已有 token 时直接放行，不在导航时重复校验。
+  if (adminToken.value || sessionBootstrapAttempted)
     return true
 
-  if (validatingPromise)
-    return validatingPromise
-
-  validatingPromise = axios.get('/api/auth/validate', {
-    headers: { 'x-admin-token': token },
-    timeout: 6000,
-  }).then((res) => {
-    const ok = !!(res.data && res.data.ok)
-    if (ok)
-      validatedToken = token
-    return ok
-  }).catch(() => false).finally(() => {
-    validatingPromise = null
-  })
-
-  return validatingPromise
+  if (!sessionPromise) {
+    sessionBootstrapAttempted = true
+    sessionPromise = axios.post('/api/auto-login', {}, { timeout: 6000 })
+      .then(({ data }) => {
+        if (!data?.ok)
+          return false
+        adminToken.value = data.data.token
+        userInfo.value = JSON.stringify({
+          username: 'admin',
+          role: 'admin',
+          card: null,
+          accountLimit: data.data.accountLimit,
+          mustChangePassword: false,
+        })
+        return true
+      })
+      .catch(() => false)
+      .finally(() => { sessionPromise = null })
+  }
+  return sessionPromise
 }
 
 const router = createRouter({
@@ -64,45 +66,7 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   NProgress.start()
-
-  if (to.name === 'renewal') {
-    if (!adminToken.value) {
-      validatedToken = ''
-      return true
-    }
-    const valid = await ensureTokenValid()
-    if (!valid) {
-      adminToken.value = ''
-      validatedToken = ''
-    }
-    return true
-  }
-
-  if (to.name === 'login') {
-    if (!adminToken.value) {
-      validatedToken = ''
-      return true
-    }
-    const valid = await ensureTokenValid()
-    if (valid)
-      return { name: 'dashboard' }
-    adminToken.value = ''
-    validatedToken = ''
-    return true
-  }
-
-  if (!adminToken.value) {
-    validatedToken = ''
-    return { name: 'login' }
-  }
-
-  const valid = await ensureTokenValid()
-  if (!valid) {
-    adminToken.value = ''
-    validatedToken = ''
-    return { name: 'login' }
-  }
-
+  await ensureAdminSession()
   return true
 })
 

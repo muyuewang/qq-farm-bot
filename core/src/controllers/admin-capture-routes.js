@@ -488,6 +488,8 @@ function registerAdminCaptureRoutes({
   requireDangerConfirmation,
   canAccessAccount,
   resolveAccountReference,
+  ensureEmbeddedCaptureService,
+  stopEmbeddedCaptureService,
 }) {
   const cleanupTimer = setInterval(() => {
     void cleanupExpiredFlows(store).catch((error) => {
@@ -499,11 +501,15 @@ function registerAdminCaptureRoutes({
   app.get("/api/admin/capture-config", requireAdminRole, (req, res) => {
     try {
       const config = store.getCaptureConfig();
+      const embedded = config.embedded !== false;
+      const running = isEmbeddedMode();
       res.json({
         ok: true,
         data: {
-          enabled: config.enabled === true,
-          embedded: isEmbeddedMode(),
+          enabled: config.enabled === true
+            && ((embedded && running) || (!embedded && !!config.apiBase && !!config.apiToken)),
+          embedded,
+          running,
           apiBase: config.apiBase,
           apiToken: "",
           tokenConfigured: !!config.apiToken,
@@ -525,6 +531,7 @@ function registerAdminCaptureRoutes({
           uptime: Number(health.uptime) || 0,
           sessions: Number(health.sessions) || 0,
           portPoolSize: Array.isArray(health.portPool) ? health.portPool.length : 0,
+          proxyPort: Array.isArray(health.portPool) ? Number(health.portPool[0]) || 18000 : 18000,
         },
       });
     } catch (error) {
@@ -532,18 +539,25 @@ function registerAdminCaptureRoutes({
     }
   });
 
-  app.post("/api/admin/capture-config", requireAdminRole, (req, res) => {
+  app.post("/api/admin/capture-config", requireAdminRole, async (req, res) => {
     try {
       if (!requireDangerConfirmation(req, res, "UPDATE_CAPTURE_CONFIG")) return;
       const input = req.body || {};
       const apiBase = normalizeApiBase(input.apiBase || store.DEFAULT_CAPTURE_CONFIG.apiBase);
       const current = store.getCaptureConfig();
       const apiToken = String(input.apiToken || current.apiToken || "").trim();
+      const wantsEmbedded = input.embedded !== false;
       // 嵌入模式无需 API Token；独立模式启用前必须填写
-      if (input.enabled === true && !isEmbeddedMode() && !apiToken) {
+      if (input.enabled === true && !wantsEmbedded && !apiToken) {
         return res.status(400).json({ ok: false, error: "启用前请填写 API Token" });
       }
       const data = store.setCaptureConfig({ ...input, apiBase, apiToken });
+      if (data.enabled === true && data.embedded !== false && typeof ensureEmbeddedCaptureService === "function") {
+        ensureEmbeddedCaptureService();
+      } else if (typeof stopEmbeddedCaptureService === "function") {
+        await stopEmbeddedCaptureService();
+        captureFlows.clear();
+      }
       logger.warn("更新 Code/GID 抓取服务配置", {
         admin: req.currentUser?.username || "",
         enabled: data.enabled === true,
@@ -555,6 +569,8 @@ function registerAdminCaptureRoutes({
         ok: true,
         data: {
           enabled: data.enabled,
+          embedded: data.embedded !== false,
+          running: isEmbeddedMode(),
           apiBase: data.apiBase,
           apiToken: "",
           tokenConfigured: !!data.apiToken,
@@ -572,7 +588,7 @@ function registerAdminCaptureRoutes({
       ok: true,
       data: {
         enabled: config.enabled === true
-          && (isEmbeddedMode() || (!!config.apiBase && !!config.apiToken)),
+          && ((config.embedded !== false && isEmbeddedMode()) || (!!config.apiBase && !!config.apiToken)),
       },
     });
   });

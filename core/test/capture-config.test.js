@@ -16,7 +16,8 @@ test('default config exposes expected fields', () => {
   assert.deepEqual(DEFAULT_CONFIG.advertiseIps, ['auto']);
   assert.ok(DEFAULT_CONFIG.captureHosts.length > 0);
   assert.ok(DEFAULT_CONFIG.proxyPortFrom >= 1024);
-  assert.ok(DEFAULT_CONFIG.proxyPortTo > DEFAULT_CONFIG.proxyPortFrom);
+  assert.equal(DEFAULT_CONFIG.proxyPortFrom, 18000);
+  assert.equal(DEFAULT_CONFIG.proxyPortTo, 18000);
 });
 
 test('splitList handles arrays and comma strings', () => {
@@ -26,7 +27,8 @@ test('splitList handles arrays and comma strings', () => {
 });
 
 test('parsePortRange validates port ranges', () => {
-  assert.deepEqual(parsePortRange('18000-18999', 1, 2), { from: 18000, to: 18999 });
+  assert.deepEqual(parsePortRange('18000', 1, 2), { from: 18000, to: 18000 });
+  assert.deepEqual(parsePortRange('18000-18999', 1, 2), { from: 18000, to: 18000 });
   assert.deepEqual(parsePortRange('', 100, 200), { from: 100, to: 200 });
   assert.deepEqual(parsePortRange('invalid', 100, 200), { from: 100, to: 200 });
   assert.deepEqual(parsePortRange('30000-1000', 100, 200), { from: 100, to: 200 });
@@ -37,7 +39,7 @@ test('normalizeConfig fills defaults and sanitizes values', () => {
   const config = normalizeConfig({ apiPort: '9999', proxyPortFrom: '5000', proxyPortTo: '6000' });
   assert.equal(config.apiPort, 9999);
   assert.equal(config.proxyPortFrom, 5000);
-  assert.equal(config.proxyPortTo, 6000);
+  assert.equal(config.proxyPortTo, 5000);
   assert.equal(config.autoStopSec >= 60, true);
 });
 

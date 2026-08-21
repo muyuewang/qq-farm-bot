@@ -3,7 +3,6 @@ import BagSeedPriorityPanel from '@/components/settings/BagSeedPriorityPanel.vue
 import StrategyTimingPanel from '@/components/settings/StrategyTimingPanel.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
-import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 
 interface SelectOption<T = string | number> {
   label: string
@@ -26,8 +25,6 @@ interface StrategySettings {
   bagSeedPriority: number[]
   bagSeedFallbackStrategy: string
   stealDelaySeconds: number
-  plantOrderRandom: boolean
-  plantDelaySeconds: number
   intervals: {
     farmMin: number
     farmMax: number
@@ -58,9 +55,13 @@ withDefaults(defineProps<{
   bagSeedsError: string | null
   title?: string
   saveLabel?: string
+  showActions?: boolean
+  timingSection?: 'all' | 'planting' | 'friends' | 'steal'
 }>(), {
   title: '策略设置',
   saveLabel: '保存策略设置',
+  showActions: true,
+  timingSection: 'all',
 })
 
 const emit = defineEmits<{
@@ -122,22 +123,13 @@ const settings = defineModel<StrategySettings>('settings', { required: true })
             {{ settings.plantingStrategy === 'bag_priority' ? '第二优先策略预览' : '策略选种预览' }}
           </label>
           <div
-            class="w-full flex items-center justify-between border border-gray-200 rounded-lg bg-gray-50 px-3 py-2 text-gray-500 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
+            class="w-full flex items-center justify-between border border-dashed border-gray-200 rounded-lg bg-gray-50 px-3 py-2 text-gray-500 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
+            title="根据当前策略自动匹配，仅供预览"
           >
             <span class="truncate">{{ strategyPreviewLabel ?? '加载中...' }}</span>
-            <div class="i-carbon-chevron-down shrink-0 text-lg text-gray-400" />
+            <div class="i-carbon-information shrink-0 text-base text-gray-400" />
           </div>
         </div>
-      </div>
-
-      <div class="border border-emerald-200 rounded-lg bg-emerald-50/70 p-3 dark:border-emerald-800/50 dark:bg-emerald-900/20">
-        <BaseSwitch
-          v-model="settings.prioritize2x2Crops"
-          label="优先种植 2×2 作物"
-        />
-        <p class="mt-2 text-xs text-emerald-700/90 leading-5 dark:text-emerald-300/90">
-          开启后会根据背包中的四格种子预留完整 2×2 区域；预留区收获后暂不补种普通作物，四块全部空闲时自动种植。四格种子不会从商城购买。
-        </p>
       </div>
 
       <div v-if="settings.plantingStrategy === 'bag_priority'" class="space-y-3">
@@ -160,9 +152,9 @@ const settings = defineModel<StrategySettings>('settings', { required: true })
         />
       </div>
 
-      <StrategyTimingPanel v-model:settings="settings" />
+      <StrategyTimingPanel v-model:settings="settings" :section="timingSection" />
 
-      <div class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
+      <div v-if="showActions" class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
         <BaseButton
           variant="primary"
           size="sm"

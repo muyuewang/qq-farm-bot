@@ -100,14 +100,6 @@ function buildSettingsPayload(store, accountId, currentUser) {
       accountId && typeof store.getStealDelaySeconds === "function"
         ? store.getStealDelaySeconds(accountId)
         : 0,
-    plantOrderRandom:
-      accountId && typeof store.getPlantOrderRandom === "function"
-        ? store.getPlantOrderRandom(accountId)
-        : false,
-    plantDelaySeconds:
-      accountId && typeof store.getPlantDelaySeconds === "function"
-        ? store.getPlantDelaySeconds(accountId)
-        : 0,
     fertilizerBuyOrganicCount:
       accountId && typeof store.getFertilizerBuyOrganicCount === "function"
         ? store.getFertilizerBuyOrganicCount(accountId)

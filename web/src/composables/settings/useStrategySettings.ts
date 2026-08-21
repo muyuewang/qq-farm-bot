@@ -50,8 +50,6 @@ export function useStrategySettings({
     bagSeedKnownIds: [] as number[],
     bagSeedFallbackStrategy: 'level',
     stealDelaySeconds: 0,
-    plantOrderRandom: false,
-    plantDelaySeconds: 0,
     intervals: { farmMin: 2, farmMax: 5, helpMin: 10, helpMax: 15, stealMin: 10, stealMax: 15 },
     friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
   })
@@ -318,8 +316,6 @@ export function useStrategySettings({
         bagSeedKnownIds: settings.value.bagSeedKnownIds ?? [],
         bagSeedFallbackStrategy: settings.value.bagSeedFallbackStrategy ?? 'level',
         stealDelaySeconds: settings.value.stealDelaySeconds ?? 0,
-        plantOrderRandom: !!settings.value.plantOrderRandom,
-        plantDelaySeconds: settings.value.plantDelaySeconds ?? 0,
         intervals: settings.value.intervals,
         friendQuietHours: settings.value.friendQuietHours,
       }))

@@ -59,7 +59,7 @@ RUN mkdir -p data/logs && chmod -R 755 data
 
 VOLUME ["/app/core/data"]
 
-EXPOSE 3007
+EXPOSE 3007 18000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
     CMD wget -q --spider http://localhost:3007/api/status || exit 1

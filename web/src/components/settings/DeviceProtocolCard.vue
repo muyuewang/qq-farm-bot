@@ -18,6 +18,7 @@ defineProps<{
   loading: boolean
   saving: boolean
   presetOptions: { label: string, value: string | number }[]
+  showSave?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -124,10 +125,10 @@ const selectedPreset = defineModel<string | number>('selectedPreset', { required
       </div>
 
       <p class="text-xs text-gray-500 dark:text-gray-400">
-        这组配置按当前用户保存，不区分单个账号。仅在登录兼容性或风控需要时启用即可。
+        这组配置全局生效，不区分单个账号。仅在登录兼容性或风控需要时启用即可。
       </p>
 
-      <div class="flex justify-end border-t pt-3 dark:border-gray-700">
+      <div v-if="showSave !== false" class="flex justify-end border-t pt-3 dark:border-gray-700">
         <BaseButton
           variant="primary"
           size="sm"

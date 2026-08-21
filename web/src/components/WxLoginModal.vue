@@ -62,23 +62,17 @@ async function handleAutoAddAccount(wxid: string, nickname?: string, avatar?: st
     if (result.success && result.code) {
       const name = accountName.value.trim() || nickname || `微信账号${Date.now()}`
 
-      // 检查是否启用自动添加账号
-      if (wxLoginStore.config.autoAddAccount) {
-        await accountStore.addAccount({
-          name,
-          code: result.code,
-          platform: 'wx',
-          loginType: 'wx_qr',
-          wxid,
-          avatar,
-          wxSessionId: wxLoginStore.uuid,
-        })
-        emit('saved')
-        close()
-      }
-      else {
-        wxLoginStore.statusMessage = '登录成功，请在配置中启用自动添加账号后重试'
-      }
+      await accountStore.addAccount({
+        name,
+        code: result.code,
+        platform: 'wx',
+        loginType: 'wx_qr',
+        wxid,
+        avatar,
+        wxSessionId: wxLoginStore.uuid,
+      })
+      emit('saved')
+      close()
     }
   }
   catch (e) {

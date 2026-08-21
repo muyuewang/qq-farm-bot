@@ -8,19 +8,10 @@ export interface SystemConfig {
   os: string
 }
 
-export interface WxConfig {
-  enabled: boolean
-  apiBase: string
-  apiKey: string
-  proxyApiUrl: string
-  appId: string
-  autoAddAccount: boolean
-  userIsolation: boolean
-}
-
 export interface CaptureConfig {
   enabled: boolean
   embedded: boolean
+  running?: boolean
   apiBase: string
   apiToken: string
   tokenConfigured: boolean
@@ -47,19 +38,10 @@ const defaultSystemConfigValues: SystemConfig = {
   os: 'iOS',
 }
 
-const defaultWxConfig: WxConfig = {
-  enabled: true,
-  apiBase: 'https://code.z74d.top/api',
-  apiKey: '',
-  proxyApiUrl: 'https://code.z74d.top/api',
-  appId: 'wx5306c5978fdb76e4',
-  autoAddAccount: true,
-  userIsolation: true,
-}
-
 const defaultCaptureConfig: CaptureConfig = {
   enabled: false,
   embedded: true,
+  running: false,
   apiBase: 'http://127.0.0.1:8450',
   apiToken: '',
   tokenConfigured: false,
@@ -78,7 +60,6 @@ const defaultLoginLinks: LoginLinks = {
 export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
   const systemConfigSaving = ref(false)
   const systemConfigLoading = ref(false)
-  const wxConfigSaving = ref(false)
   const captureConfigSaving = ref(false)
   const captureConfigTesting = ref(false)
   const loginLinksSaving = ref(false)
@@ -87,12 +68,9 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
   const showResetSystemConfirm = ref(false)
   const showSaveSystemConfirm = ref(false)
   const showResetLoginLinksConfirm = ref(false)
-  const showResetWxConfigConfirm = ref(false)
-  const showSaveWxConfigConfirm = ref(false)
 
   const localSystemConfig = ref<SystemConfig>({ ...defaultSystemConfigValues })
   const defaultSystemConfig = ref<SystemConfig>({ ...defaultSystemConfigValues })
-  const localWxConfig = ref<WxConfig>({ ...defaultWxConfig })
   const localCaptureConfig = ref<CaptureConfig>({ ...defaultCaptureConfig })
   const localLoginLinks = ref<LoginLinks>({ ...defaultLoginLinks })
 
@@ -199,17 +177,6 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
     { label: 'Android', value: 'Android' },
   ]
 
-  async function loadWxConfig() {
-    try {
-      const { data } = await api.get('/api/admin/wx-config')
-      if (data?.ok && data.data)
-        localWxConfig.value = { ...data.data }
-    }
-    catch (e: any) {
-      console.error('加载微信配置失败:', e)
-    }
-  }
-
   async function loadCaptureConfig() {
     try {
       const { data } = await api.get('/api/admin/capture-config')
@@ -226,8 +193,9 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
     try {
       const { data } = await api.post('/api/admin/capture-config/test', localCaptureConfig.value, { timeout: 20000 })
       if (data?.ok) {
+        const proxyPort = Number(data.data?.proxyPort) || 18000
         const poolSize = Number(data.data?.portPoolSize) || 0
-        options.showAlert(`连接成功${poolSize ? `，可用代理端口 ${poolSize} 个` : ''}`, 'primary')
+        options.showAlert(`连接成功${poolSize ? `，代理端口 ${proxyPort} 可用` : ''}`, 'primary')
       }
       else {
         options.showAlert(data?.error || '连接失败', 'danger')
@@ -262,41 +230,6 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
     finally {
       captureConfigSaving.value = false
     }
-  }
-
-  async function handleSaveWxConfig() {
-    showSaveWxConfigConfirm.value = false
-    wxConfigSaving.value = true
-    try {
-      const { data } = await api.post('/api/admin/wx-config', {
-        ...localWxConfig.value,
-        confirmed: true,
-      })
-      if (data?.ok)
-        options.showAlert('微信配置已保存，全局应用生效', 'primary')
-      else
-        options.showAlert(data?.error || '保存失败', 'danger')
-    }
-    catch (e: any) {
-      options.showAlert(`保存失败: ${e.message || '未知错误'}`, 'danger')
-    }
-    finally {
-      wxConfigSaving.value = false
-    }
-  }
-
-  async function handleResetWxConfig() {
-    showResetWxConfigConfirm.value = false
-    localWxConfig.value = { ...defaultWxConfig }
-    options.showAlert('微信配置已重置为默认值', 'primary')
-  }
-
-  function openResetWxConfigConfirm() {
-    showResetWxConfigConfirm.value = true
-  }
-
-  function openSaveWxConfigConfirm() {
-    showSaveWxConfigConfirm.value = true
   }
 
   async function loadSystemConfig() {
@@ -373,7 +306,6 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
   return {
     systemConfigSaving,
     systemConfigLoading,
-    wxConfigSaving,
     captureConfigSaving,
     captureConfigTesting,
     loginLinksSaving,
@@ -381,16 +313,12 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
     showResetSystemConfirm,
     showSaveSystemConfirm,
     showResetLoginLinksConfirm,
-    showResetWxConfigConfirm,
-    showSaveWxConfigConfirm,
     localSystemConfig,
     defaultSystemConfig,
-    localWxConfig,
     localCaptureConfig,
     localLoginLinks,
     platformOptions,
     osOptions,
-    loadWxConfig,
     loadCaptureConfig,
     handleTestCaptureConfig,
     handleSaveCaptureConfig,
@@ -399,10 +327,6 @@ export function useAdminSystemConfig(options: UseAdminSystemConfigOptions) {
     handleResetLoginLinks,
     openResetLoginLinksConfirm,
     handleUploadLoginLogo,
-    handleSaveWxConfig,
-    handleResetWxConfig,
-    openResetWxConfigConfirm,
-    openSaveWxConfigConfirm,
     loadSystemConfig,
     handleSaveSystemConfig,
     handleResetSystemConfig,

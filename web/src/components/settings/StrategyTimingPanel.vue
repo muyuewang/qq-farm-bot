@@ -4,8 +4,6 @@ import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
 
 interface StrategyTimingSettings {
-  plantOrderRandom: boolean
-  plantDelaySeconds: number
   stealDelaySeconds: number
   intervals: {
     farmMin: number
@@ -22,8 +20,8 @@ interface StrategyTimingSettings {
   }
 }
 
+const props = withDefaults(defineProps<{ section?: 'all' | 'planting' | 'friends' | 'steal' }>(), { section: 'all' })
 const settings = defineModel<StrategyTimingSettings>('settings', { required: true })
-
 type IntervalKey = keyof StrategyTimingSettings['intervals']
 
 function intervalModel(key: IntervalKey) {
@@ -52,7 +50,7 @@ const stealMax = intervalModel('stealMax')
 
 <template>
   <div class="space-y-3">
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div v-if="section === 'all' || section === 'planting'" class="grid grid-cols-2 gap-3 md:grid-cols-2">
       <BaseInput
         v-model.number="farmMin"
         label="农场巡查最小 (秒)"
@@ -67,7 +65,7 @@ const stealMax = intervalModel('stealMax')
       />
     </div>
 
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-2">
+    <div v-if="section === 'all' || section === 'friends'" class="grid grid-cols-2 gap-3 md:grid-cols-2">
       <BaseInput
         v-model.number="helpMin"
         label="帮助巡查最小 (秒)"
@@ -82,7 +80,7 @@ const stealMax = intervalModel('stealMax')
       />
     </div>
 
-    <div class="grid grid-cols-2 gap-3 md:grid-cols-2">
+    <div v-if="section === 'all' || section === 'steal'" class="grid grid-cols-2 gap-3 md:grid-cols-2">
       <BaseInput
         v-model.number="stealMin"
         label="偷菜巡查最小 (秒)"
@@ -97,7 +95,7 @@ const stealMax = intervalModel('stealMax')
       />
     </div>
 
-    <div class="flex flex-wrap items-center gap-4 border-t pt-3 dark:border-gray-700">
+    <div v-if="section === 'all' || section === 'friends'" class="flex flex-wrap items-center gap-4 border-t pt-3 dark:border-gray-700">
       <BaseSwitch
         v-model="settings.friendQuietHours.enabled"
         label="启用静默时段"
@@ -119,28 +117,16 @@ const stealMax = intervalModel('stealMax')
       </div>
     </div>
 
-    <div class="border-t pt-3 space-y-3 dark:border-gray-700">
+    <div v-if="section === 'all' || section === 'steal'" class="border-t pt-3 space-y-3 dark:border-gray-700">
       <h4 class="text-sm text-gray-700 font-medium dark:text-gray-300">
-        种植与偷菜延迟设置
+        偷菜延迟设置
       </h4>
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <BaseSwitch
-          v-model="settings.plantOrderRandom"
-          label="种植顺序随机"
-        />
-        <BaseInput
-          v-model.number="settings.plantDelaySeconds"
-          label="种植延迟 (秒)"
-          type="number"
-          min="0"
-        />
-        <BaseInput
-          v-model.number="settings.stealDelaySeconds"
-          label="偷菜延迟 (秒)"
-          type="number"
-          min="0"
-        />
-      </div>
+      <BaseInput
+        v-model.number="settings.stealDelaySeconds"
+        label="偷菜延迟 (秒)"
+        type="number"
+        min="0"
+      />
     </div>
   </div>
 </template>

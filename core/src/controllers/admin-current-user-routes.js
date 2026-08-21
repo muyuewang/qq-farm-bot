@@ -10,7 +10,6 @@ function requireCurrentUser(req, res) {
 function registerAdminCurrentUserRoutes({
   app,
   requireAdminToken,
-  requireAdminRole,
   userStore,
   store,
 }) {
@@ -29,34 +28,6 @@ function registerAdminCurrentUserRoutes({
             currentUser.accountLimit || userStore.DEFAULT_ACCOUNT_LIMIT || 2,
         },
       });
-    } catch (error) {
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
-
-  app.post(
-    "/api/user/wxlogin-config",
-    requireAdminToken,
-    requireAdminRole,
-    (req, res) => {
-      try {
-        const currentUser = requireCurrentUser(req, res);
-        if (!currentUser) return;
-
-        const config = store.setGlobalWxConfig(req.body || {});
-        res.json({ ok: true, config });
-      } catch (error) {
-        res.status(500).json({ ok: false, error: error.message });
-      }
-    },
-  );
-
-  app.get("/api/user/wxlogin-config", requireAdminToken, (req, res) => {
-    try {
-      const currentUser = requireCurrentUser(req, res);
-      if (!currentUser) return;
-
-      res.json({ ok: true, config: store.getGlobalWxConfig() });
     } catch (error) {
       res.status(500).json({ ok: false, error: error.message });
     }

@@ -1,4 +1,3 @@
-const fetch = require('node-fetch');
 const { createScheduler } = require('../services/scheduler');
 const wxLoginAdapter = require('../services/wx-login-adapter');
 
@@ -55,53 +54,18 @@ function createAutoCodeRefreshService(deps) {
     };
   }
 
-  function getWxConfig() {
-    return store.getGlobalWxConfig ? store.getGlobalWxConfig() : {};
-  }
-
-  async function requestFarmCode(account, wxConfig) {
+  async function requestFarmCode(account) {
     const wxid = String(account && account.wxid || '').trim();
     if (!wxid) throw new Error('账号缺少 wxid，无法自动刷新 Code');
 
-    const apiKey = String(wxConfig.apiKey || '').trim();
-    const appId = String(wxConfig.appId || 'wx5306c5978fdb76e4').trim();
-
-    // 新扫码账号保存了应用宝凭证，优先在进程内滚动续期并换取短时效 Code。
-    if (account.loginBuffer) {
-      if (account.refreshtoken) {
-        const keepalive = await wxLoginAdapter.keepWxCredentialAlive(account);
-        if (!keepalive.Success) throw new Error(keepalive.Message || '微信凭证续期失败');
-      }
-      const local = await wxLoginAdapter.getFarmCode(wxid, { accountId: account.id });
-      if (local.Success && local.Data && local.Data.code) return String(local.Data.code);
-      throw new Error(local.Message || '进程内获取 Code 失败');
+    if (!account.loginBuffer) throw new Error('账号缺少应用宝登录凭据，请重新扫码登录');
+    if (account.refreshtoken) {
+      const keepalive = await wxLoginAdapter.keepWxCredentialAlive(account);
+      if (!keepalive.Success) throw new Error(keepalive.Message || '微信凭证续期失败');
     }
-
-    if (apiKey) {
-      const proxyApiUrl = String(wxConfig.proxyApiUrl || 'https://code.z74d.top/api').trim();
-      const targetUrl = `${proxyApiUrl  }?api_key=${  encodeURIComponent(apiKey)  }&action=jslogin`;
-      const response = await fetch(targetUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wxid, appid: appId }),
-      });
-      const data = await response.json();
-      if (data && data.code === 0 && data.data && data.data.code) return String(data.data.code);
-      throw new Error(data && data.msg ? data.msg : '代理获取 Code 失败');
-    }
-
-    const apiBase = String(wxConfig.apiBase || 'https://code.z74d.top/api').trim();
-    const response = await fetch(`${apiBase  }/Wxapp/JSLogin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ Wxid: wxid, Appid: appId }),
-    });
-    const data = await response.json();
-    if (data && data.Success && data.Data && data.Data.code) return String(data.Data.code);
-    const msg = data && data.Data && data.Data.jsapiBaseresponse && data.Data.jsapiBaseresponse.errmsg
-      ? data.Data.jsapiBaseresponse.errmsg
-      : data && data.Message ? data.Message : '获取 Code 失败';
-    throw new Error(msg);
+    const local = await wxLoginAdapter.getFarmCode(wxid, { accountId: account.id });
+    if (local.Success && local.Data && local.Data.code) return String(local.Data.code);
+    throw new Error(local.Message || '进程内获取 Code 失败');
   }
 
   async function refreshAccountCode(accountId, reason = 'timer') {
@@ -117,17 +81,8 @@ function createAutoCodeRefreshService(deps) {
     }
     if (recovery) recovery.attempts += 1;
 
-    const wxConfig = getWxConfig();
-    if (wxConfig.enabled === false && !account.loginBuffer) {
-      log('系统', '自动刷新 Code 跳过: 微信登录未启用', {
-        accountId: String(accountId),
-        accountName: account.name,
-      });
-      return false;
-    }
-
     try {
-      const code = await requestFarmCode(account, wxConfig);
+      const code = await requestFarmCode(account);
       const nextAccount = { ...account, code };
       addOrUpdateAccount(nextAccount);
 

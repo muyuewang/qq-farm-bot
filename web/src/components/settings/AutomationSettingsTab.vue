@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import api from '@/api'
-import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
@@ -12,6 +11,7 @@ interface AutomationSettings {
     task: boolean
     sell: boolean
     friend: boolean
+    friend_auto_accept: boolean
     farm_push: boolean
     land_upgrade: boolean
     friend_steal: boolean
@@ -20,6 +20,7 @@ interface AutomationSettings {
     friend_golden_bug: boolean
     friend_help_exp_limit: boolean
     star_passport_claim: boolean
+    star_solar_claim: boolean
     star_record_claim: boolean
     qingmei_seed_claim: boolean
     qingmei_wine_brew: boolean
@@ -51,35 +52,27 @@ interface AutomationSettings {
   goldenBugRoundLimit: number
 }
 
-interface AutoCodeRefreshConfig {
-  enabled: boolean
-  intervalMinutes: number
-}
-
 const props = withDefaults(defineProps<{
   currentAccountName: string | null
   currentAccountId: string | number | null | undefined
   loading: boolean
   saving: boolean
-  autoCodeRefreshing: boolean
   fertilizerLandTypeOptions: { label: string, value: string }[]
   fertilizerOptions: { label: string, value: string | number }[]
   title?: string
   saveLabel?: string
-  showRunAutoCodeRefresh?: boolean
+  showActions?: boolean
 }>(), {
   title: '自动控制',
   saveLabel: '保存自动控制',
-  showRunAutoCodeRefresh: true,
+  showActions: true,
 })
 
 const emit = defineEmits<{
   save: []
-  runAutoCodeRefresh: []
 }>()
 
 const settings = defineModel<AutomationSettings>('settings', { required: true })
-const autoCodeRefresh = defineModel<AutoCodeRefreshConfig>('autoCodeRefresh', { required: true })
 
 function isFastMatureFertilizerMode(mode: string) {
   return mode === 'smart' || mode === 'smart_only' || mode === 'smart_normal'
@@ -235,6 +228,9 @@ watch(() => props.currentAccountId, loadQixiFriends)
             <BaseSwitch v-model="settings.automation.star_passport_claim" label="自动领取千星游记" />
           </div>
           <div class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.star_solar_claim" label="自动领取节令小札" />
+          </div>
+          <div class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.star_record_claim" label="自动领取观星礼录" />
           </div>
           <div class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
@@ -260,51 +256,6 @@ watch(() => props.currentAccountId, loadQixiFriends)
           <div class="flex max-h-44 flex-wrap gap-2 overflow-y-auto">
             <button v-for="friend in qixiFriends.filter(item => !qixiPriority().includes(item.gid))" :key="friend.gid" type="button" class="rounded-full border border-gray-200 px-3 py-1.5 text-xs text-gray-700 hover:border-violet-400 dark:border-gray-700 dark:text-gray-200" @click="toggleQixiFriend(friend.gid)">+ {{ friend.name }}</button>
             <span v-if="!qixiFriends.length" class="text-xs text-gray-500">账号运行后可加载好友列表。</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="border border-gray-200 rounded bg-gray-50/70 p-3 dark:border-gray-700 dark:bg-gray-900/20">
-        <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          <div class="min-w-0 space-y-2">
-            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <span class="inline-flex items-center gap-1.5 text-sm text-gray-900 font-medium dark:text-gray-100">
-                <span class="i-carbon-renew text-base text-gray-500 dark:text-gray-400" />
-                自动刷新获取 Code
-              </span>
-              <BaseSwitch
-                v-model="autoCodeRefresh.enabled"
-                label="启用"
-              />
-            </div>
-            <p class="text-xs text-gray-500 dark:text-gray-400">
-              <span class="text-amber-700 font-semibold dark:text-amber-300">仅微信账号可用。</span>
-              到点后自动获取新 Code 并重启当前账号；QQ 账号和缺少 wxid 的手动填码账号会跳过。
-            </p>
-          </div>
-
-          <div class="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <BaseInput
-              v-model.number="autoCodeRefresh.intervalMinutes"
-              class="sm:w-36"
-              label="间隔(分钟)"
-              type="number"
-              min="1"
-              max="1440"
-              placeholder="60"
-            />
-            <BaseButton
-              v-if="showRunAutoCodeRefresh"
-              variant="secondary"
-              size="sm"
-              class="h-9 whitespace-nowrap"
-              :loading="autoCodeRefreshing"
-              :disabled="saving"
-              @click="emit('runAutoCodeRefresh')"
-            >
-              <span class="i-carbon-renew mr-1" />
-              立即刷新
-            </BaseButton>
           </div>
         </div>
       </div>
@@ -370,6 +321,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
         <BaseSwitch v-model="settings.automation.friend_steal" label="自动偷菜" />
         <BaseSwitch v-model="settings.automation.friend_help" label="自动帮忙" />
         <BaseSwitch v-model="settings.automation.friend_bad" label="自动捣乱" />
+        <BaseSwitch v-model="settings.automation.friend_auto_accept" label="自动通过好友申请" />
         <BaseSwitch v-model="settings.automation.friend_golden_bug" label="自动放黄金虫" />
         <BaseSwitch v-model="settings.automation.friend_help_exp_limit" label="经验满只帮护主犬" />
       </div>
@@ -391,7 +343,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
         />
       </div>
 
-      <div v-if="settings.automation.friend" class="rounded bg-sky-50 p-3 text-sm dark:bg-sky-900/20">
+      <div v-if="settings.automation.friend && settings.automation.friend_auto_accept" class="rounded bg-sky-50 p-3 text-sm dark:bg-sky-900/20">
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <BaseInput
             v-model.number="settings.autoAcceptFriendMinLevel"
@@ -402,7 +354,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
           />
         </div>
         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-          设为 `0` 表示不限制等级；启用好友相关自动化后，系统会按这里的最低等级自动通过好友申请。
+          设为 `0` 表示不限制等级；开启自动通过好友申请后，系统会按这里的最低等级处理申请。
         </p>
       </div>
 
@@ -467,7 +419,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
         </div>
       </div>
 
-      <div class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
+      <div v-if="showActions" class="flex justify-end gap-2 border-t pt-3 dark:border-gray-700">
         <BaseButton
           variant="primary"
           size="sm"

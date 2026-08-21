@@ -186,37 +186,53 @@ function accountAvatar(acc: any) {
             <BaseButton
               :data-testid="`apply-default-plan-${acc.id}`"
               variant="ghost"
-              class="min-h-[36px] min-w-[36px] !p-2"
+              class="group relative min-h-[36px] min-w-[36px] !p-2"
               :loading="defaultPlanApplyingId === String(acc.id)"
               :disabled="!!defaultPlanApplyingId"
+              aria-label="应用默认方案"
               title="应用默认方案"
               @click="emit('applyDefaultPlan', acc)"
             >
               <div v-if="defaultPlanApplyingId !== String(acc.id)" i-carbon-document-import />
+              <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 -translate-x-1/2 dark:bg-gray-100 dark:text-gray-900 group-focus-visible:opacity-100 group-hover:opacity-100">
+                应用默认方案
+              </span>
             </BaseButton>
             <BaseButton
               variant="ghost"
-              class="min-h-[36px] min-w-[36px] !p-2"
+              class="group relative min-h-[36px] min-w-[36px] !p-2"
+              aria-label="设置"
               title="设置"
               @click="emit('settings', acc)"
             >
               <div i-carbon-settings />
+              <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 -translate-x-1/2 dark:bg-gray-100 dark:text-gray-900 group-focus-visible:opacity-100 group-hover:opacity-100">
+                设置
+              </span>
             </BaseButton>
             <BaseButton
               variant="ghost"
-              class="min-h-[36px] min-w-[36px] !p-2"
+              class="group relative min-h-[36px] min-w-[36px] !p-2"
+              aria-label="编辑"
               title="编辑"
               @click="emit('edit', acc)"
             >
               <div i-carbon-edit />
+              <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 -translate-x-1/2 dark:bg-gray-100 dark:text-gray-900 group-focus-visible:opacity-100 group-hover:opacity-100">
+                编辑
+              </span>
             </BaseButton>
             <BaseButton
               variant="ghost"
-              class="min-h-[36px] min-w-[36px] text-red-500 !p-2 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
+              class="group relative min-h-[36px] min-w-[36px] text-red-500 !p-2 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300"
+              aria-label="删除"
               title="删除"
               @click="emit('delete', acc)"
             >
               <div i-carbon-trash-can />
+              <span class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 whitespace-nowrap rounded-md bg-gray-900 px-2 py-1 text-xs text-white opacity-0 shadow-lg transition-opacity duration-150 -translate-x-1/2 dark:bg-gray-100 dark:text-gray-900 group-focus-visible:opacity-100 group-hover:opacity-100">
+                删除
+              </span>
             </BaseButton>
           </div>
         </div>

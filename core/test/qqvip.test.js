@@ -6,6 +6,7 @@ const protobuf = require('protobufjs');
 const {
   getAvailableVipTypes,
   getVipRewardLabels,
+  isNotVipError,
 } = require('../src/services/qqvip');
 
 let proto;
@@ -33,6 +34,14 @@ test('VIP reward types use readable log labels', () => {
   assert.deepEqual(getVipRewardLabels([1]), ['VIP奖励']);
   assert.deepEqual(getVipRewardLabels([2]), ['SVIP奖励']);
   assert.deepEqual(getVipRewardLabels([1, 2]), ['VIP奖励', 'SVIP奖励']);
+});
+
+test('non-VIP errors are recognized by code and readable message', () => {
+  assert.equal(isNotVipError(new Error(
+    'gamepb.qqvippb.QQVipService.RefreshVipInfo 错误: code=1021001 非QQ会员'
+  )), true);
+  assert.equal(isNotVipError(new Error('当前账号非 QQ 会员')), true);
+  assert.equal(isNotVipError(new Error('code=500 服务异常')), false);
 });
 
 test('SVIP-only claim matches the captured packed request', () => {

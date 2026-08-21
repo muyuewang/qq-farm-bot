@@ -4,7 +4,7 @@
  *
  * 启动后提供：
  * - REST API：默认 http://127.0.0.1:8450（bot 管理面板的“抓包登录”使用）
- * - MITM 代理端口池：默认 18000-18999，绑定全部网卡 IP（局域网 / Tailscale）
+ * - MITM 代理端口：默认 18000，绑定全部网卡 IP（局域网 / Tailscale）
  *
  * 配置见 <core>/data/capture/config.json，或使用 CAPTURE_* 环境变量。
  */
@@ -18,7 +18,7 @@ async function main() {
   const advertise = require('./src/capture/ip-utils').resolveAdvertiseAddresses(config);
   log('info', '抓包服务启动完成');
   log('info', `API: http://${config.apiHost}:${config.apiPort}`);
-  log('info', `代理端口池: ${config.proxyPortFrom}-${config.proxyPortTo}`);
+  log('info', `代理端口: ${config.proxyPortFrom}`);
   log('info', `代理绑定 IP: ${(config.proxyBind || []).join(', ')}`);
   log('info', `对外代理地址（手机 Wi-Fi 代理填写）: ${advertise.addresses.length
     ? advertise.addresses.map(item => `${item.address}:<代理端口> (${item.kind})`).join(', ')

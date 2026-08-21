@@ -673,6 +673,11 @@ onUnmounted(() => {
   filter: saturate(1.08) brightness(1.06) drop-shadow(0 10px 7px rgb(62 46 27 / 0.35));
 }
 
+.iso-farm-stage :deep(.land-card-selected .land-ground-single.land-ground-rotated),
+.iso-farm-stage :deep(.land-card-selected .land-ground-merged.land-ground-rotated) {
+  transform: translate(-50%, -50%) rotate(180deg);
+}
+
 .iso-farm-stage :deep(.land-card-selected .land-ground-layer) {
   inset: 0;
 }

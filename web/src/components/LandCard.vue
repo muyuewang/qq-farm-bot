@@ -857,11 +857,6 @@ function getIsometricBubbleClass(targetLand: any) {
   filter: saturate(1.22) brightness(1.05) drop-shadow(0 0 5px rgb(244 63 94 / 0.82));
 }
 
-.love-mutation-layer {
-  background: radial-gradient(circle, rgb(251 113 133 / 0.2) 10%, transparent 68%);
-  box-shadow: inset 0 0 7px rgb(244 114 182 / 0.34);
-}
-
 .love-mutation-layer i {
   position: absolute;
   bottom: -2px;

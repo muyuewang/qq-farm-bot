@@ -378,41 +378,6 @@ function registerAdminSystemRoutes({
     },
   );
 
-  app.get(
-    "/api/admin/wx-config",
-    requireAdminToken,
-    requireAdminRole,
-    (req, res) => {
-      try {
-        res.json({ ok: true, data: store.getGlobalWxConfig() });
-      } catch (error) {
-        res.status(500).json({ ok: false, error: error.message });
-      }
-    },
-  );
-
-  app.post(
-    "/api/admin/wx-config",
-    requireAdminToken,
-    requireAdminRole,
-    (req, res) => {
-      try {
-        if (!requireDangerConfirmation(req, res, "UPDATE_WX_CONFIG")) return;
-        const data = store.setGlobalWxConfig(req.body || {});
-        logger.warn("更新微信配置", {
-          admin: req.currentUser?.username || "",
-          enabled: data?.enabled === true,
-          autoAddAccount: data?.autoAddAccount === true,
-          userIsolation: data?.userIsolation === true,
-          apiBase: data?.apiBase || "",
-          confirmation: "UPDATE_WX_CONFIG",
-        });
-        res.json({ ok: true, data });
-      } catch (error) {
-        res.status(500).json({ ok: false, error: error.message });
-      }
-    },
-  );
 }
 
 module.exports = { registerAdminSystemRoutes };

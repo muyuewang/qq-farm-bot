@@ -584,6 +584,8 @@ function refreshFriendCheckLoop(delayMs = 0) {
 // ===== Friend application handling =====
 
 function onFriendApplicationReceived(applications) {
+  if (!isAutomationOn('friend_auto_accept') || !isAutomationOn('friend') || !isConnected()) return;
+
   const names = applications
     .map(app => app.name || `GID:${toNum(app.gid)}`)
     .join(', ');
@@ -617,6 +619,8 @@ function onFriendApplicationReceived(applications) {
 
 async function checkAndAcceptApplications() {
   try {
+    if (!isAutomationOn('friend_auto_accept') || !isAutomationOn('friend') || !isConnected()) return;
+
     const reply = await getApplications();
     const apps = reply.applications || [];
     if (apps.length === 0) return;

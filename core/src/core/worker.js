@@ -270,6 +270,7 @@ async function runStarActivityAutoClaims() {
 
     const automation = getAutomation() || {};
     const claimPassport = automation.star_passport_claim === true;
+    const claimSolarTerms = automation.star_solar_claim === true;
     const claimRecords = automation.star_record_claim === true;
     const claimQingmeiSeedsEnabled = automation.qingmei_seed_claim === true;
     const brewQingmeiWineEnabled = automation.qingmei_wine_brew === true;
@@ -278,7 +279,7 @@ async function runStarActivityAutoClaims() {
     const giftQixiSachetEnabled = automation.qixi_sachet_gift === true;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
-    if (!claimPassport && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
+    if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
         && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled) return;
 
     starActivityClaimRunning = true;
@@ -286,11 +287,12 @@ async function runStarActivityAutoClaims() {
         const {
             getStarActivity,
             claimSeasonPassportRewards,
+            claimSolarTermsReward,
             claimStarRecordRewards,
             claimQingmeiSeeds,
             brewAndSellQingmeiWine
         } = require('../services/activity');
-        const needsStarActivity = claimPassport || claimRecords || claimQingmeiSeedsEnabled || brewQingmeiWineEnabled;
+        const needsStarActivity = claimPassport || claimSolarTerms || claimRecords || claimQingmeiSeedsEnabled || brewQingmeiWineEnabled;
         const activity = needsStarActivity ? await getStarActivity() : {};
         if (claimPassport && Number(activity?.passport?.claimableLevels || 0) > 0) {
             try {
@@ -307,6 +309,31 @@ async function runStarActivityAutoClaims() {
                     event: '千星游记自动领取',
                     result: 'error'
                 });
+            }
+        }
+
+        if (claimSolarTerms && Number(activity?.solarTerms?.claimableCount || 0) > 0) {
+            const terms = Array.isArray(activity?.solarTerms?.terms)
+                ? activity.solarTerms.terms.filter(term => term && term.claimable)
+                : [];
+            for (const term of terms) {
+                try {
+                    const result = await claimSolarTermsReward(Number(term.id) || 0);
+                    log('活动', `自动领取节令小札完成：${  term.title || result?.term?.title || term.id  }`, {
+                        module: 'activity',
+                        event: '节令小札自动领取',
+                        result: 'success',
+                        termId: Number(term.id) || 0,
+                        termTitle: term.title || result?.term?.title || ''
+                    });
+                } catch (err) {
+                    log('活动', `自动领取节令小札失败: ${  err.message}`, {
+                        module: 'activity',
+                        event: '节令小札自动领取',
+                        result: 'error',
+                        termId: Number(term.id) || 0
+                    });
+                }
             }
         }
 
