@@ -12,21 +12,22 @@ const {
   getFertilizerBuyCheckIntervalMinutes
 } = require('../models/store');
 const { checkAndBuyFertilizerBoth } = require('./mall');
+const { createScheduler } = require('./scheduler');
 
-let fertilizerBuyCheckTimer = null;
+const fertilizerScheduler = createScheduler('fertilizer_buy');
 
 /** 启动化肥自动购买检测定时器 */
 function startFertilizerBuyCheckTimer() {
-  if (fertilizerBuyCheckTimer) clearInterval(fertilizerBuyCheckTimer);
+  fertilizerScheduler.clear('check');
 
   if (!isAutomationOn('fertilizer_buy_organic') && !isAutomationOn('fertilizer_buy_normal')) return;
 
   const intervalMinutes = getFertilizerBuyCheckIntervalMinutes();
   const intervalMs = intervalMinutes * 60 * 1000;
 
-  fertilizerBuyCheckTimer = setInterval(() => {
-    checkFertilizerBuyOnce();
-  }, intervalMs);
+  fertilizerScheduler.setIntervalTask('check', intervalMs, checkFertilizerBuyOnce, {
+    preventOverlap: true
+  });
 
   log('农场', `化肥自动购买检测定时器已启动，间隔 ${intervalMinutes} 分钟`, {
     module: 'farm',
@@ -38,10 +39,7 @@ function startFertilizerBuyCheckTimer() {
 
 /** 停止化肥自动购买检测定时器 */
 function stopFertilizerBuyCheckTimer() {
-  if (fertilizerBuyCheckTimer) {
-    clearInterval(fertilizerBuyCheckTimer);
-    fertilizerBuyCheckTimer = null;
-  }
+  fertilizerScheduler.clear('check');
   log('农场', '化肥自动购买检测定时器已停止', {
     module: 'farm',
     event: '购买化肥计时器',

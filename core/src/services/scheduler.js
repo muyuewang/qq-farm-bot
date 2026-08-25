@@ -105,6 +105,12 @@ function createScheduler(namespace = 'default') {
     for (const key of keys) clearTask(key);
   }
 
+  function dispose() {
+    clearAll();
+    const current = schedulerRegistry.get(ns);
+    if (current === store) schedulerRegistry.delete(ns);
+  }
+
   /**
    * 设置一次性超时任务
    * @param {string} taskName - 任务名称（唯一标识）
@@ -249,6 +255,7 @@ function createScheduler(namespace = 'default') {
     setIntervalTask,
     clear: clearTask,
     clearAll,
+    dispose,
     has,
     getTaskNames,
     getSnapshot

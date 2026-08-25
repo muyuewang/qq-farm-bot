@@ -24,6 +24,7 @@ function createDataProvider(deps) {
         startWorker,
         stopWorker,
         restartWorker,
+        getResourceStatus,
         scheduleAutoCodeRefresh,
         refreshAccountCode
     } = deps;
@@ -369,11 +370,11 @@ function createDataProvider(deps) {
             let workerError = '';
 
             if (!id) {
-                return { accountId: '', runtime: runtimeSchedulers, worker: workerSchedulers, workerError: '' };
+                return { accountId: '', runtime: runtimeSchedulers, resources: getResourceStatus?.() || null, worker: workerSchedulers, workerError: '' };
             }
 
             if (!workers[id]) {
-                return { accountId: id, runtime: runtimeSchedulers, worker: workerSchedulers, workerError: '账号未运行' };
+                return { accountId: id, runtime: runtimeSchedulers, resources: getResourceStatus?.() || null, worker: workerSchedulers, workerError: '账号未运行' };
             }
 
             try {
@@ -382,7 +383,7 @@ function createDataProvider(deps) {
                 workerError = err && err.message ? err.message : String(err || 'unknown');
             }
 
-            return { accountId: id, runtime: runtimeSchedulers, worker: workerSchedulers, workerError };
+            return { accountId: id, runtime: runtimeSchedulers, resources: getResourceStatus?.() || null, worker: workerSchedulers, workerError };
         }
     };
 }

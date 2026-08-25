@@ -5,8 +5,10 @@
 
 const crypto = require('node:crypto');
 const { createModuleLogger } = require('./logger');
+const { createScheduler } = require('./scheduler');
 
 const logger = createModuleLogger('security');
+const securityScheduler = createScheduler('security');
 
 const SECURITY_CONFIG = {
     saltRounds: 12,
@@ -280,14 +282,14 @@ function rateLimitMiddleware(options = {}) {
     };
 }
 
-setInterval(() => {
+securityScheduler.setIntervalTask('rate_limit_cleanup', 60000, () => {
     const now = Date.now();
     for (const [key, record] of rateLimitStore.entries()) {
         if (now > record.resetAt) {
             rateLimitStore.delete(key);
         }
     }
-}, 60000);
+});
 
 module.exports = {
     hashPassword,

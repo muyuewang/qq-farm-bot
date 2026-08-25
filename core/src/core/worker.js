@@ -99,6 +99,7 @@ const {
 } = require('../utils/network');
 const { loadProto } = require('../utils/proto');
 const { setLogHook, log, toNum } = require('../utils/utils');
+const { resourcePolicy, createResourceMonitor } = require('../runtime/resource-policy');
 
 // 设置环境变量中的账号ID
 if (parentPort && workerData && workerData.accountId && !process.env.FARM_ACCOUNT_ID) {
@@ -209,6 +210,24 @@ let friendSyncPaused = false;
 let starActivityClaimRunning = false;
 
 const workerScheduler = createScheduler('worker');
+const resourceMonitor = createResourceMonitor();
+let offlinePollDelayMs = resourcePolicy.offlinePollMinMs;
+let nextPermitId = 1;
+const pendingPermits = new Map();
+
+function acquireTaskPermit() {
+    if (resourcePolicy.globalTaskConcurrency <= 0) return Promise.resolve(null);
+    const token = String(nextPermitId++);
+    return new Promise(resolve => {
+        pendingPermits.set(token, resolve);
+        sendToMaster({ type: 'task_permit_request', token });
+    });
+}
+
+function releaseTaskPermit(token) {
+    if (!token) return;
+    sendToMaster({ type: 'task_permit_release', token });
+}
 
 /** 每日任务是否启用 */
 function isDailyRoutineEnabled() { return true; }
@@ -555,7 +574,9 @@ function resetUnifiedSchedule() {
         CONFIG.stealCheckIntervalMin || 25000,
         CONFIG.stealCheckIntervalMax || 30000
     );
-    const now = Date.now();
+    const accountId = String(process.env.FARM_ACCOUNT_ID || '');
+    const staggerMs = [...accountId].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 3000, 0);
+    const now = Date.now() + staggerMs;
     nextFarmRunAt = now + farmDelay;
     nextHelpRunAt = now + helpDelay;
     nextStealRunAt = now + stealDelay;
@@ -658,10 +679,15 @@ async function runUnifiedTick() {
 
     if (!shouldFarm && !shouldHelp && !shouldSteal) return;
 
-    const autoConfig = getAutomation();
-    if (shouldFarm) await runFarmTick(autoConfig);
-    if (shouldHelp) await runHelpTick(autoConfig);
-    if (shouldSteal) await runStealTick(autoConfig);
+    const permit = await acquireTaskPermit();
+    try {
+        const autoConfig = getAutomation();
+        if (shouldFarm) await runFarmTick(autoConfig);
+        if (shouldHelp) await runHelpTick(autoConfig);
+        if (shouldSteal) await runStealTick(autoConfig);
+    } finally {
+        releaseTaskPermit(permit);
+    }
 }
 
 function scheduleUnifiedNextTick() {
@@ -669,11 +695,16 @@ function scheduleUnifiedNextTick() {
     workerScheduler.clear('unified_next_tick');
 
     if (!loginReady) {
-        workerScheduler.setTimeoutTask('unified_next_tick', 500, async () => {
+        const waitMs = offlinePollDelayMs;
+        offlinePollDelayMs = Math.min(resourcePolicy.offlinePollMaxMs,
+            Math.max(waitMs * 2, resourcePolicy.offlinePollMinMs));
+        workerScheduler.setTimeoutTask('unified_next_tick', waitMs, async () => {
             try { await runUnifiedTick(); } finally { scheduleUnifiedNextTick(); }
         });
         return;
     }
+
+    offlinePollDelayMs = resourcePolicy.offlinePollMinMs;
 
     const now = Date.now();
     const nearest = Math.min(
@@ -834,6 +865,14 @@ onMasterMessage(async (msg) => {
             applyRuntimeConfig(msg.config || {}, true);
         } else if (msg.type === 'watchdog_ping') {
             sendToMaster({ type: 'watchdog_pong', at: msg.at || Date.now() });
+        } else if (msg.type === 'task_permit_granted') {
+            const rawToken = String(msg.token || '');
+            const token = rawToken.includes(':') ? rawToken.slice(rawToken.lastIndexOf(':') + 1) : rawToken;
+            const resolve = pendingPermits.get(token);
+            if (resolve) {
+                pendingPermits.delete(token);
+                resolve(token);
+            }
         }
     } catch (err) {
         sendToMaster({ type: 'error', error: err.message });
@@ -1011,7 +1050,7 @@ async function startBot(config) {
     connect(code, onReady);
 
     // 定期同步状态
-    workerScheduler.setIntervalTask('status_sync', 5000, syncStatus, { preventOverlap: true });
+    workerScheduler.setIntervalTask('status_sync', resourcePolicy.statusSyncIntervalMs, syncStatus, { preventOverlap: true });
 }
 
 async function stopBot() {
@@ -1058,6 +1097,7 @@ async function stopBot() {
     stopStarActivityClaimTimer();
     cleanupTaskSystem();
     workerScheduler.clearAll();
+    resourceMonitor.dispose();
     stopNetwork('账号停止');
 
     const ws = getWs();
@@ -1353,7 +1393,7 @@ async function handleApiCall(msg) {
                 result = await getDailyGiftOverview();
                 break;
             case 'getSchedulers':
-                result = getSchedulerRegistrySnapshot();
+                result = { ...getSchedulerRegistrySnapshot(), resources: resourceMonitor.snapshot() };
                 break;
             case 'fertilizeLand': {
                 const landId = Number(args[0]) || 0;
@@ -1559,10 +1599,12 @@ function syncStatus() {
     stats.levelProgress = levelProgress;
     stats.configRevision = appliedConfigRevision;
 
-    const hash = JSON.stringify(stats);
+    const stableStats = { ...stats };
+    delete stableStats.nextChecks;
+    const hash = JSON.stringify(stableStats);
     const now2 = Date.now();
 
-    if (hash !== lastStatusHash || now2 - lastStatusSentAt > 30000) {
+    if (hash !== lastStatusHash || now2 - lastStatusSentAt > resourcePolicy.statusFullSyncIntervalMs) {
         lastStatusHash = hash;
         lastStatusSentAt = now2;
         sendToMaster({ type: 'status_sync', data: stats });

@@ -1,4 +1,5 @@
 const { createScheduler } = require('../services/scheduler');
+const { resourcePolicy, createResourceMonitor } = require('./resource-policy');
 
 /**
  * 创建 Worker 管理器
@@ -31,14 +32,41 @@ function createWorkerManager(deps) {
     } = deps;
 
     const scheduler = createScheduler('worker_manager');
+    const resourceMonitor = createResourceMonitor();
     const restartHistory = new Map();
     const credentialRefreshes = new Map();
+    const permitQueue = [];
+    const activePermits = new Map();
     const WATCHDOG_PING_MS = 30000;
     const WATCHDOG_TIMEOUT_MS = 90000;
     const WATCHDOG_MAX_RESTARTS = 3;
 
     /** 是否支持 Thread 模式（非 pkg 打包 + Worker 可用） */
     const threadMode = runtimeMode === 'thread' && !processRef.pkg && typeof WorkerThread === 'function';
+
+    function drainPermitQueue() {
+        const limit = resourcePolicy.globalTaskConcurrency;
+        while (permitQueue.length > 0) {
+            if (limit > 0 && activePermits.size >= limit) break;
+            const request = permitQueue.shift();
+            const wrk = workers[request.accountId];
+            if (!wrk || wrk.process !== request.proc || wrk.stopping) continue;
+            activePermits.set(request.token, request);
+            try { request.proc.send({ type: 'task_permit_granted', token: request.token }); } catch {
+                activePermits.delete(request.token);
+            }
+        }
+    }
+
+    function releaseAccountPermits(accountId) {
+        for (let i = permitQueue.length - 1; i >= 0; i -= 1) {
+            if (String(permitQueue[i].accountId) === String(accountId)) permitQueue.splice(i, 1);
+        }
+        for (const [token, request] of activePermits.entries()) {
+            if (String(request.accountId) === String(accountId)) activePermits.delete(token);
+        }
+        drainPermitQueue();
+    }
 
     function cleanText(value) {
         return String(value || '').trim();
@@ -173,6 +201,21 @@ function createWorkerManager(deps) {
         if (!account || !account.id) return false;
         if (workers[account.id]) return false;
 
+        const runningCount = Object.keys(workers).length;
+        if (resourcePolicy.maxRunningAccounts > 0 && runningCount >= resourcePolicy.maxRunningAccounts) {
+            log('系统', `低配资源策略已阻止启动账号 ${account.name}：运行账号数达到 ${resourcePolicy.maxRunningAccounts}`, {
+                accountId: String(account.id), accountName: account.name
+            });
+            return false;
+        }
+        const rssMb = processRef.memoryUsage ? processRef.memoryUsage().rss / 1024 / 1024 : 0;
+        if (resourcePolicy.maxRssMb > 0 && rssMb >= resourcePolicy.maxRssMb) {
+            log('系统', `资源策略已阻止启动账号 ${account.name}：RSS ${Math.round(rssMb)}MB`, {
+                accountId: String(account.id), accountName: account.name
+            });
+            return false;
+        }
+
         log('系统', `正在启动账号: ${  account.name}`, {
             accountId: String(account.id),
             accountName: account.name
@@ -261,6 +304,7 @@ function createWorkerManager(deps) {
 
             scheduler.clear(`force_kill_${  account.id}`);
             scheduler.clear(`restart_fallback_${  account.id}`);
+            releaseAccountPermits(account.id);
 
             // 清理所有未完成的 API 请求
             if (wrk && wrk.requests && wrk.requests.size > 0) {
@@ -361,7 +405,14 @@ function createWorkerManager(deps) {
         const wrk = workers[accountId];
         if (!wrk) return;
 
-        if (msg.type === 'status_sync') {
+        if (msg.type === 'task_permit_request') {
+            const token = `${accountId}:${String(msg.token || '')}`;
+            permitQueue.push({ accountId, token, proc: wrk.process, requestedAt: Date.now() });
+            drainPermitQueue();
+        } else if (msg.type === 'task_permit_release') {
+            activePermits.delete(`${accountId}:${String(msg.token || '')}`);
+            drainPermitQueue();
+        } else if (msg.type === 'status_sync') {
             // 状态同步
             wrk.status = normalizeStatusForPanel(msg.data, accountId, wrk.name);
             if (typeof onStatusSync === 'function') {
@@ -681,7 +732,15 @@ function createWorkerManager(deps) {
         stopWorker,
         restartWorker,
         callWorkerApi,
-        dispose: () => scheduler.clearAll()
+        getResourceStatus: () => ({
+            policy: resourcePolicy,
+            runtime: resourceMonitor.snapshot(),
+            governor: { active: activePermits.size, queued: permitQueue.length }
+        }),
+        dispose: () => {
+            scheduler.dispose();
+            resourceMonitor.dispose();
+        }
     };
 }
 

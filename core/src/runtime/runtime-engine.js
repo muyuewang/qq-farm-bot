@@ -11,6 +11,11 @@ const { createDataProvider } = require('./data-provider');
 const { createReloginReminderService } = require('./relogin-reminder');
 const { createRuntimeState } = require('./runtime-state');
 const { createWorkerManager } = require('./worker-manager');
+const { resourcePolicy } = require('./resource-policy');
+
+function delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
 
 /** 操作类型键列表 */
 const OPERATION_KEYS = [
@@ -92,7 +97,8 @@ function createRuntimeEngine(options = {}) {
         startWorker,
         stopWorker,
         restartWorker,
-        callWorkerApi
+        callWorkerApi,
+        getResourceStatus
     } = createWorkerManager({
         fork,
         WorkerThread: Worker,
@@ -152,6 +158,7 @@ function createRuntimeEngine(options = {}) {
         startWorker,
         stopWorker,
         restartWorker,
+        getResourceStatus,
         scheduleAutoCodeRefresh: autoCodeRefresh.scheduleAccount,
         refreshAccountCode: autoCodeRefresh.refreshAccountCode
     };
@@ -189,6 +196,7 @@ function createRuntimeEngine(options = {}) {
         const accounts = store.getAccounts().accounts || [];
         if (accounts.length > 0) {
             log('系统', `发现 ${  accounts.length  } 个账号，正在启动...`);
+            let launchedInBatch = 0;
             for (const acc of accounts) {
                 // 为移植前已扫码保存凭证的微信账号执行一次默认策略迁移。
                 if (acc.platform === 'wx' && acc.loginBuffer && acc.wxDefaultsApplied !== true) {
@@ -208,6 +216,11 @@ function createRuntimeEngine(options = {}) {
                     if (!refreshed) startWorker(acc);
                 } else {
                     startWorker(acc);
+                }
+                launchedInBatch += 1;
+                if (launchedInBatch >= resourcePolicy.workerStartConcurrency) {
+                    launchedInBatch = 0;
+                    await delay(resourcePolicy.workerStartDelayMs);
                 }
             }
         } else {
@@ -251,6 +264,7 @@ function createRuntimeEngine(options = {}) {
         runtimeEvents,
         workers,
         dataProvider,
+        getResourceStatus,
         start,
         startAllAccounts,
         stopAllAccounts,
