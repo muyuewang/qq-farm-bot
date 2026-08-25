@@ -44,6 +44,24 @@ function createWorkerManager(deps) {
         return String(value || '').trim();
     }
 
+    function notifyAbnormalOffline(accountId, wrk, reason, action, message) {
+        if (!wrk || wrk.offlineReminderTriggered) return false;
+        wrk.offlineReminderTriggered = true;
+        const normalizedReason = cleanText(reason) || 'unknown';
+
+        triggerOfflineReminder({
+            accountId,
+            accountName: wrk.name,
+            username: wrk.username,
+            reason: normalizedReason,
+            offlineMs: wrk.disconnectedSince ? Date.now() - wrk.disconnectedSince : 0
+        });
+        if (action && message) {
+            addAccountLog(action, message, accountId, wrk.name, { reason: normalizedReason });
+        }
+        return true;
+    }
+
     function buildQqAvatarUrl(qq) {
         const value = cleanText(qq);
         if (!/^\d+$/.test(value)) return '';
@@ -235,6 +253,12 @@ function createWorkerManager(deps) {
                 runtimeMode: threadMode ? 'thread' : 'fork'
             });
 
+            if (wrk && !wrk.stopping) {
+                const reason = `worker_exit:code=${code == null ? 'unknown' : code},signal=${signal || 'none'}`;
+                notifyAbnormalOffline(account.id, wrk, reason, 'worker_unexpected_exit',
+                    `账号 ${displayName} 异常掉线（Worker 进程意外退出）`);
+            }
+
             scheduler.clear(`force_kill_${  account.id}`);
             scheduler.clear(`restart_fallback_${  account.id}`);
 
@@ -376,20 +400,12 @@ function createWorkerManager(deps) {
 
                 const offlineDuration = now - wrk.disconnectedSince;
                 if (!wrk.offlineReminderTriggered && offlineDuration >= 60000) {
-                    wrk.offlineReminderTriggered = true;
                     const offlineMinutes = Math.floor(offlineDuration / 60000);
                     log('系统', `账号 ${  wrk.name  } 已离线 ${  offlineMinutes  } 分钟，发送下线提醒`);
 
-                    triggerOfflineReminder({
-                        accountId,
-                        accountName: wrk.name,
-                        username: wrk.username,
-                        reason: 'offline',
-                        offlineMs: offlineDuration
-                    });
-                    addAccountLog('offline_reminder',
+                    notifyAbnormalOffline(accountId, wrk, 'offline', 'offline_reminder',
                         `账号 ${  wrk.name  } 已离线 ${  offlineMinutes  } 分钟，已发送下线提醒`,
-                        accountId, wrk.name, { reason: 'offline', offlineMs: offlineDuration });
+                    );
                 }
 
                 const autoDeleteMs = typeof getOfflineAutoDeleteMs === 'function'
@@ -422,11 +438,15 @@ function createWorkerManager(deps) {
             }
         } else if (msg.type === 'log') {
             // 日志消息
+            const timestamp = Date.now();
             const entry = {
                 ...msg.data,
+                logId: `worker-${accountId}-${timestamp}-${globalLogs.length}`,
                 accountId,
                 accountName: wrk.name,
-                ts: Date.now(),
+                ts: timestamp,
+                level: msg.data && msg.data.isWarn ? 'warn' : 'info',
+                source: 'business',
                 meta: msg.data && msg.data.meta ? msg.data.meta : {}
             };
             entry._searchText = (`${entry.msg || ''  } ${  entry.tag || '' 
@@ -454,6 +474,8 @@ function createWorkerManager(deps) {
 
             // Code 400 = 登录失效
             if (code === 400) {
+                notifyAbnormalOffline(accountId, wrk, `ws_400:${message || '登录失效'}`,
+                    'offline_reminder', `账号 ${wrk.name} 登录失效，已发送下线提醒`);
                 addAccountLog('ws_400', `账号 ${  wrk.name  } 登录失效，请更新 Code`,
                     accountId, wrk.name);
                 if (typeof refreshAccountCode === 'function' && !credentialRefreshes.has(accountId)) {
@@ -477,12 +499,7 @@ function createWorkerManager(deps) {
                 accountName: wrk.name
             });
 
-            triggerOfflineReminder({
-                accountId,
-                accountName: wrk.name,
-                reason: `kickout:${  reason}`,
-                offlineMs: 0
-            });
+            notifyAbnormalOffline(accountId, wrk, `kickout:${reason}`);
             addAccountLog('kickout_stop',
                 `账号 ${  wrk.name  } 被踢下线，已自动停止`,
                 accountId, wrk.name, { reason });
@@ -498,12 +515,7 @@ function createWorkerManager(deps) {
                 accountName: wrk.name
             });
 
-            triggerOfflineReminder({
-                accountId,
-                accountName: wrk.name,
-                reason: `ws_reconnect_failed:${  reason}`,
-                offlineMs: 0
-            });
+            notifyAbnormalOffline(accountId, wrk, `ws_reconnect_failed:${reason}`);
             addAccountLog('ws_reconnect_failed',
                 `账号 ${  wrk.name  } 连接多次重试失败，已自动停止`,
                 accountId, wrk.name, { reason });
@@ -603,6 +615,8 @@ function createWorkerManager(deps) {
                     .filter(at => now - at < 60 * 60 * 1000);
                 if (history.length >= WATCHDOG_MAX_RESTARTS) {
                     wrk.stopping = true;
+                    notifyAbnormalOffline(accountId, wrk, 'worker_watchdog_stopped',
+                        'offline_reminder', `账号 ${wrk.name} Worker 连续无响应，已发送下线提醒`);
                     stopWorker(accountId);
                     log('错误', `账号 ${wrk.name} Worker 连续无响应，已停止自动重启`, {
                         accountId, accountName: wrk.name
@@ -666,7 +680,8 @@ function createWorkerManager(deps) {
         startWorker,
         stopWorker,
         restartWorker,
-        callWorkerApi
+        callWorkerApi,
+        dispose: () => scheduler.clearAll()
     };
 }
 
