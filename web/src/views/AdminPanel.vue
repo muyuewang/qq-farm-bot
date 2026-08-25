@@ -8,20 +8,17 @@ import AdminLoginLogConfirmModal from '@/components/admin/AdminLoginLogConfirmMo
 import AdminLoginLogPanel from '@/components/admin/AdminLoginLogPanel.vue'
 import AdminPanelHeader from '@/components/admin/AdminPanelHeader.vue'
 import AdminPanelTabs from '@/components/admin/AdminPanelTabs.vue'
-import AdminSystemConfigConfirmModals from '@/components/admin/AdminSystemConfigConfirmModals.vue'
-import AdminSystemPanel from '@/components/admin/AdminSystemPanel.vue'
 import AdminUserConfirmModals from '@/components/admin/AdminUserConfirmModals.vue'
 import AdminUserPanel from '@/components/admin/AdminUserPanel.vue'
 import { useAdminCards } from '@/composables/useAdminCards'
 import { useAdminLoginLogs } from '@/composables/useAdminLoginLogs'
-import { useAdminSystemConfig } from '@/composables/useAdminSystemConfig'
 import { useAdminUsers } from '@/composables/useAdminUsers'
 import { useToastStore } from '@/stores/toast'
 
 const toast = useToastStore()
 
 const savedAdminTab = localStorage.getItem('admin-active-tab')
-const activeTab = ref<AdminTabKey>(['card', 'user', 'log', 'system'].includes(savedAdminTab || '')
+const activeTab = ref<AdminTabKey>(['card', 'user', 'log'].includes(savedAdminTab || '')
   ? savedAdminTab as AdminTabKey
   : 'card')
 
@@ -33,7 +30,6 @@ const tabs = [
   { key: 'card', label: '卡密', icon: 'i-carbon-ticket' },
   { key: 'user', label: '用户', icon: 'i-carbon-user-admin' },
   { key: 'log', label: '日志', icon: 'i-carbon-document' },
-  { key: 'system', label: '系统', icon: 'i-carbon-settings' },
 ] as const
 
 const modalVisible = ref(false)
@@ -176,33 +172,10 @@ async function confirmClearLogs() {
     showClearLogsConfirm.value = false
 }
 
-const {
-  systemConfigSaving,
-  captureConfigSaving,
-  captureConfigTesting,
-  showResetSystemConfirm,
-  showSaveSystemConfirm,
-  localSystemConfig,
-  defaultSystemConfig,
-  localCaptureConfig,
-  platformOptions,
-  osOptions,
-  loadCaptureConfig,
-  handleTestCaptureConfig,
-  handleSaveCaptureConfig,
-  loadSystemConfig,
-  handleSaveSystemConfig,
-  handleResetSystemConfig,
-  openResetSystemConfirm,
-  openSaveSystemConfirm,
-} = useAdminSystemConfig({ showAlert })
-
 onMounted(() => {
   fetchCards()
   fetchUsers()
   fetchLoginLogs()
-  loadSystemConfig()
-  loadCaptureConfig()
   fetchCardClaimStatus()
 })
 </script>
@@ -292,24 +265,6 @@ onMounted(() => {
         @clear="openClearLogsConfirm"
       />
 
-      <AdminSystemPanel
-        v-else-if="activeTab === 'system'"
-        v-model:local-system-config="localSystemConfig"
-        v-model:local-capture-config="localCaptureConfig"
-        section="system"
-        :default-system-config="defaultSystemConfig"
-        :platform-options="platformOptions"
-        :os-options="osOptions"
-        :system-config-saving="systemConfigSaving"
-        :capture-config-saving="captureConfigSaving"
-        :capture-config-testing="captureConfigTesting"
-        :show-save="true"
-        @reset-system="openResetSystemConfirm"
-        @save-system="openSaveSystemConfirm"
-        @test-capture="handleTestCaptureConfig"
-        @save-capture="handleSaveCaptureConfig"
-      />
-
     </AdminPanelTabs>
 
     <AdminLoginLogConfirmModal
@@ -366,14 +321,6 @@ onMounted(() => {
       @renew-user="confirmRenewUser"
       @clear-expired-users="confirmClearExpiredUsers"
       @edit-user="confirmEditUser"
-    />
-
-    <AdminSystemConfigConfirmModals
-      v-model:show-reset-system-confirm="showResetSystemConfirm"
-      v-model:show-save-system-confirm="showSaveSystemConfirm"
-      :system-config-saving="systemConfigSaving"
-      @reset-system="handleResetSystemConfig"
-      @save-system="handleSaveSystemConfig"
     />
 
     <AdminAlertModal
