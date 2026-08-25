@@ -35,6 +35,7 @@ const {
   decorations,
   mallGoods,
   mysteryOffer,
+  mysteryHistory,
   loading,
   petLoading,
   decorationLoading,
@@ -82,6 +83,23 @@ const mysteryBalance = computed(() => {
     return userGoldBean.value
   return currentGold.value
 })
+const mysteryHistorySummary = computed(() => {
+  const currencyTotals = new Map<string, number>()
+  for (const record of mysteryHistory.value) {
+    currencyTotals.set(record.currencyName, (currencyTotals.get(record.currencyName) || 0) + record.price)
+  }
+  return [...currencyTotals.entries()].map(([name, amount]) => `${formatCurrencyAmountByLabel(amount, name)} ${name}`).join('、')
+})
+
+function formatHistoryTime(timestamp: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(timestamp))
+}
 const {
   canAffordGoods,
   canAffordDecoration,
@@ -250,6 +268,7 @@ async function buyMysteryGoods(item: any) {
     const count = Number(result.data?.reward?.count || item.itemCount || 0)
     toast.success(`已从神秘商人处购买 ${item.itemName} x${count}`)
     await shopStore.fetchMysteryShop(currentAccountId.value)
+    await shopStore.fetchMysteryHistory(currentAccountId.value)
   }
   else {
     toast.error(result?.error || '购买失败')
@@ -489,14 +508,14 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="space-y-4">
-        <div class="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/30">
-          <div class="flex min-w-0 items-center gap-2 text-sm">
+        <div class="flex items-center justify-between gap-3 border border-gray-200 rounded-xl bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/30">
+          <div class="min-w-0 flex items-center gap-2 text-sm">
             <span :class="mysteryAutoBuyEnabled ? 'i-carbon-checkmark-filled text-green-500' : 'i-carbon-pause-filled text-gray-400'" />
             <span class="text-gray-700 dark:text-gray-200">
               神秘商人自动购买{{ mysteryAutoBuyEnabled ? '已开启' : '未开启' }}
             </span>
           </div>
-          <button class="shrink-0 text-sm text-blue-600 font-medium hover:underline dark:text-blue-400" type="button" @click="openMysteryAutoBuySettings">
+          <button class="shrink-0 text-sm text-blue-600 font-medium dark:text-blue-400 hover:underline" type="button" @click="openMysteryAutoBuySettings">
             前往设置
           </button>
         </div>
@@ -512,6 +531,44 @@ onUnmounted(() => {
           @buy="confirmBuyMysteryGoods"
           @abandon="confirmAbandonMysteryMerchant"
         />
+        <div class="overflow-hidden border border-gray-200 rounded-xl dark:border-gray-700">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/30">
+            <div>
+              <h3 class="text-sm text-gray-900 font-semibold dark:text-gray-100">
+                购买历史
+              </h3>
+              <p class="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                共 {{ mysteryHistory.length }} 次<span v-if="mysteryHistorySummary">，累计花费 {{ mysteryHistorySummary }}</span>
+              </p>
+            </div>
+            <span class="text-xs text-gray-400">保留最近 100 条</span>
+          </div>
+          <div v-if="!mysteryHistory.length" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            暂无购买记录，手动和自动购买都会记录在这里。
+          </div>
+          <div v-else class="divide-y divide-gray-100 dark:divide-gray-700">
+            <div v-for="record in mysteryHistory" :key="record.id" class="flex items-center gap-3 px-4 py-3">
+              <img v-if="record.itemImage" :src="record.itemImage" :alt="record.itemName" class="h-10 w-10 shrink-0 object-contain">
+              <div v-else class="i-carbon-gift h-10 w-10 shrink-0 text-gray-300" />
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-sm text-gray-800 font-medium dark:text-gray-100">
+                  {{ record.itemName }} x{{ record.itemCount }}
+                </div>
+                <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ formatHistoryTime(record.purchasedAt) }} · {{ record.source === 'auto' ? '自动购买' : '手动购买' }}
+                </div>
+              </div>
+              <div class="shrink-0 text-right">
+                <div class="text-sm text-gray-700 font-medium dark:text-gray-200">
+                  {{ formatCurrencyAmountByLabel(record.price, record.currencyName) }} {{ record.currencyName }}
+                </div>
+                <div v-if="record.discount" class="mt-1 text-xs text-orange-500">
+                  {{ record.discount / 10 }} 折
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

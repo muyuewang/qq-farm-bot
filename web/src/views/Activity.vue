@@ -88,10 +88,11 @@ const {
   qixiDewLoading,
 } = storeToRefs(activityStore)
 
+const SHOW_QIXI_ACTIVITY = false
 const activeSection = ref<ActivitySectionKey>('journey')
 const showActivityAnalysis = ref(false)
 const sections = computed<ActivitySection[]>(() => [
-  { key: 'qixi', label: '鹊桥寄情', icon: 'i-carbon-favorite', count: qixiActivity.value?.gift.remainingCount || 0 },
+  ...(SHOW_QIXI_ACTIVITY ? [{ key: 'qixi' as const, label: '鹊桥寄情', icon: 'i-carbon-favorite', count: qixiActivity.value?.gift.remainingCount || 0 }] : []),
   { key: 'journey', label: '千星游记', icon: 'i-carbon-map', count: activity.value?.passport?.claimableLevels || 0 },
   { key: 'records', label: '观星礼录', icon: 'i-carbon-star', count: activity.value?.starRecord?.claimableCount || 0 },
   { key: 'shop', label: '星砂兑换商店', icon: 'i-carbon-store', count: activity.value?.exchangeShop?.length || 0 },
@@ -252,7 +253,7 @@ onMounted(refreshAll)
         @claim="claimRecords"
       />
       <QixiActivityPanel
-        v-else-if="activeSection === 'qixi'"
+        v-else-if="SHOW_QIXI_ACTIVITY && activeSection === 'qixi'"
         :activity="qixiActivity"
         :friends="qixiFriends"
         :build-loading="qixiBuildLoading || qixiLoading"

@@ -3,6 +3,7 @@ const { sendMsgAsync } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toNum, log, logWarn } = require('../utils/utils');
 const { getAutomation } = require('../models/store');
+const { appendMysteryShopHistory } = require('./mystery-shop-history');
 
 const SERVICE = 'gamepb.mysteryshoppb.MysteryShopService';
 const CURRENCY_NAMES = {
@@ -49,7 +50,7 @@ async function getActiveMysteryShop() {
   return normalizeNPC(types.GetActiveMysteryNPCReply.decode(body));
 }
 
-async function buyMysteryShopGoods(npcId) {
+async function buyMysteryShopGoods(npcId, offer = null, source = 'manual') {
   const id = toNum(npcId);
   if (id <= 0) throw new Error('无效的神秘商人 ID');
 
@@ -58,13 +59,17 @@ async function buyMysteryShopGoods(npcId) {
   ).finish();
   const { body } = await sendMsgAsync(SERVICE, 'Buy', request);
   const reply = types.BuyMysteryShopReply.decode(body);
-  return {
+  const result = {
     reward: {
       itemId: toNum(reply?.reward?.item_id),
       count: toNum(reply?.reward?.count),
     },
     purchased: !!reply?.npc?.purchased,
   };
+  if (offer) {
+    appendMysteryShopHistory(process.env.FARM_ACCOUNT_ID, offer, result, source);
+  }
+  return result;
 }
 
 async function abandonMysteryShop() {
@@ -100,7 +105,7 @@ async function checkAndAutoBuyMysteryShop() {
       return { skipped: true, reason: 'currency_not_allowed', offer };
     }
 
-    const result = await buyMysteryShopGoods(offer.npcId);
+    const result = await buyMysteryShopGoods(offer.npcId, offer, 'auto');
     log('商城', `神秘商人自动购买成功：${offer.itemName} x${offer.itemCount}，花费 ${offer.price} ${offer.currencyName}`, {
       module: 'shop', event: '神秘商人自动购买', result: 'success', itemId: offer.itemId,
       count: offer.itemCount, currencyId: offer.currencyId, price: offer.price

@@ -1226,8 +1226,12 @@ async function handleApiCall(msg) {
                 break;
             }
             case 'buyMysteryShopGoods': {
-                const { buyMysteryShopGoods } = require('../services/mystery-shop');
-                result = await buyMysteryShopGoods(args[0]);
+                const { getActiveMysteryShop, buyMysteryShopGoods } = require('../services/mystery-shop');
+                const offer = await getActiveMysteryShop();
+                if (!offer.active || Number(offer.npcId) !== Number(args[0])) {
+                    throw new Error('神秘商人商品已失效，请刷新后重试');
+                }
+                result = await buyMysteryShopGoods(args[0], offer, 'manual');
                 break;
             }
             case 'abandonMysteryShop': {

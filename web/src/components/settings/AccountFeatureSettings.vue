@@ -31,6 +31,7 @@ const automation = defineModel<any>('automation', { required: true })
 const activeModule = ref<ModuleKey | null>(null)
 const editSnapshot = ref<{ strategy: any, automation: any } | null>(null)
 const qixiFriends = ref<Array<{ gid: number, name: string }>>([])
+const SHOW_QIXI_ACTIVITY = false
 
 const moduleInfo: Record<ModuleKey, { title: string, description: string, icon: string, image: string, tone: string }> = {
   planting: { title: '种植与收获', description: '选种、收获、出售和巡田节奏', icon: 'i-carbon-sprout', image: '/game-config/module_icons/planting.png', tone: 'emerald' },
@@ -106,8 +107,8 @@ function summaryTags(key: ModuleKey) {
   return [
     automation.value.automation.task ? '自动完成日常任务' : '不做日常',
     starFestivalEnabled.value && '心许千灯星垂野',
-    qixiActivityEnabled.value && '鹊桥寄情',
-    !starFestivalEnabled.value && !qixiActivityEnabled.value && '未开启活动',
+    SHOW_QIXI_ACTIVITY && qixiActivityEnabled.value && '鹊桥寄情',
+    !starFestivalEnabled.value && (!SHOW_QIXI_ACTIVITY || !qixiActivityEnabled.value) && '未开启活动',
   ].filter(Boolean)
 }
 
@@ -506,7 +507,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
                 </div>
               </section>
 
-              <section class="space-y-3 border border-gray-100 rounded-lg p-4 dark:border-gray-700">
+              <section v-if="SHOW_QIXI_ACTIVITY" class="space-y-3 border border-gray-100 rounded-lg p-4 dark:border-gray-700">
                 <div>
                   <div class="text-sm text-gray-700 font-medium dark:text-gray-300">
                     鹊桥寄情

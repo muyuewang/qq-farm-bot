@@ -23,6 +23,17 @@ function registerAdminMysteryShopRoutes({
   canAccessAccount,
   sendProviderError,
 }) {
+  app.get('/api/shop/mystery/history', (req, res) => {
+    const accountId = getAuthorizedAccountId({ req, res, getAccountIdFromRequest, canAccessAccount });
+    if (!accountId) return;
+    try {
+      const { getMysteryShopHistory } = require('../services/mystery-shop-history');
+      res.json({ ok: true, data: getMysteryShopHistory(accountId) });
+    } catch (error) {
+      sendProviderError(res, error);
+    }
+  });
+
   app.get('/api/shop/mystery', async (req, res) => {
     const accountId = getAuthorizedAccountId({
       req,

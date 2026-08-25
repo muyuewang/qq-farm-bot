@@ -81,6 +81,12 @@ export interface MysteryShopOffer {
   endTime: number
 }
 
+export interface MysteryShopHistoryRecord extends Omit<MysteryShopOffer, 'active' | 'purchased' | 'startTime' | 'endTime'> {
+  id: string
+  purchasedAt: number
+  source: 'manual' | 'auto'
+}
+
 export const useShopStore = defineStore('shop', () => {
   const seeds = ref<ShopSeedItem[]>([])
   const pets = ref<ShopPetItem[]>([])
@@ -88,6 +94,7 @@ export const useShopStore = defineStore('shop', () => {
   const mallGoods = ref<ShopMallItem[]>([])
   const mysteryOffer = ref<MysteryShopOffer | null>(null)
   const mysteryOfferAccountId = ref('')
+  const mysteryHistory = ref<MysteryShopHistoryRecord[]>([])
 
   const loading = ref(false)
   const petLoading = ref(false)
@@ -119,6 +126,7 @@ export const useShopStore = defineStore('shop', () => {
     mallGoods.value = []
     mysteryOffer.value = null
     mysteryOfferAccountId.value = ''
+    mysteryHistory.value = []
     loading.value = false
     petLoading.value = false
     decorationLoading.value = false
@@ -295,6 +303,23 @@ export const useShopStore = defineStore('shop', () => {
     }
   }
 
+  async function fetchMysteryHistory(accountId: string) {
+    if (!accountId)
+      return
+    const requestedId = String(accountId)
+    try {
+      const { data } = await api.get('/api/shop/mystery/history', {
+        headers: { 'x-account-id': accountId },
+      })
+      if (isCurrentAccount(requestedId) && data.ok)
+        mysteryHistory.value = data.data || []
+    }
+    catch {
+      if (isCurrentAccount(requestedId))
+        mysteryHistory.value = []
+    }
+  }
+
   async function buyGoods(accountId: string, goodsId: number, num: number, price: number) {
     const { data } = await api.post('/api/shop/buy', {
       goodsId,
@@ -339,6 +364,7 @@ export const useShopStore = defineStore('shop', () => {
       fetchDecorations(accountId),
       fetchMall(accountId),
       fetchMysteryShop(accountId),
+      fetchMysteryHistory(accountId),
     ])
   }
 
@@ -349,6 +375,7 @@ export const useShopStore = defineStore('shop', () => {
     mallGoods,
     mysteryOffer,
     mysteryOfferAccountId,
+    mysteryHistory,
     loading,
     petLoading,
     decorationLoading,
@@ -369,6 +396,7 @@ export const useShopStore = defineStore('shop', () => {
     fetchDecorations,
     fetchMall,
     fetchMysteryShop,
+    fetchMysteryHistory,
     refreshAll,
     buyGoods,
     buyMallGoods,

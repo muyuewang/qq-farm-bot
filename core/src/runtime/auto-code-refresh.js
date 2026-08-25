@@ -116,10 +116,14 @@ function createAutoCodeRefreshService(deps) {
     scheduler.clear(getKeepaliveTaskName(accountId));
 
     const account = findAccount(accountId);
-    if (!account || !String(account.wxid || '').trim()) {
+    // Code refresh and credential keepalive only apply to WeChat scan-login accounts.
+    // All accounts are passed through rescheduleAll(), so QQ accounts must exit quietly.
+    if (!account || account.platform !== 'wx') return;
+
+    if (!String(account.wxid || '').trim()) {
       log('系统', '自动刷新 Code 未启动: 账号缺少 wxid', {
         accountId: String(accountId),
-        accountName: account && account.name || '',
+        accountName: account.name || '',
       });
       return;
     }
