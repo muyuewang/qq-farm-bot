@@ -31,6 +31,12 @@ function createRuntimeState(deps) {
     const globalLogs = [];
     const accountLogs = [];
     const runtimeEvents = new EventEmitter();
+    let nextLogSequence = 0;
+
+    function createLogId(prefix, timestamp) {
+        nextLogSequence = (nextLogSequence + 1) % Number.MAX_SAFE_INTEGER;
+        return `${prefix}-${timestamp}-${nextLogSequence}`;
+    }
 
     let configRevision = Date.now();
     const moduleLogger = createModuleLogger('runtime');
@@ -62,22 +68,27 @@ function createRuntimeState(deps) {
 
     /** 记录全局日志 */
     function log(tag, msg, meta = {}) {
-        const time = formatLocalDateTime24(new Date());
-        const level = tag === '错误' ? 'error' : 'info';
+        const now = new Date();
+        const time = formatLocalDateTime24(now);
+        const timestamp = now.getTime();
+        const level = tag === '错误' ? 'error' : tag === '警告' ? 'warn' : 'info';
         moduleLogger[level](msg, { tag, ...meta });
 
         const module = tag === '系统' || tag === '错误' ? 'system' : '';
         const accountId = meta && meta.accountId ? String(meta.accountId) : '';
         const accountName = meta && meta.accountName ? String(meta.accountName) : '';
         const entry = {
+            logId: createLogId('runtime', timestamp),
             time,
             tag,
             msg,
+            level,
+            source: module === 'system' ? 'system' : 'business',
             meta: {
                 ...(module ? { module } : {}),
                 ...meta
             },
-            ts: Date.now(),
+            ts: timestamp,
             ...meta,
             ...(accountId ? { accountId } : {}),
             ...(accountName ? { accountName } : {})
@@ -91,10 +102,20 @@ function createRuntimeState(deps) {
 
     /** 记录账号操作日志 */
     function addAccountLog(action, msg, accountId = '', accountName = '', meta = {}) {
+        const now = new Date();
+        const timestamp = now.getTime();
+        const normalizedAction = String(action || '');
+        const level = /(?:error|failed|failure|blocked|kickout|offline_delete|watchdog_stopped|ws_400)/i.test(normalizedAction)
+            ? 'error'
+            : /(?:warn|offline|reconnect)/i.test(normalizedAction) ? 'warn' : 'info';
         const entry = {
-            time: formatLocalDateTime24(new Date()),
+            logId: createLogId('account', timestamp),
+            ts: timestamp,
+            time: formatLocalDateTime24(now),
             action,
             msg,
+            level,
+            source: 'account',
             accountId: accountId ? String(accountId) : '',
             accountName: accountName || '',
             ...meta
