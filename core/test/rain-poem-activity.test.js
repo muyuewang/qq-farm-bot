@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 
 const { normalizeRainPoemActivity, normalizeWeatherStatus, getOwnWeatherStatus, isLightningMutantPlant, encodeRainPoemSummonUseRequest, mergeRainPoemTaskUsage } = require('../src/services/activity');
 const { getMutantEffectsByIds } = require('../src/config/gameConfig');
+const { loadProto, types } = require('../src/utils/proto');
 
 function fixture() {
   const child = (id, extra = {}) => ({ activity: { id, start_time: 1787709600, end_time: 1788883199, visible: true }, ...extra });
@@ -112,6 +113,16 @@ test('research status 2 is available and status 4 is completed', () => {
   assert.deepEqual(stages.map(stage => [stage.completed, stage.available]), [[true, false], [false, true], [false, false]]);
   assert.deepEqual(stages.map(stage => stage.reward.itemName), ['天气采集瓶', '化肥礼包', '青蛙使坏瓶']);
   assert.ok(stages.every(stage => stage.reward.image));
+});
+
+test('research node 1000 request matches the official generated schema', async () => {
+  if (!types.ActivityOperateRequest) await loadProto();
+  const request = types.ActivityOperateRequest.encode(types.ActivityOperateRequest.create({
+    id: 2026070304,
+    cmd: 40,
+    tech_tree_submit_node: { node_id: 1000 },
+  })).finish();
+  assert.equal(Buffer.from(request).toString('hex'), '08a0c28dc6071028e2080308e807');
 });
 
 test('late research rewards have names and icons', () => {

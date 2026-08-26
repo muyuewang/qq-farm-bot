@@ -344,6 +344,15 @@ async function operateActivity(activityId, cmd, options = {}) {
       gift_id: Math.max(1, toNum(options.qixiGift.giftId)),
     };
   }
+  if (options?.techTreeSubmitNode && typeof options.techTreeSubmitNode === 'object') {
+    payload.tech_tree_submit_node = {
+      node_id: Math.max(0, toNum(options.techTreeSubmitNode.nodeId)),
+    };
+  }
+
+  const request = types.ActivityOperateRequest.encode(
+    types.ActivityOperateRequest.create(payload)
+  ).finish();
 
   activityLogger.info('活动操作请求', {
     activityId: payload.id,
@@ -357,14 +366,25 @@ async function operateActivity(activityId, cmd, options = {}) {
     qingmeiWineBrew: !!payload.qingmei_wine_brew,
     qingmeiWineSell: payload.qingmei_wine_sell,
     qixiGift: payload.qixi_gift,
+    techTreeSubmitNode: payload.tech_tree_submit_node,
+    // 用于和官方抓包的明文 protobuf 对照；请求中不含登录凭据。
+    requestBytes: request.length,
+    requestHex: Buffer.from(request).toString('hex'),
   });
 
-  const request = types.ActivityOperateRequest.encode(
-    types.ActivityOperateRequest.create(payload)
-  ).finish();
-
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
-  return body;
+  try {
+    const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
+    return body;
+  } catch (err) {
+    activityLogger.error('活动操作请求失败', {
+      activityId: payload.id,
+      cmd: payload.cmd,
+      requestBytes: request.length,
+      requestHex: Buffer.from(request).toString('hex'),
+      error: err?.message || String(err),
+    });
+    throw err;
+  }
 }
 
 function normalizeQixiItem(item, fallbackId = 0, fallbackName = '') {
@@ -583,6 +603,7 @@ function encodeRainPoemSummonUseRequest(gid, itemUid) {
   return writer.finish();
 }
 
+
 async function useRainPoemSummonBottle() {
   const before = await getRainPoemActivity();
   if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
@@ -650,10 +671,18 @@ async function unlockRainPoemResearch() {
   if (before.items.badges < stage.cost.itemCount) {
     throw new Error(`雷电徽章不足，需要 ${stage.cost.itemCount}，当前 ${before.items.badges}`);
   }
-  // 气象研究沿用 OperateRequest.draw：id 是要推进的研究节点，不能省略。
-  await operateActivityReply(RAIN_POEM_RESEARCH_ACTIVITY_ID, RAIN_POEM_RESEARCH_UNLOCK_CMD, {
-    draw: { id: stage.id, count: 1 },
-  });
+  try {
+    await operateActivityReply(RAIN_POEM_RESEARCH_ACTIVITY_ID, RAIN_POEM_RESEARCH_UNLOCK_CMD, {
+      techTreeSubmitNode: { nodeId: stage.id },
+    });
+  } catch (err) {
+    // 并发任务可能已经推进该节点，刷新后将该错误视为状态竞争。
+    if (!String(err?.message || '').includes('code=1034101')) throw err;
+    const refreshed = await getRainPoemActivity();
+    const stillAvailable = (refreshed?.research?.stages || []).some(item => item.available);
+    if (stillAvailable) throw err;
+    return { ok: true, unlocked: false, reason: 'state_already_advanced', activity: refreshed };
+  }
   return {
     ok: true, unlocked: true, stageId: stage.id, cost: stage.cost, reward: stage.reward,
     activity: await getRainPoemActivity(),

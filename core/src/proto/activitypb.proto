@@ -65,6 +65,16 @@ message QixiGiftParams {
     int32 gift_id = 2;
 }
 
+message TechTreeSubmitNodeReq {
+    int64 node_id = 1;
+}
+
+message TechTreeSubmitNodeRsp {
+    int64 node_id = 1;
+    repeated corepb.Item rewards = 2;
+    repeated int64 unlocked_node_ids = 3;
+}
+
 message OperateRequest {
     int64 id = 1;
     int64 cmd = 2;
@@ -77,6 +87,7 @@ message OperateRequest {
     QingmeiWineBrewParams qingmei_wine_brew = 113;
     QingmeiWineSellParams qingmei_wine_sell = 114;
     QixiGiftParams qixi_gift = 124;
+    TechTreeSubmitNodeReq tech_tree_submit_node = 140;
 }
 
 message RandomShopItem {
@@ -269,4 +280,5 @@ message OperateReply {
     QingmeiClaimResult qingmei_claim = 104;
     StarRecordClaimResult star_record_claim = 120;
     corepb.Item qixi_gift_result = 125;
+    TechTreeSubmitNodeRsp tech_tree_submit_node = 140;
 }
