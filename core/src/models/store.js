@@ -221,6 +221,10 @@ const DEFAULT_AUTOMATION = {
     qixi_bridge_build: false,
     qixi_sachet_gift: false,
     qixi_friend_priority: [],
+    rain_poem_bottle_buy: false,
+    rain_poem_weather_collect: false,
+    rain_poem_summon_use: false,
+    rain_poem_research_unlock: false,
     fertilizer_gift: false,
     fertilizer_buy_organic: false,
     fertilizer_buy_normal: false,
@@ -236,6 +240,53 @@ const DEFAULT_AUTOMATION = {
     skip_own_weed_bug: true,
     golden_bug_clear: true
 };
+
+// 已从前端隐藏的限时活动。即使旧配置或客户端提交 true，也必须在配置边界
+// 统一关闭，避免活动入口隐藏后后台任务继续执行。
+const HIDDEN_ACTIVITY_AUTOMATION_KEYS = new Set([
+    'star_passport_claim',
+    'star_solar_claim',
+    'star_record_claim',
+    'qingmei_seed_claim',
+    'qingmei_wine_brew',
+    'qixi_dew_use',
+    'qixi_bridge_build',
+    'qixi_sachet_gift'
+]);
+
+const TIMED_ACTIVITY_AUTOMATION_GROUPS = [
+    {
+        startTime: 1787709600,
+        endTime: 1788883199,
+        keys: [
+            'rain_poem_bottle_buy',
+            'rain_poem_weather_collect',
+            'rain_poem_summon_use',
+            'rain_poem_research_unlock'
+        ]
+    }
+];
+
+function isActivityWindowActive(group, nowSeconds = Math.floor(Date.now() / 1000)) {
+    const startTime = Number(group && group.startTime) || 0;
+    const endTime = Number(group && group.endTime) || 0;
+    return (!startTime || nowSeconds >= startTime) && (!endTime || nowSeconds <= endTime);
+}
+
+function getInactiveActivityAutomationKeys(nowSeconds = Math.floor(Date.now() / 1000)) {
+    const keys = new Set(HIDDEN_ACTIVITY_AUTOMATION_KEYS);
+    for (const group of TIMED_ACTIVITY_AUTOMATION_GROUPS) {
+        if (isActivityWindowActive(group, nowSeconds)) continue;
+        for (const key of group.keys || []) keys.add(key);
+    }
+    return keys;
+}
+
+function disableHiddenActivityAutomation(automation, nowSeconds = Math.floor(Date.now() / 1000)) {
+    if (!automation || typeof automation !== 'object') return automation;
+    for (const key of getInactiveActivityAutomationKeys(nowSeconds)) automation[key] = false;
+    return automation;
+}
 
 /** 默认间隔配置（秒） */
 const DEFAULT_INTERVALS = {
@@ -257,6 +308,17 @@ const DEFAULT_QUIET_HOURS = {
 
 /** 默认植物黑名单（一些特殊/活动作物ID） */
 const DEFAULT_PLANT_BLACKLIST = [20002, 26739, 20059, 20065, 20064, 20060, 20061];
+const DEFAULT_CAPITAL_MODE = { enabled: false, dogId: 0, leadSeconds: 10 };
+
+function normalizeCapitalMode(value, fallback = DEFAULT_CAPITAL_MODE) {
+    const input = value && typeof value === 'object' ? value : {};
+    const base = fallback && typeof fallback === 'object' ? fallback : DEFAULT_CAPITAL_MODE;
+    return {
+        enabled: input.enabled !== undefined ? input.enabled === true : base.enabled === true,
+        dogId: Math.max(0, Number(input.dogId ?? input.selectedDogId ?? base.dogId) || 0),
+        leadSeconds: Math.max(5, Math.min(300, Number(input.leadSeconds ?? input.secondsBeforeMature ?? base.leadSeconds) || 10))
+    };
+}
 
 /** 默认账号配置 */
 const DEFAULT_ACCOUNT_CONFIG = {
@@ -284,7 +346,8 @@ const DEFAULT_ACCOUNT_CONFIG = {
     bagSeedFallbackStrategy: 'level',
     autoAcceptFriendMinLevel: 0,
     goldenBugKeepCount: 0,
-    goldenBugRoundLimit: 24
+    goldenBugRoundLimit: 24,
+    capitalMode: DEFAULT_CAPITAL_MODE
 };
 
 const ALLOWED_AUTOMATION_KEYS = new Set(Object.keys(DEFAULT_ACCOUNT_CONFIG.automation));
@@ -521,7 +584,8 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(config.goldenBugRoundLimit) || 24)),
         bagSeedPriority: normalizeBagSeedPriority(config.bagSeedPriority),
         bagSeedKnownIds: normalizeBagSeedPriority(config.bagSeedKnownIds),
-        bagSeedFallbackStrategy: normalizeBagSeedFallbackStrategy(config.bagSeedFallbackStrategy)
+        bagSeedFallbackStrategy: normalizeBagSeedFallbackStrategy(config.bagSeedFallbackStrategy),
+        capitalMode: normalizeCapitalMode(config.capitalMode)
     };
 }
 
@@ -602,6 +666,7 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
             }
         }
     }
+    disableHiddenActivityAutomation(cfg.automation);
 
     // 自动刷新 Code
     if (input.autoCodeRefresh && typeof input.autoCodeRefresh === 'object') {
@@ -609,6 +674,10 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
             enabled: input.autoCodeRefresh.enabled === true,
             intervalMinutes: Math.max(1, Math.min(1440, Number(input.autoCodeRefresh.intervalMinutes) || 60))
         };
+    }
+
+    if (input.capitalMode && typeof input.capitalMode === 'object') {
+        cfg.capitalMode = normalizeCapitalMode(input.capitalMode, cfg.capitalMode);
     }
 
     // 种植策略
@@ -1037,7 +1106,7 @@ function getAutomation(accountId) {
     const auto = { ...getAccountConfigSnapshot(accountId).automation };
     auto.fertilizer_land_types = normalizeFertilizerLandTypes(auto.fertilizer_land_types);
     auto.qixi_friend_priority = normalizeKnownFriendGids(auto.qixi_friend_priority, []);
-    return auto;
+    return disableHiddenActivityAutomation(auto);
 }
 
 function getConfigSnapshot(accountId) {
@@ -1092,6 +1161,7 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
             }
         }
     }
+    disableHiddenActivityAutomation(cfg.automation);
 
     if (patch.autoCodeRefresh && typeof patch.autoCodeRefresh === 'object') {
         cfg.autoCodeRefresh = {
@@ -1172,6 +1242,9 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     if (patch.bagSeedFallbackStrategy !== undefined && patch.bagSeedFallbackStrategy !== null) {
         cfg.bagSeedFallbackStrategy = normalizeBagSeedFallbackStrategy(patch.bagSeedFallbackStrategy);
     }
+    if (patch.capitalMode && typeof patch.capitalMode === 'object') {
+        cfg.capitalMode = normalizeCapitalMode(patch.capitalMode, cfg.capitalMode);
+    }
     if (patch.ui && typeof patch.ui === 'object') {
         const theme = String(patch.ui.theme || '').toLowerCase();
         if (theme === 'dark' || theme === 'light') {
@@ -1209,6 +1282,14 @@ function setAutoCodeRefresh(accountId, config) {
         }
     }, { accountId });
     return result.autoCodeRefresh;
+}
+
+function getCapitalMode(accountId) {
+    return normalizeCapitalMode(getAccountConfigSnapshot(accountId).capitalMode);
+}
+
+function setCapitalMode(accountId, config) {
+    return applyConfigSnapshot({ capitalMode: config || {} }, { accountId }).capitalMode;
 }
 
 function isAutomationOn(key, accountId) {
@@ -1819,6 +1900,8 @@ module.exports = {
     setAutomation,
     getAutoCodeRefresh,
     setAutoCodeRefresh,
+    getCapitalMode,
+    setCapitalMode,
     isAutomationOn,
     getPlantingStrategy,
     getPrioritize2x2Crops,
@@ -1893,4 +1976,13 @@ module.exports = {
     getAntiResaleConfig,
     setAntiResaleConfig,
     DEFAULT_ANTI_RESALE_CONFIG
+};
+
+module.exports._test = {
+    ...(module.exports._test || {}),
+    normalizeCapitalMode,
+    disableHiddenActivityAutomation,
+    HIDDEN_ACTIVITY_AUTOMATION_KEYS,
+    RAIN_POEM_AUTOMATION_KEYS: TIMED_ACTIVITY_AUTOMATION_GROUPS[0].keys,
+    getInactiveActivityAutomationKeys
 };

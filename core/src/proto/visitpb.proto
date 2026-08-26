@@ -4,6 +4,7 @@ package gamepb.visitpb;
 
 import "plantpb.proto";
 import "userpb.proto";
+import "weatherpb.proto";
 
 // ============ 访问好友农场服务 ============
  service VisitService {
@@ -36,6 +37,7 @@ message EnterReply {
     repeated gamepb.plantpb.LandInfo lands = 2;     // 好友的所有土地
     bytes brief_dog_info = 3;                       // 好友当前农场护主犬摘要(抓包: length-delimited)
     bytes nudge_info = 4;                           // 催熟信息(抓包: length-delimited)
+    gamepb.weatherpb.WeatherStatus weather = 13;    // 当前农场天气状态
 }
 
 // ============ 离开好友农场 ============

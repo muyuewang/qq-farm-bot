@@ -36,7 +36,14 @@ message ExchangeShopOperateParams {
 message HeluPaidDrawParams {
     int64 type = 1;
     int64 count = 2;
+    int64 item_uid = 3;
 }
+
+message WeatherTask { int32 id = 1; int64 item_id = 2; corepb.Item reward = 3; string desc = 4; int32 target = 5; int32 progress = 6; }
+message WeatherTaskInfo { repeated WeatherTask tasks = 1; }
+message WeatherResearchStage { int32 id = 1; bytes progress = 2; int32 status = 3; int32 claimed = 5; corepb.Item cost = 6; corepb.Item reward = 7; bool repeatable = 8; int32 limit = 9; }
+message WeatherResearchProgress { int32 current_stage = 1; repeated WeatherResearchStage stages = 2; }
+message WeatherResearchInfo { WeatherResearchProgress progress = 1; }
 
 message QingmeiClaimParams {
     int32 type = 1;
@@ -212,6 +219,8 @@ message ActivityNode {
     StarRecordInfo star_record = 110;
     QixiBridgeInfo qixi_bridge = 112;
     QixiGiftInfo qixi_gift = 113;
+    WeatherTaskInfo weather_tasks = 117;
+    WeatherResearchInfo weather_research = 118;
 }
 
 message ListReply {

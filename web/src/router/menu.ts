@@ -31,6 +31,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Friends.vue'),
   },
   {
+    path: 'pet',
+    name: 'pet',
+    label: '宠物',
+    icon: 'i-fa-solid-paw',
+    component: () => import('@/views/Pet.vue'),
+  },
+  {
     path: 'activity',
     name: 'activity',
     label: '活动',

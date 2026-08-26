@@ -62,6 +62,7 @@ function createRuntimeState(deps) {
             bagSeedKnownIds: store.getConfigSnapshot(accountId).bagSeedKnownIds,
             bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(accountId),
             autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(accountId),
+            capitalMode: store.getCapitalMode(accountId),
             __revision: configRevision
         };
     }

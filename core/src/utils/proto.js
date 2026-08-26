@@ -32,6 +32,7 @@ async function loadProto() {
         getResourcePath('proto', 'shoppb.proto'),
         getResourcePath('proto', 'friendpb.proto'),
         getResourcePath('proto', 'visitpb.proto'),
+        getResourcePath('proto', 'weatherpb.proto'),
         getResourcePath('proto', 'notifypb.proto'),
         getResourcePath('proto', 'taskpb.proto'),
         getResourcePath('proto', 'itempb.proto'),
@@ -177,6 +178,10 @@ async function loadProto() {
     types.ActivityStarRecordInfo = root.lookupType('gamepb.activitypb.StarRecordInfo');
     types.ActivityStarRecordClaimResult = root.lookupType('gamepb.activitypb.StarRecordClaimResult');
 
+    // 天气
+    types.GetWeatherStatusRequest = root.lookupType('gamepb.weatherpb.GetWeatherStatusRequest');
+    types.GetWeatherStatusReply = root.lookupType('gamepb.weatherpb.GetWeatherStatusReply');
+
     // 好友
     types.GetAllFriendsRequest = root.lookupType('gamepb.friendpb.GetAllRequest');
     types.GetAllFriendsReply = root.lookupType('gamepb.friendpb.GetAllReply');
@@ -201,6 +206,14 @@ async function loadProto() {
     types.ClaimSkillGiftsRequest = root.lookupType('gamepb.dogpb.ClaimSkillGiftsRequest');
     types.ClaimSkillGiftsReply = root.lookupType('gamepb.dogpb.ClaimSkillGiftsReply');
     types.PendingGiftCountNotify = root.lookupType('gamepb.dogpb.PendingGiftCountNotify');
+    types.DeployDogRequest = root.lookupType('gamepb.dogpb.DeployDogRequest');
+    types.DeployDogReply = root.lookupType('gamepb.dogpb.DeployDogReply');
+    types.WithdrawDogRequest = root.lookupType('gamepb.dogpb.WithdrawDogRequest');
+    types.WithdrawDogReply = root.lookupType('gamepb.dogpb.WithdrawDogReply');
+    types.AddFoodRequest = root.lookupType('gamepb.dogpb.AddFoodRequest');
+    types.AddFoodReply = root.lookupType('gamepb.dogpb.AddFoodReply');
+    types.GetProtectLogsRequest = root.lookupType('gamepb.dogpb.GetProtectLogsRequest');
+    types.GetProtectLogsReply = root.lookupType('gamepb.dogpb.GetProtectLogsReply');
 
 
     // 任务

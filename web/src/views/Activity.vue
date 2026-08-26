@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import type { ActivityLabels, ActivitySection, ActivitySectionKey } from '@/components/activity/types'
 import { storeToRefs } from 'pinia'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import HeluExchangePanel from '@/components/activity/HeluExchangePanel.vue'
 import HeluPassportPanel from '@/components/activity/HeluPassportPanel.vue'
 import HeluSolarTermsPanel from '@/components/activity/HeluSolarTermsPanel.vue'
 import QixiActivityPanel from '@/components/activity/QixiActivityPanel.vue'
+import RainPoemActivityPanel from '@/components/activity/RainPoemActivityPanel.vue'
 import StarRecordPanel from '@/components/activity/StarRecordPanel.vue'
 import AdminActivityUpdatePanel from '@/components/admin/AdminActivityUpdatePanel.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import { isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 import { useAccountStore } from '@/stores/account'
 import { useActivityStore } from '@/stores/activity'
 import { useToastStore } from '@/stores/toast'
@@ -86,11 +88,18 @@ const {
   qixiBuildLoading,
   qixiGiftLoading,
   qixiDewLoading,
+  rainPoemActivity,
+  rainPoemLoading,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
+const SHOW_STAR_ACTIVITY = false
+const nowMs = ref(Date.now())
+let nowTimer: ReturnType<typeof window.setInterval> | null = null
+const showRainPoemActivity = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 const activeSection = ref<ActivitySectionKey>('journey')
 const showActivityAnalysis = ref(false)
+const ACTIVITY_REFRESH_INTERVAL_MS = 30_000
 const sections = computed<ActivitySection[]>(() => [
   ...(SHOW_QIXI_ACTIVITY ? [{ key: 'qixi' as const, label: '鹊桥寄情', icon: 'i-carbon-favorite', count: qixiActivity.value?.gift.remainingCount || 0 }] : []),
   { key: 'journey', label: '千星游记', icon: 'i-carbon-map', count: activity.value?.passport?.claimableLevels || 0 },
@@ -100,11 +109,22 @@ const sections = computed<ActivitySection[]>(() => [
 ])
 
 async function refreshAll() {
-  if (currentAccountId.value) {
-    await Promise.all([
-      activityStore.fetchHeluActivity(String(currentAccountId.value)),
-      activityStore.fetchQixiActivity(String(currentAccountId.value)),
-    ])
+  if (currentAccountId.value && !rainPoemLoading.value && !heluLoading.value && !qixiLoading.value) {
+    const requests = []
+    if (SHOW_STAR_ACTIVITY)
+      requests.push(activityStore.fetchHeluActivity(String(currentAccountId.value)))
+    if (SHOW_QIXI_ACTIVITY)
+      requests.push(activityStore.fetchQixiActivity(String(currentAccountId.value)))
+    if (showRainPoemActivity.value)
+      requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
+    await Promise.all(requests)
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    nowMs.value = Date.now()
+    refreshAll()
   }
 }
 
@@ -172,12 +192,31 @@ watch(currentAccountId, () => {
   activityStore.clearActivityData()
   refreshAll()
 })
-onMounted(refreshAll)
+watch(showRainPoemActivity, (visible) => {
+  if (visible)
+    refreshAll()
+  else
+    activityStore.clearActivityData()
+})
+onMounted(() => {
+  nowTimer = window.setInterval(() => {
+    nowMs.value = Date.now()
+    if (document.visibilityState === 'visible')
+      refreshAll()
+  }, ACTIVITY_REFRESH_INTERVAL_MS)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+  refreshAll()
+})
+onUnmounted(() => {
+  if (nowTimer)
+    window.clearInterval(nowTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>
 
 <template>
   <section class="space-y-4">
-    <header class="relative min-h-40 overflow-hidden rounded-lg bg-[#071b43] shadow-sm">
+    <header v-if="SHOW_STAR_ACTIVITY" class="relative min-h-40 overflow-hidden rounded-lg bg-[#071b43] shadow-sm">
       <img
         src="/activity/star-festival/star-sky.png"
         alt=""
@@ -232,7 +271,24 @@ onMounted(refreshAll)
       </div>
     </header>
 
-    <div v-if="!currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+    <RainPoemActivityPanel
+      v-if="showRainPoemActivity && currentAccountId"
+      :activity="rainPoemActivity"
+      :loading="rainPoemLoading"
+      @refresh="refreshAll"
+    />
+    <div v-else-if="showRainPoemActivity && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+      {{ L.needAccount }}
+    </div>
+    <div v-else-if="!SHOW_STAR_ACTIVITY" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+      <div class="i-carbon-events mx-auto mb-3 text-4xl text-gray-300" />
+      <p>当前暂无进行中的活动。</p>
+      <BaseButton v-if="userStore.isAdmin" class="mt-4" variant="secondary" @click="showActivityAnalysis = true">
+        <span class="i-carbon-analytics mr-1.5" />
+        活动分析
+      </BaseButton>
+    </div>
+    <div v-else-if="!currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
       {{ L.needAccount }}
     </div>
     <template v-else>

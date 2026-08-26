@@ -23,10 +23,29 @@ const plantPhaseImageMap = new Map();// assetName → { phase: imageUrl }
 let plantPhaseManifestPath = '';
 let plantPhaseManifestMtimeMs = -1;
 const skinDetailImageMap = new Map();// itemId → skinDetailImageUrl
+const staticItemInfoMap = new Map([
+    [1027, { id: 1027, name: '雷电徽章' }],
+    [4002, { id: 4002, name: '闪电感应' }],
+    [4003, { id: 4003, name: '闪电感应' }],
+    [5001, { id: 5001, name: '天气采集瓶' }],
+    [5002, { id: 5002, name: '雷雨召唤瓶' }],
+    [5005, { id: 5005, name: '青蛙使坏瓶' }],
+    [5006, { id: 5006, name: '乌云使坏瓶' }],
+    [2159, { id: 2159, name: '雨落成诗头像框' }],
+    [100003, { id: 100003, name: '化肥礼包' }],
+]);
 const staticItemImageMap = new Map([
     [1023, '/activity/star-festival/star-token.png'],
     [1024, '/activity/qixi/qixi-feather.png'],
     [301103, '/activity/qixi/qixi-dew.png'],
+    [5001, '/activity/rain-poem/weather-collection-bottle.png'],
+    [5002, '/activity/rain-poem/rainstorm-summon-bottle.png'],
+    [5005, '/activity/rain-poem/frog-prank-bottle.png'],
+    [5006, '/activity/rain-poem/cloud-prank-bottle.png'],
+    [1027, '/activity/rain-poem/lightning-badge.svg'],
+    [4002, '/activity/rain-poem/lightning-sense.png'],
+    [4003, '/activity/rain-poem/lightning-sense.png'],
+    [2159, '/activity/rain-poem/avatar-frame.png'],
 ]);
 
 // 变异效果配置
@@ -587,7 +606,14 @@ function getItemImageById(itemId) {
 
 /** 根据物品ID获取物品信息 */
 function getItemById(itemId) {
-    return itemInfoMap.get(Number(itemId) || 0);
+    const numericId = Number(itemId) || 0;
+    const staticInfo = staticItemInfoMap.get(numericId);
+    const itemInfo = itemInfoMap.get(numericId);
+    if (!staticInfo) return itemInfo;
+    return {
+        ...(itemInfo || {}),
+        ...staticInfo,
+    };
 }
 
 /** 判断是否是种子物品 */

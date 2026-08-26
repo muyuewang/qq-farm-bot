@@ -19,6 +19,10 @@ export interface AutomationConfig {
   qixi_bridge_build?: boolean
   qixi_sachet_gift?: boolean
   qixi_friend_priority?: number[]
+  rain_poem_bottle_buy?: boolean
+  rain_poem_weather_collect?: boolean
+  rain_poem_summon_use?: boolean
+  rain_poem_research_unlock?: boolean
   sell?: boolean
   fertilizer_gift?: boolean
   fertilizer_buy_organic?: boolean

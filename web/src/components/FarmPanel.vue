@@ -11,7 +11,7 @@ import { useStatusStore } from '@/stores/status'
 const farmStore = useFarmStore()
 const accountStore = useAccountStore()
 const statusStore = useStatusStore()
-const { lands, summary, loading, dogSkillGiftPendingCount, dogSkillGiftLoading, dogSkillGiftError } = storeToRefs(farmStore)
+const { lands, summary, weather, loading, dogSkillGiftPendingCount, dogSkillGiftLoading, dogSkillGiftError } = storeToRefs(farmStore)
 const { currentAccountId, currentAccount } = storeToRefs(accountStore)
 const { status, loading: statusLoading, realtimeConnected, currentStatusReady } = storeToRefs(statusStore)
 
@@ -448,7 +448,7 @@ onUnmounted(() => {
           待拾取同气连枝礼包 ×{{ dogSkillGiftPendingCount }}
         </div>
         <button
-          class="rounded bg-amber-600 px-3 py-1.5 text-white disabled:opacity-50 hover:bg-amber-700"
+          class="rounded bg-amber-600 px-3 py-1.5 text-white hover:bg-amber-700 disabled:opacity-50"
           :disabled="dogSkillGiftLoading"
           @click="claimDogSkillGifts"
         >
@@ -523,6 +523,12 @@ onUnmounted(() => {
                 :height="FARM_CANVAS_HEIGHT"
                 aria-hidden="true"
               />
+              <div v-if="weather?.rainstorm" class="farm-rainstorm-effect" aria-hidden="true">
+                <img class="farm-rain-fog" src="/game-config/effect_images/rain-poem/rain-fog.png" alt="">
+                <div class="farm-rain-streaks farm-rain-streaks-a" />
+                <div class="farm-rain-streaks farm-rain-streaks-b" />
+                <div class="farm-thunder-flash" />
+              </div>
               <LandCard
                 v-for="land in displayLands"
                 :key="land.id"
@@ -591,6 +597,107 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   pointer-events: none;
+}
+
+.farm-rainstorm-effect {
+  position: absolute;
+  z-index: 1000;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background: rgb(15 32 55 / 0.18);
+}
+
+.farm-rain-fog,
+.farm-rain-streaks,
+.farm-thunder-flash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.farm-rain-fog {
+  object-fit: cover;
+  opacity: 0.18;
+  mix-blend-mode: screen;
+  animation: farm-rain-fog-drift 8s ease-in-out infinite alternate;
+}
+
+.farm-rain-streaks {
+  inset: -24%;
+  width: 148%;
+  height: 148%;
+  background-image: url('/game-config/effect_images/rain-poem/rain-streaks.png');
+  background-repeat: repeat;
+  background-size: 36% auto;
+  opacity: 0.52;
+  filter: drop-shadow(1px 2px 1px rgb(155 211 255 / 0.42));
+  transform: rotate(4deg);
+  animation: farm-rain-fall 0.78s linear infinite;
+}
+
+.farm-rain-streaks-b {
+  background-size: 25% auto;
+  opacity: 0.28;
+  transform: rotate(7deg) scaleX(-1);
+  animation-delay: -0.4s;
+  animation-duration: 1.08s;
+}
+
+.farm-thunder-flash {
+  background: rgb(208 235 255 / 0.72);
+  opacity: 0;
+  animation: farm-thunder-flash 7.5s steps(1, end) infinite;
+}
+
+@keyframes farm-rain-fall {
+  from {
+    background-position: 0 -45%;
+  }
+  to {
+    background-position: -5% 0;
+  }
+}
+
+@keyframes farm-rain-fog-drift {
+  from {
+    transform: translateX(-4%) scale(1.08);
+  }
+  to {
+    transform: translateX(4%) scale(1.12);
+  }
+}
+
+@keyframes farm-thunder-flash {
+  0%,
+  3%,
+  5%,
+  48%,
+  51%,
+  100% {
+    opacity: 0;
+  }
+  2%,
+  4% {
+    opacity: 0.75;
+  }
+  49% {
+    opacity: 0.42;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .farm-rain-fog,
+  .farm-rain-streaks,
+  .farm-thunder-flash {
+    animation: none;
+  }
+
+  .farm-rain-streaks-b,
+  .farm-thunder-flash {
+    display: none;
+  }
 }
 
 .iso-farm-stage :deep(.land-card) {

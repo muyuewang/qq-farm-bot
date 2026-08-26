@@ -25,6 +25,7 @@ export const useFarmStore = defineStore('farm', () => {
   const lands = ref<Land[]>([])
   const seeds = ref<any[]>([])
   const summary = ref<any>({})
+  const weather = ref<any>(null)
   const loading = ref(false)
   const dogSkillGiftPendingCount = ref(0)
   const dogSkillGiftLoading = ref(false)
@@ -34,6 +35,7 @@ export const useFarmStore = defineStore('farm', () => {
     lands.value = []
     seeds.value = []
     summary.value = {}
+    weather.value = null
     dogSkillGiftPendingCount.value = 0
     dogSkillGiftError.value = ''
   }
@@ -58,6 +60,7 @@ export const useFarmStore = defineStore('farm', () => {
       if (data && data.ok) {
         lands.value = data.data.lands || []
         summary.value = data.data.summary || {}
+        weather.value = data.data.weather || null
       }
     }
     finally {
@@ -164,9 +167,22 @@ export const useFarmStore = defineStore('farm', () => {
   }
 
   return {
-    lands, summary, seeds, loading,
-    dogSkillGiftPendingCount, dogSkillGiftLoading, dogSkillGiftError,
-    clearFarmData, fetchLands, fetchSeeds, fetchDogSkillGiftStatus, claimDogSkillGifts,
-    operate, fertilizeLand, removePlant, removeAllPlants,
+    lands,
+    summary,
+    weather,
+    seeds,
+    loading,
+    dogSkillGiftPendingCount,
+    dogSkillGiftLoading,
+    dogSkillGiftError,
+    clearFarmData,
+    fetchLands,
+    fetchSeeds,
+    fetchDogSkillGiftStatus,
+    claimDogSkillGifts,
+    operate,
+    fertilizeLand,
+    removePlant,
+    removeAllPlants,
   }
 })

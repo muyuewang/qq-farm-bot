@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import api from '@/api'
 import StrategySettingsTab from '@/components/settings/StrategySettingsTab.vue'
 import StrategyTimingPanel from '@/components/settings/StrategyTimingPanel.vue'
@@ -7,6 +7,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
+import { isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 
 type ModuleKey = 'planting' | 'fertilizer' | 'friends' | 'steal' | 'merchant' | 'activity'
 
@@ -31,7 +32,11 @@ const automation = defineModel<any>('automation', { required: true })
 const activeModule = ref<ModuleKey | null>(null)
 const editSnapshot = ref<{ strategy: any, automation: any } | null>(null)
 const qixiFriends = ref<Array<{ gid: number, name: string }>>([])
+const SHOW_STAR_ACTIVITY = false
 const SHOW_QIXI_ACTIVITY = false
+const nowMs = ref(Date.now())
+let nowTimer: ReturnType<typeof window.setInterval> | null = null
+const showRainPoemActivity = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 
 const moduleInfo: Record<ModuleKey, { title: string, description: string, icon: string, image: string, tone: string }> = {
   planting: { title: '种植与收获', description: '选种、收获、出售和巡田节奏', icon: 'i-carbon-sprout', image: '/game-config/module_icons/planting.png', tone: 'emerald' },
@@ -46,10 +51,15 @@ const activeInfo = computed(() => activeModule.value ? moduleInfo[activeModule.v
 const fertilizerName = computed(() => props.fertilizerOptions.find(item => item.value === automation.value.automation.fertilizer)?.label || '未设置')
 const selectedLandNames = computed(() => props.fertilizerLandTypeOptions.filter(item => automation.value.automation.fertilizer_land_types?.includes(item.value)).map(item => item.label))
 const selectedLandTypeCount = computed(() => Array.isArray(automation.value.automation.fertilizer_land_types) ? automation.value.automation.fertilizer_land_types.length : 0)
-const activityKeys = ['star_passport_claim', 'star_solar_claim', 'star_record_claim', 'qixi_dew_use', 'qixi_bridge_build', 'qixi_sachet_gift'] as const
-const activityEnabledCount = computed(() => activityKeys.filter(key => automation.value.automation[key]).length)
+const activityKeys = computed(() => [
+  ...(showRainPoemActivity.value
+    ? ['rain_poem_bottle_buy', 'rain_poem_weather_collect', 'rain_poem_summon_use', 'rain_poem_research_unlock']
+    : []),
+])
+const activityEnabledCount = computed(() => activityKeys.value.filter(key => automation.value.automation[key]).length)
 const starFestivalEnabled = computed(() => ['star_passport_claim', 'star_solar_claim', 'star_record_claim'].some(key => automation.value.automation[key]))
 const qixiActivityEnabled = computed(() => ['qixi_dew_use', 'qixi_bridge_build', 'qixi_sachet_gift'].some(key => automation.value.automation[key]))
+const rainPoemActivityEnabled = computed(() => activityKeys.value.some(key => automation.value.automation[key]))
 
 function intervalTag(min: number, max: number) {
   return `${min}-${max} 秒`
@@ -106,9 +116,10 @@ function summaryTags(key: ModuleKey) {
   }
   return [
     automation.value.automation.task ? '自动完成日常任务' : '不做日常',
-    starFestivalEnabled.value && '心许千灯星垂野',
+    SHOW_STAR_ACTIVITY && starFestivalEnabled.value && '心许千灯星垂野',
     SHOW_QIXI_ACTIVITY && qixiActivityEnabled.value && '鹊桥寄情',
-    !starFestivalEnabled.value && (!SHOW_QIXI_ACTIVITY || !qixiActivityEnabled.value) && '未开启活动',
+    showRainPoemActivity.value && rainPoemActivityEnabled.value && '雨落成诗',
+    !starFestivalEnabled.value && (!SHOW_QIXI_ACTIVITY || !qixiActivityEnabled.value) && !rainPoemActivityEnabled.value && '未开启活动',
   ].filter(Boolean)
 }
 
@@ -147,7 +158,7 @@ function setModuleEnabled(key: ModuleKey, enabled: boolean) {
   else {
     automation.value.automation.task = enabled
     if (!enabled) {
-      activityKeys.forEach((activityKey) => {
+      activityKeys.value.forEach((activityKey) => {
         automation.value.automation[activityKey] = false
       })
     }
@@ -221,7 +232,15 @@ function cancel() {
   editSnapshot.value = null
   activeModule.value = null
 }
-onMounted(loadQixiFriends)
+onMounted(() => {
+  loadQixiFriends()
+  nowTimer = window.setInterval(() => {
+    nowMs.value = Date.now()
+  }, 60000)
+})
+onUnmounted(() => {
+  if (nowTimer) window.clearInterval(nowTimer)
+})
 watch(() => props.currentAccountId, loadQixiFriends)
 </script>
 
@@ -491,7 +510,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
                 </div>
               </section>
 
-              <section class="space-y-3 border border-gray-100 rounded-lg p-4 dark:border-gray-700">
+              <section v-if="SHOW_STAR_ACTIVITY" class="space-y-3 border border-gray-100 rounded-lg p-4 dark:border-gray-700">
                 <div>
                   <div class="text-sm text-gray-700 font-medium dark:text-gray-300">
                     心许千灯星垂野
@@ -544,6 +563,23 @@ watch(() => props.currentAccountId, loadQixiFriends)
                       + {{ friend.name }}
                     </button>
                   </div>
+                </div>
+              </section>
+
+              <section v-if="showRainPoemActivity" class="space-y-3 border border-gray-100 rounded-lg p-4 dark:border-gray-700">
+                <div>
+                  <div class="text-sm text-gray-700 font-medium dark:text-gray-300">
+                    雨落成诗
+                  </div>
+                  <div class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    天气采集、雷雨召唤与气象研究
+                  </div>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <BaseSwitch v-model="automation.automation.rain_poem_bottle_buy" label="购买天气采集瓶" />
+                  <BaseSwitch v-model="automation.automation.rain_poem_weather_collect" label="采集好友雷雨" />
+                  <BaseSwitch v-model="automation.automation.rain_poem_summon_use" label="使用雷雨召唤瓶" />
+                  <BaseSwitch v-model="automation.automation.rain_poem_research_unlock" label="解锁气象研究" />
                 </div>
               </section>
             </div>

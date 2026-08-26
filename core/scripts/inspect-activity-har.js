@@ -40,6 +40,10 @@ async function main() {
   ], { keepCase: true });
 
   const GateMessage = root.lookupType('gatepb.Message');
+  const ActivityListReply = root.lookupType('gamepb.activitypb.ListReply');
+  const ActivityGetGroupRequest = root.lookupType('gamepb.activitypb.GetGroupRequest');
+  const ActivityGetGroupReply = root.lookupType('gamepb.activitypb.GetGroupReply');
+  const ActivityOperateRequest = root.lookupType('gamepb.activitypb.OperateRequest');
   const ActivityOperateReply = root.lookupType('gamepb.activitypb.OperateReply');
   const rows = [];
 
@@ -68,15 +72,21 @@ async function main() {
       bodyBytes: gate.body?.length || 0,
     };
 
-    if (service === 'gamepb.activitypb.ActivityService'
-      && method === 'Operate'
-      && direction === 'response'
-      && gate.body?.length) {
+    if (service === 'gamepb.activitypb.ActivityService' && gate.body?.length) {
+      row.bodyHex = Buffer.from(gate.body).toString('hex');
       try {
-        row.activity = toPlain(
-          ActivityOperateReply,
-          ActivityOperateReply.decode(gate.body),
-        );
+        const type = method === 'List' && direction === 'response'
+          ? ActivityListReply
+          : method === 'GetGroup' && direction === 'request'
+            ? ActivityGetGroupRequest
+            : method === 'GetGroup' && direction === 'response'
+              ? ActivityGetGroupReply
+              : method === 'Operate' && direction === 'request'
+                ? ActivityOperateRequest
+                : method === 'Operate' && direction === 'response'
+                  ? ActivityOperateReply
+                  : null;
+        if (type) row.activity = toPlain(type, type.decode(gate.body));
       } catch (err) {
         row.decodeError = err.message;
       }

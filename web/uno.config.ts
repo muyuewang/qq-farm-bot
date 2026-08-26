@@ -18,6 +18,9 @@ export default defineConfig({
     'i-fas-circle-notch-function': 'i-fas-circle-notch',
     'i-fas-circle-notch-string': 'i-fas-circle-notch',
     'i-fas-circle-notch-return': 'i-fas-circle-notch',
+    'i-carbon-circle-dash-function': 'i-carbon-circle-dash',
+    'i-carbon-circle-dash-string': 'i-carbon-circle-dash',
+    'i-carbon-circle-dash-return': 'i-carbon-circle-dash',
   },
   presets: [
     presetUno(),

@@ -8,11 +8,14 @@
  * - 原始 protobuf 回退解码
  */
 const protobuf = require('protobufjs/minimal');
+const path = require('node:path');
 const { sendMsgAsync, getUserState, isConnected } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toNum } = require('../utils/utils');
 const { getItemImageById, getItemById } = require('../config/gameConfig');
+const { getDataDir } = require('../config/runtime-paths');
 const { createModuleLogger } = require('./logger');
+const { readJsonFile, writeJsonFileAtomic } = require('./json-db');
 const { getBag, getBagItems } = require('./warehouse');
 
 const activityLogger = createModuleLogger('activity');
@@ -23,6 +26,27 @@ const QINGMEI_WINE_STEP_DELAY_MS = 1000;
 const qingmeiClaimedDateByAccount = new Map();
 const qixiDewLimitDateByAccount = new Map();
 const QIXI_DEW_DAILY_LIMIT = 15;
+const RAIN_POEM_ACTIVITY_UID = 'WeatherBottleUI';
+const RAIN_POEM_ACTIVITY_ID = 2026070300;
+const RAIN_POEM_SHOP_ACTIVITY_ID = 2026070301;
+const RAIN_POEM_COLLECTION_ACTIVITY_ID = 2026070303;
+const RAIN_POEM_COLLECTION_CMD = 9;
+const RAIN_POEM_RESEARCH_ACTIVITY_ID = 2026070304;
+const RAIN_POEM_RESEARCH_UNLOCK_CMD = 40;
+const RAIN_POEM_BOTTLE_ITEM_ID = 5001;
+const RAIN_POEM_SUMMON_ITEM_ID = 5002;
+const RAIN_POEM_BADGE_ITEM_ID = 1027;
+const RAIN_POEM_START_TIME = 1787709600;
+const RAIN_POEM_END_TIME = 1788883199;
+const RAINSTORM_WEATHER_ID = 1;
+const LIGHTNING_MUTANT_TYPE = 12;
+const RAIN_POEM_SUMMON_DAILY_LIMIT = 50;
+const RAIN_POEM_ITEM_NAMES = new Map([
+  [1027, '雷电徽章'], [5001, '天气采集瓶'], [5002, '雷雨召唤瓶'],
+  [5005, '青蛙使坏瓶'], [5006, '乌云使坏瓶'],
+  [80013, '有机化肥（8小时）'], [100003, '化肥礼包'],
+  [4002, '闪电感应'], [4003, '闪电感应'], [2159, '雨落成诗头像框'],
+]);
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
@@ -44,6 +68,42 @@ function getQingmeiClaimStateKey() {
 function getQixiDewLimitStateKey() {
   const state = getUserState();
   return String(state?.gid || state?.openid || 'current');
+}
+
+function getRainPoemSummonUsageFile() {
+  const state = getUserState();
+  const accountKey = String(state?.gid || 'current').replace(/[^\w-]/gi, '_');
+  return path.join(getDataDir(), 'rain_poem_summon_usage', `${accountKey}.json`);
+}
+
+function getRainPoemSummonUsedToday() {
+  const usage = readJsonFile(getRainPoemSummonUsageFile(), () => ({}));
+  return usage?.date === getLocalDateKey() ? Math.max(0, toNum(usage.count)) : 0;
+}
+
+function incrementRainPoemSummonUsedToday() {
+  const count = Math.min(RAIN_POEM_SUMMON_DAILY_LIMIT, getRainPoemSummonUsedToday() + 1);
+  writeJsonFileAtomic(getRainPoemSummonUsageFile(), { date: getLocalDateKey(), count });
+  return count;
+}
+
+function mergeRainPoemTaskUsage(activity, summonUsedToday) {
+  const collectionLimit = Math.max(0, toNum(activity?.collection?.dailyUseLimit));
+  const collectionRemaining = Math.min(collectionLimit, Math.max(0, toNum(activity?.collection?.remainingUseCount)));
+  const collectionTask = activity.tasks.find(item => toNum(item?.itemId) === RAIN_POEM_BOTTLE_ITEM_ID);
+  if (collectionTask) {
+    collectionTask.progress = collectionLimit - collectionRemaining;
+    collectionTask.target = collectionLimit;
+  }
+
+  const count = Math.min(RAIN_POEM_SUMMON_DAILY_LIMIT, Math.max(0, toNum(summonUsedToday)));
+  activity.summon.usedToday = count;
+  const task = activity.tasks.find(item => toNum(item?.itemId) === RAIN_POEM_SUMMON_ITEM_ID);
+  if (task) {
+    task.progress = Math.max(toNum(task.progress), count);
+    task.target = RAIN_POEM_SUMMON_DAILY_LIMIT;
+  }
+  return activity;
 }
 
 function isQixiDewLimitReachedToday() {
@@ -397,6 +457,204 @@ async function getQixiActivity() {
       && activity.items.feather.itemCount >= activity.bridge.nextStage.cost.itemCount;
   }
   return activity;
+}
+
+function normalizeRainPoemActivity(reply, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const root = reply?.group || null;
+  const shopNode = findActivityNodeById([root], 2026070301);
+  const drawNode = findActivityNodeById([root], 2026070303);
+  const researchNode = findActivityNodeById([root], 2026070304);
+  const taskNode = findActivityNodeById([root], 2026070305);
+  const startTime = toNum(root?.activity?.start_time) || RAIN_POEM_START_TIME;
+  const endTime = toNum(root?.activity?.end_time) || RAIN_POEM_END_TIME;
+  // type=3 天气商店的数据位于 ActivityInfo 内；部分旧响应则直接挂在 ActivityNode。
+  const shopInfo = shopNode?.exchange_shop || shopNode?.activity?.exchange_shop || {};
+  const shopItem = (shopInfo?.items || [])[0] || {};
+  const draw = drawNode?.draw_info || drawNode?.activity?.draw_info || {};
+  const research = (researchNode?.weather_research || researchNode?.activity?.weather_research)?.progress || {};
+  const weatherTasks = taskNode?.weather_tasks || taskNode?.activity?.weather_tasks || {};
+  return {
+    uid: RAIN_POEM_ACTIVITY_UID,
+    title: String(root?.activity?.title || '雨落成诗'),
+    activityId: RAIN_POEM_ACTIVITY_ID,
+    startTime,
+    endTime,
+    active: nowSeconds >= startTime && nowSeconds <= endTime && root?.activity?.visible !== false,
+    shop: {
+      activityId: RAIN_POEM_SHOP_ACTIVITY_ID,
+      slotId: toNum(shopItem?.id) || 200,
+      item: normalizeRainPoemItem(shopItem?.item, RAIN_POEM_BOTTLE_ITEM_ID),
+      cost: normalizeQixiItem(shopItem?.cost, 1005, '金豆豆'),
+      purchasedToday: !!shopItem?.owned,
+      available: toNum(shopItem?.status) === 1 && !shopItem?.owned,
+      dailyLimit: 1,
+    },
+    collection: {
+      remainingUseCount: toNum(draw?.paid_remaining_count),
+      dailyUseLimit: toNum(draw?.max_paid_count) || 10,
+      bottleItemId: toNum(draw?.paid_currency_id) || RAIN_POEM_BOTTLE_ITEM_ID,
+      bottleCost: toNum(draw?.paid_price) || 1,
+      reward: normalizeRainPoemItem(draw?.rewards?.[0]?.item, RAIN_POEM_SUMMON_ITEM_ID),
+    },
+    summon: {
+      itemId: RAIN_POEM_SUMMON_ITEM_ID,
+      dailyUseLimit: RAIN_POEM_SUMMON_DAILY_LIMIT,
+      durationSeconds: 2 * 60 * 60,
+    },
+    tasks: (weatherTasks?.tasks || []).map(task => ({
+      id: toNum(task?.id), itemId: toNum(task?.item_id), desc: String(task?.desc || ''),
+      target: toNum(task?.target), progress: toNum(task?.progress),
+      reward: normalizeRainPoemItem(task?.reward, RAIN_POEM_BADGE_ITEM_ID),
+    })),
+    research: {
+      currentStage: toNum(research?.current_stage),
+      stages: (research?.stages || []).map(stage => ({
+        id: toNum(stage?.id), status: toNum(stage?.status),
+        available: toNum(stage?.status) === 2,
+        completed: toNum(stage?.status) === 4,
+        claimed: toNum(stage?.status) === 4,
+        cost: normalizeRainPoemItem(stage?.cost, RAIN_POEM_BADGE_ITEM_ID), reward: normalizeRainPoemItem(stage?.reward),
+        repeatable: !!stage?.repeatable, limit: toNum(stage?.limit),
+      })),
+    },
+  };
+}
+
+function normalizeRainPoemItem(item, fallbackId = 0) {
+  const itemId = toNum(item?.id) || fallbackId;
+  return normalizeQixiItem(item, itemId, RAIN_POEM_ITEM_NAMES.get(itemId) || '未知物品');
+}
+
+function normalizeWeatherStatus(weather, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const weatherId = toNum(weather?.weather_id);
+  const status = toNum(weather?.status);
+  const startTime = toNum(weather?.start_time);
+  const endTime = toNum(weather?.end_time);
+  return {
+    weatherId, status, startTime, endTime,
+    // 自然雷雨为 status=1，召唤瓶生成的雷雨为 status=2。
+    rainstorm: weatherId === RAINSTORM_WEATHER_ID && status > 0
+      && (!startTime || nowSeconds >= startTime) && (!endTime || nowSeconds <= endTime),
+  };
+}
+
+function isLightningMutantPlant(plant) {
+  return (plant?.mutant_config_ids || []).map(toNum).includes(LIGHTNING_MUTANT_TYPE);
+}
+
+async function getOwnWeatherStatus() {
+  const request = types.GetWeatherStatusRequest.encode(types.GetWeatherStatusRequest.create({})).finish();
+  const { body } = await sendMsgAsync('gamepb.weatherpb.WeatherService', 'GetWeatherStatus', request);
+  return normalizeWeatherStatus(types.GetWeatherStatusReply.decode(body)?.weather);
+}
+
+async function getRainPoemActivity() {
+  const activity = normalizeRainPoemActivity(await getActivityGroup(RAIN_POEM_ACTIVITY_ID, RAIN_POEM_ACTIVITY_UID));
+  const [collectionBottles, summonBottles, badges] = await Promise.all([
+    getBagItemCount(RAIN_POEM_BOTTLE_ITEM_ID), getBagItemCount(RAIN_POEM_SUMMON_ITEM_ID), getBagItemCount(RAIN_POEM_BADGE_ITEM_ID),
+  ]);
+  activity.items = { collectionBottles, summonBottles, badges };
+  mergeRainPoemTaskUsage(activity, getRainPoemSummonUsedToday());
+  try {
+    activity.weather = await getOwnWeatherStatus();
+  } catch (err) {
+    activity.weather = { weatherId: 0, status: 0, rainstorm: false, error: err.message };
+  }
+  return activity;
+}
+
+async function buyRainPoemCollectionBottle() {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  if (before.shop.purchasedToday || !before.shop.available) {
+    return { ok: true, purchased: false, reason: 'daily_limit', activity: before };
+  }
+  await operateActivityReply(RAIN_POEM_SHOP_ACTIVITY_ID, 1, {
+    exchangeShopOperate: { id: 200, count: 1 },
+  });
+  return { ok: true, purchased: true, count: 1, activity: await getRainPoemActivity() };
+}
+
+function encodeRainPoemSummonUseRequest(gid, itemUid) {
+  const writer = protobuf.Writer.create();
+  writer.uint32(10).fork().uint32(8).int64(RAIN_POEM_SUMMON_ITEM_ID)
+    .uint32(16).int64(1).uint32(48).int64(toNum(itemUid)).ldelim();
+  writer.uint32(18).fork().uint32(8).int64(toNum(gid)).uint32(24).int64(0).ldelim();
+  return writer.finish();
+}
+
+async function useRainPoemSummonBottle() {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  if (before.weather?.rainstorm) return { ok: true, used: false, reason: 'already_rainstorm', activity: before };
+  if (before.summon.usedToday >= RAIN_POEM_SUMMON_DAILY_LIMIT) {
+    return { ok: true, used: false, reason: 'daily_limit', activity: before };
+  }
+  if (before.items.summonBottles < 1) throw new Error('雷雨召唤瓶不足');
+  const bag = await getBag();
+  const bottle = getBagItems(bag).find(item => toNum(item?.id) === RAIN_POEM_SUMMON_ITEM_ID && toNum(item?.count) > 0);
+  if (!bottle) throw new Error('雷雨召唤瓶不足');
+  const gid = toNum(getUserState()?.gid);
+  if (!gid) throw new Error('尚未获取当前账号 GID');
+  await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeRainPoemSummonUseRequest(gid, bottle.uid));
+  incrementRainPoemSummonUsedToday();
+  return { ok: true, used: true, activity: await getRainPoemActivity() };
+}
+
+async function collectRainPoemWeather() {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  if (before.items.collectionBottles < 1) throw new Error('天气采集瓶不足');
+  if (before.collection.remainingUseCount <= 0) throw new Error('天气采集瓶今日使用次数已达上限');
+
+  const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
+  const { getFriendsList } = require('./friend-land-analyzer');
+  const friends = await getFriendsList();
+  let checkedCount = 0;
+  let visitFailureCount = 0;
+
+  for (const friend of friends) {
+    const gid = toNum(friend?.gid);
+    if (!gid) continue;
+    let entered = false;
+    try {
+      const visit = await enterFriendFarm(gid);
+      entered = true;
+      checkedCount++;
+      const weather = normalizeWeatherStatus(visit?.weather);
+      if (!weather.rainstorm) continue;
+      await operateActivityReply(RAIN_POEM_COLLECTION_ACTIVITY_ID, RAIN_POEM_COLLECTION_CMD, {
+        // 抓包确认 field 107.3 承载目标好友 GID；沿用现有消息字段名 item_uid。
+        helu_paid_draw: { item_uid: gid },
+      });
+      return {
+        ok: true, friendGid: gid, friendName: String(friend?.name || ''), weather,
+        checkedCount, visitFailureCount, activity: await getRainPoemActivity(),
+      };
+    } catch (err) {
+      if (entered) throw err;
+      visitFailureCount++;
+      activityLogger.warn('检查好友雷雨天气失败，继续下一位', { friendGid: gid, error: err.message });
+    } finally {
+      if (entered) await leaveFriendFarm(gid);
+    }
+  }
+  return { ok: true, collected: false, reason: 'no_rainstorm_friend', checkedCount, visitFailureCount, activity: await getRainPoemActivity() };
+}
+
+async function unlockRainPoemResearch() {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  const stage = before.research.stages.find(item => item.available);
+  if (!stage) return { ok: true, unlocked: false, reason: 'no_available_stage', activity: before };
+  if (before.items.badges < stage.cost.itemCount) {
+    throw new Error(`雷电徽章不足，需要 ${stage.cost.itemCount}，当前 ${before.items.badges}`);
+  }
+  await operateActivityReply(RAIN_POEM_RESEARCH_ACTIVITY_ID, RAIN_POEM_RESEARCH_UNLOCK_CMD);
+  return {
+    ok: true, unlocked: true, stageId: stage.id, cost: stage.cost, reward: stage.reward,
+    activity: await getRainPoemActivity(),
+  };
 }
 
 function isQixiDewLandCandidate(land) {
@@ -2503,6 +2761,7 @@ module.exports = {
   STAR_ACTIVITY_UID,
   QINGMEI_ACTIVITY_UID,
   QIXI_ACTIVITY_UID,
+  RAIN_POEM_ACTIVITY_UID,
   NANGUA_SHOP_ACTIVITY_ID,
   NANGUA_RANDOM_SHOP_ACTIVITY_ID,
   HELU_ACTIVITY_ID,
@@ -2518,6 +2777,9 @@ module.exports = {
   QIXI_ACTIVITY_ID,
   QIXI_BRIDGE_ACTIVITY_ID,
   QIXI_GIFT_ACTIVITY_ID,
+  RAIN_POEM_ACTIVITY_ID,
+  RAIN_POEM_COLLECTION_ACTIVITY_ID,
+  RAIN_POEM_RESEARCH_ACTIVITY_ID,
   HELU_SUB_ACTIVITY_KEYS,
   NANGUA_SHOP_BUY_CMD,
   NANGUA_SHOP_REFRESH_CMD,
@@ -2540,6 +2802,17 @@ module.exports = {
   useQixiDew,
   isQixiDewLandCandidate,
   normalizeQixiActivity,
+  getRainPoemActivity,
+  buyRainPoemCollectionBottle,
+  collectRainPoemWeather,
+  useRainPoemSummonBottle,
+  unlockRainPoemResearch,
+  normalizeRainPoemActivity,
+  mergeRainPoemTaskUsage,
+  normalizeWeatherStatus,
+  getOwnWeatherStatus,
+  encodeRainPoemSummonUseRequest,
+  isLightningMutantPlant,
   getSeasonPassport,
   claimSeasonPassportRewards,
   getSolarTermsInfo,

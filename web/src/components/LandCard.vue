@@ -147,7 +147,9 @@ const mutantEffects = computed(() => {
         id: Number(effect?.id) || 0,
         name: String(effect?.name || effect?.effect_name || icon || '变异').trim(),
         icon,
-        image: icon ? `/game-config/seed_images_named/mutant/${icon}.png` : '',
+        image: icon === 'lightning'
+          ? '/activity/rain-poem/lightning-sense.png'
+          : (icon ? `/game-config/seed_images_named/mutant/${icon}.png` : ''),
         tag: String(effect?.tag || '').trim(),
         description: String(effect?.description || effect?.desc || effect?.tips || '').trim(),
       }
@@ -169,6 +171,7 @@ const hasFrozenMutation = computed(() => hasMutation(1, 'frozen'))
 const hasLoveMutation = computed(() => hasMutation(2, 'love'))
 const hasDarkMutation = computed(() => hasMutation(3, 'dark'))
 const hasMoistMutation = computed(() => hasMutation(4, 'moist'))
+const hasLightningMutation = computed(() => hasMutation(12, 'lightning'))
 const darkSmokeImageUrl = '/game-config/effect_images/mutant/dark-smoke.png'
 const darkParticleImageUrl = '/game-config/effect_images/mutant/dark-particle.png'
 
@@ -397,6 +400,7 @@ function getIsometricBubbleClass(targetLand: any) {
           'land-card-image-love': hasLoveMutation && Boolean(cropImageUrl),
           'land-card-image-dark': hasDarkMutation && Boolean(cropImageUrl),
           'land-card-image-moist': hasMoistMutation && Boolean(cropImageUrl),
+          'land-card-image-lightning': hasLightningMutation && Boolean(cropImageUrl),
         },
       ]"
     >
@@ -416,6 +420,15 @@ function getIsometricBubbleClass(targetLand: any) {
       </div>
       <div v-if="hasMoistMutation && cropImageUrl" class="moist-mutation-layer" aria-hidden="true">
         <i v-for="index in 4" :key="index" />
+      </div>
+      <div v-if="hasLightningMutation && cropImageUrl" class="lightning-mutation-layer" aria-hidden="true">
+        <img
+          v-for="index in 4"
+          :key="`lightning-frame-${index}`"
+          :src="`/game-config/effect_images/rain-poem/lightning-0${index - 1}.png`"
+          :class="`lightning-mutation-frame lightning-mutation-frame-${index}`"
+          alt=""
+        >
       </div>
       <img
         v-if="cropImageUrl"
@@ -780,7 +793,8 @@ function getIsometricBubbleClass(targetLand: any) {
 .land-card-image-frozen,
 .land-card-image-love,
 .land-card-image-dark,
-.land-card-image-moist {
+.land-card-image-moist,
+.land-card-image-lightning {
   position: relative;
   isolation: isolate;
   overflow: hidden;
@@ -796,7 +810,8 @@ function getIsometricBubbleClass(targetLand: any) {
 .frozen-mutation-layer,
 .love-mutation-layer,
 .dark-mutation-layer,
-.moist-mutation-layer {
+.moist-mutation-layer,
+.lightning-mutation-layer {
   position: absolute;
   z-index: 3;
   inset: 0;
@@ -988,6 +1003,38 @@ function getIsometricBubbleClass(targetLand: any) {
   animation-delay: -1.2s;
 }
 
+.land-card-image-lightning .land-crop-image {
+  position: relative;
+  z-index: 2;
+}
+
+.lightning-mutation-layer {
+  z-index: 4;
+  overflow: visible;
+}
+
+.lightning-mutation-frame {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 145%;
+  height: 145%;
+  object-fit: contain;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  animation: official-lightning-frame 1s steps(1, end) infinite;
+}
+
+.lightning-mutation-frame-2 {
+  animation-delay: -0.75s;
+}
+.lightning-mutation-frame-3 {
+  animation-delay: -0.5s;
+}
+.lightning-mutation-frame-4 {
+  animation-delay: -0.25s;
+}
+
 @keyframes golden-crop-glow {
   0%,
   100% {
@@ -1125,6 +1172,17 @@ function getIsometricBubbleClass(targetLand: any) {
   }
 }
 
+@keyframes official-lightning-frame {
+  0%,
+  24.99% {
+    opacity: 1;
+  }
+  25%,
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .land-card-image-golden .land-crop-image,
   .golden-mutation-aura,
@@ -1136,8 +1194,13 @@ function getIsometricBubbleClass(targetLand: any) {
   .love-mutation-layer i,
   .dark-mutation-smoke,
   .dark-mutation-particle,
-  .moist-mutation-layer i {
+  .moist-mutation-layer i,
+  .lightning-mutation-frame {
     animation: none;
+  }
+
+  .lightning-mutation-frame-1 {
+    opacity: 1;
   }
 
   .land-card-image-golden .land-crop-image {

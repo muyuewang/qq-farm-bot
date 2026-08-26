@@ -295,10 +295,16 @@ async function runStarActivityAutoClaims() {
     const useQixiDewEnabled = automation.qixi_dew_use === true;
     const buildQixiBridgeEnabled = automation.qixi_bridge_build === true;
     const giftQixiSachetEnabled = automation.qixi_sachet_gift === true;
+    const buyRainPoemBottleEnabled = automation.rain_poem_bottle_buy === true;
+    const collectRainPoemWeatherEnabled = automation.rain_poem_weather_collect === true;
+    const useRainPoemSummonEnabled = automation.rain_poem_summon_use === true;
+    const unlockRainPoemResearchEnabled = automation.rain_poem_research_unlock === true;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
     if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
-        && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled) return;
+        && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled
+        && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled
+        && !unlockRainPoemResearchEnabled) return;
 
     starActivityClaimRunning = true;
     try {
@@ -469,6 +475,94 @@ async function runStarActivityAutoClaims() {
                     }
                 }
                 log('活动', `自动赠送鹊羽香囊完成：${sent} 个`, { module: 'activity', event: '香囊自动赠送', result: sent ? 'success' : 'none', count: sent });
+            }
+        }
+
+        if (buyRainPoemBottleEnabled || collectRainPoemWeatherEnabled || useRainPoemSummonEnabled || unlockRainPoemResearchEnabled) {
+            const {
+                getRainPoemActivity,
+                buyRainPoemCollectionBottle,
+                collectRainPoemWeather,
+                useRainPoemSummonBottle,
+                unlockRainPoemResearch
+            } = require('../services/activity');
+            let rainPoem = await getRainPoemActivity();
+            if (rainPoem?.active === false) return;
+
+            if (buyRainPoemBottleEnabled && rainPoem?.shop?.available && !rainPoem?.shop?.purchasedToday) {
+                try {
+                    const result = await buyRainPoemCollectionBottle();
+                    rainPoem = result.activity || rainPoem;
+                    log('活动', result?.purchased ? '自动购买天气采集瓶完成：1 个' : '自动购买天气采集瓶：今日已购买', {
+                        module: 'activity',
+                        event: '雨落成诗自动买瓶',
+                        result: result?.purchased ? 'success' : 'none'
+                    });
+                } catch (err) {
+                    log('活动', `自动购买天气采集瓶失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动买瓶', result: 'error' });
+                }
+            }
+
+            if (collectRainPoemWeatherEnabled && Number(rainPoem?.items?.collectionBottles || 0) > 0 && Number(rainPoem?.collection?.remainingUseCount || 0) > 0) {
+                try {
+                    const result = await collectRainPoemWeather();
+                    rainPoem = result.activity || rainPoem;
+                    log('活动', result?.collected === false
+                        ? `自动采集好友雷雨：已检查 ${Number(result?.checkedCount || 0)} 位好友，暂未发现雷雨`
+                        : `自动采集好友雷雨完成：${result?.friendName || result?.friendGid || ''}`, {
+                        module: 'activity',
+                        event: '雨落成诗自动采集',
+                        result: result?.collected === false ? 'none' : 'success',
+                        checkedCount: Number(result?.checkedCount || 0),
+                        friendGid: Number(result?.friendGid || 0)
+                    });
+                } catch (err) {
+                    log('活动', `自动采集好友雷雨失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动采集', result: 'error' });
+                }
+            }
+
+            if (useRainPoemSummonEnabled
+                && !rainPoem?.weather?.rainstorm
+                && Number(rainPoem?.items?.summonBottles || 0) > 0
+                && Number(rainPoem?.summon?.usedToday || 0) < Number(rainPoem?.summon?.dailyUseLimit || 50)) {
+                try {
+                    const result = await useRainPoemSummonBottle();
+                    rainPoem = result.activity || rainPoem;
+                    const noUseMessage = result?.reason === 'daily_limit'
+                        ? '自动使用雷雨召唤瓶：今日使用次数已达上限'
+                        : '自动使用雷雨召唤瓶：当前已是雷雨天气';
+                    log('活动', result?.used ? '自动使用雷雨召唤瓶完成' : noUseMessage, {
+                        module: 'activity',
+                        event: '雨落成诗自动召唤',
+                        result: result?.used ? 'success' : 'none'
+                    });
+                } catch (err) {
+                    log('活动', `自动使用雷雨召唤瓶失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动召唤', result: 'error' });
+                }
+            }
+
+            if (unlockRainPoemResearchEnabled) {
+                let unlocked = 0;
+                try {
+                    while ((rainPoem?.research?.stages || []).some(stage => stage.available)
+                        && unlocked < 20) {
+                        const stage = (rainPoem.research.stages || []).find(item => item.available);
+                        if (!stage || Number(rainPoem?.items?.badges || 0) < Number(stage?.cost?.itemCount || 0)) break;
+                        const result = await unlockRainPoemResearch();
+                        if (!result?.unlocked) break;
+                        unlocked++;
+                        rainPoem = result.activity || rainPoem;
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
+                    log('活动', `自动解锁气象研究完成：${unlocked} 个节点`, {
+                        module: 'activity',
+                        event: '雨落成诗自动研究',
+                        result: unlocked ? 'success' : 'none',
+                        count: unlocked
+                    });
+                } catch (err) {
+                    log('活动', `自动解锁气象研究失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动研究', result: 'error', count: unlocked });
+                }
             }
         }
     } catch (err) {
@@ -738,12 +832,15 @@ function stopUnifiedScheduler() {
 
 function applyRuntimeConfig(config, syncStatusAfter = false) {
     const prevAuto = getAutomation();
+    const prevCapitalMode = require('../models/store').getCapitalMode();
     const accountId = process.env.FARM_ACCOUNT_ID || '';
 
     applyConfigSnapshot(config || {}, {
         persist: false,
         accountId
     });
+    const nextCapitalMode = require('../models/store').getCapitalMode();
+    require('../services/capital-mode').reconcileConfigChange(prevCapitalMode, nextCapitalMode).catch(() => null);
 
     const revision = Number((config || {}).__revision || 0);
     if (revision > 0) appliedConfigRevision = revision;
@@ -776,6 +873,14 @@ function applyRuntimeConfig(config, syncStatusAfter = false) {
                 !prevAuto?.qixi_bridge_build && newAuto?.qixi_bridge_build
             ) || (
                 !prevAuto?.qixi_sachet_gift && newAuto?.qixi_sachet_gift
+            ) || (
+                !prevAuto?.rain_poem_bottle_buy && newAuto?.rain_poem_bottle_buy
+            ) || (
+                !prevAuto?.rain_poem_weather_collect && newAuto?.rain_poem_weather_collect
+            ) || (
+                !prevAuto?.rain_poem_summon_use && newAuto?.rain_poem_summon_use
+            ) || (
+                !prevAuto?.rain_poem_research_unlock && newAuto?.rain_poem_research_unlock
             );
             if (starClaimBecameEnabled) {
                 workerScheduler.setTimeoutTask('star_activity_claim_after_save', 2000, () => {
@@ -1147,6 +1252,12 @@ async function handleApiCall(msg) {
         switch (method) {
             case 'getLands':
                 result = await getLandsDetail();
+                try {
+                    const { getOwnWeatherStatus } = require('../services/activity');
+                    result.weather = await getOwnWeatherStatus();
+                } catch (weatherError) {
+                    result.weather = { weatherId: 0, status: 0, rainstorm: false, error: weatherError.message };
+                }
                 break;
             case 'getFriends':
                 result = await getFriendsList(args[0] === true);
@@ -1195,6 +1306,23 @@ async function handleApiCall(msg) {
             }
             case 'claimDogSkillGifts':
                 result = await require('../services/dog-skill-gifts').checkAndClaimDogSkillGifts();
+                break;
+            case 'getPetOverview':
+                result = await require('../services/pets').getPetOverview();
+                break;
+            case 'deployDog':
+                require('../services/capital-mode').releaseForManualCommand();
+                result = await require('../services/pets').deployDog(args[0]);
+                break;
+            case 'withdrawDog':
+                require('../services/capital-mode').releaseForManualCommand();
+                result = await require('../services/pets').withdrawDog();
+                break;
+            case 'feedDog':
+                result = await require('../services/pets').feedDog(args[0], args[1]);
+                break;
+            case 'getProtectLogs':
+                result = await require('../services/pets').getProtectLogs();
                 break;
             case 'useItem': {
                 const { useItem } = require('../services/warehouse');
@@ -1342,6 +1470,31 @@ async function handleApiCall(msg) {
             case 'useQixiDew': {
                 const { useQixiDew } = require('../services/activity');
                 result = await useQixiDew(args[0] || {});
+                break;
+            }
+            case 'getRainPoemActivity': {
+                const { getRainPoemActivity } = require('../services/activity');
+                result = await getRainPoemActivity();
+                break;
+            }
+            case 'buyRainPoemCollectionBottle': {
+                const { buyRainPoemCollectionBottle } = require('../services/activity');
+                result = await buyRainPoemCollectionBottle();
+                break;
+            }
+            case 'collectRainPoemWeather': {
+                const { collectRainPoemWeather } = require('../services/activity');
+                result = await collectRainPoemWeather(args[0]);
+                break;
+            }
+            case 'useRainPoemSummonBottle': {
+                const { useRainPoemSummonBottle } = require('../services/activity');
+                result = await useRainPoemSummonBottle();
+                break;
+            }
+            case 'unlockRainPoemResearch': {
+                const { unlockRainPoemResearch } = require('../services/activity');
+                result = await unlockRainPoemResearch();
                 break;
             }
             case 'exchangeHeluShopItem': {

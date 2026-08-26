@@ -258,5 +258,31 @@
     "effect_harvest_path": null,
     "allSpine_prefix_path": null,
     "icon_prefix_path": null
+  },
+  {
+    "id": 12,
+    "effect_name": "闪电",
+    "effect_type": 4,
+    "param": null,
+    "ignore_land_bonus": true,
+    "ignore_land_yield_bonus": false,
+    "ignore_level_bonus": true,
+    "ignore_buff_bonus": null,
+    "tag": "活动",
+    "activity_id": 2026070300,
+    "name": "闪电",
+    "description": "雨落成诗活动闪电变异",
+    "fruit_name": null,
+    "icon": "lightning",
+    "sort": 7,
+    "tips": "雨落成诗活动期间有概率出现",
+    "desc": null,
+    "effect_res_type": 2,
+    "effect_res": null,
+    "lod_animateRes": null,
+    "effect_prefix_path": null,
+    "effect_harvest_path": null,
+    "allSpine_prefix_path": null,
+    "icon_prefix_path": null
   }
 ]

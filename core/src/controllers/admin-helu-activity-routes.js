@@ -31,6 +31,51 @@ function registerAdminHeluActivityRoutes({
     canAccessAccount,
   };
 
+  app.get('/api/activity/rain-poem', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取雨落成诗失败: 账号未运行')) return;
+      res.json({ ok: true, activity: await provider.getRainPoemActivity(accountId) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/bottle/buy', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '购买天气采集瓶失败: 账号未运行')) return;
+      res.json(await provider.buyRainPoemCollectionBottle(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/collect', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '采集好友雷雨失败: 账号未运行')) return;
+      res.json(await provider.collectRainPoemWeather(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/research/unlock', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '解锁气象研究失败: 账号未运行')) return;
+      res.json(await provider.unlockRainPoemResearch(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/summon/use', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '使用雷雨召唤瓶失败: 账号未运行')) return;
+      res.json(await provider.useRainPoemSummonBottle(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.get("/api/activity/star", async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

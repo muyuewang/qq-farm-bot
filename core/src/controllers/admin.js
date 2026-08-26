@@ -51,7 +51,7 @@ const {
 } = require("./admin-farm-resource-routes");
 const { registerAdminFriendRoutes } = require("./admin-friend-routes");
 const { registerAdminIllustratedRoutes } = require("./admin-illustrated-routes");
-const { registerAdminLoginLogRoutes } = require("./admin-login-log-routes");
+const { registerAdminPetRoutes } = require("./admin-pet-routes");
 const {
   registerAdminPlantBlacklistRoutes,
 } = require("./admin-plant-blacklist-routes");
@@ -424,9 +424,6 @@ function startAdminServer(dataProvider) {
   adminScheduler.setIntervalTask("session_cleanup", FIVE_MINUTES_MS, cleanupInvalidAdminSessions, {
     preventOverlap: true,
   });
-  adminScheduler.setIntervalTask("check_account_limit", ONE_MINUTE_MS, checkAccountLimitInterval, {
-    preventOverlap: true,
-  });
 
   registerAdminAuthRoutes({
     app,
@@ -453,6 +450,14 @@ function startAdminServer(dataProvider) {
   registerAdminFarmResourceRoutes({
     app,
     provider,
+    getAccountIdFromRequest,
+    canAccessAccount,
+    sendProviderError,
+  });
+  registerAdminPetRoutes({
+    app,
+    provider,
+    store,
     getAccountIdFromRequest,
     canAccessAccount,
     sendProviderError,

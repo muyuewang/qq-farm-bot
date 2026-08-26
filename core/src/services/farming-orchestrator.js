@@ -73,6 +73,7 @@ async function runFarmOperation(opType) {
 
   const lands = landsReply.lands;
   const analysis = analyzeLands(lands, isFirstFarmCheck);
+  await require('./capital-mode').prepareForFarmOperation({ lands, analysis, opType });
   const labels = [];
 
   // 构建状态标签
@@ -139,6 +140,7 @@ async function runFarmOperation(opType) {
           landIds: [...analysis.harvestable],
           opType
         });
+        require('./capital-mode').handleFarmHarvested();
       } catch (err) {
         logWarn('收获', err.message, { module: 'farm', event: '收获作物', result: 'error' });
       }
