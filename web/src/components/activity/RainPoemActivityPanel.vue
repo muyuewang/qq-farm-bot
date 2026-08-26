@@ -35,7 +35,7 @@ function formatDateTime(seconds?: number) {
 <template>
   <section class="space-y-4">
     <header class="storm-header relative overflow-hidden rounded-lg p-4 text-white shadow-sm sm:p-5">
-      <img src="/activity/rain-poem/lightning-sense.png" alt="" class="pointer-events-none absolute h-56 w-56 opacity-15 -right-8 -top-14 sm:right-4">
+      <img src="/activity/rain-poem/lightning-sense.png?v=2" alt="" class="pointer-events-none absolute h-56 w-56 opacity-15 -right-8 -top-14 sm:right-4">
       <div class="relative flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2 text-xs text-cyan-100/80">

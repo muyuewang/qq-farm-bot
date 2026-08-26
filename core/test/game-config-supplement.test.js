@@ -91,21 +91,22 @@ test('qixi activity items resolve official static icons', () => {
 test('rain poem activity items resolve official names and static icons', () => {
   const expected = new Map([
     [1027, ['雷电徽章', '/activity/rain-poem/lightning-badge.svg']],
-    [4002, ['闪电感应', '/activity/rain-poem/lightning-sense.png']],
-    [4003, ['闪电感应', '/activity/rain-poem/lightning-sense.png']],
+    [4002, ['闪电感应', '/activity/rain-poem/lightning-sense.png?v=2']],
+    [4003, ['闪电感应', '/activity/rain-poem/lightning-sense.png?v=2']],
     [5001, ['天气采集瓶', '/activity/rain-poem/weather-collection-bottle.png']],
     [5002, ['雷雨召唤瓶', '/activity/rain-poem/rainstorm-summon-bottle.png']],
     [5005, ['青蛙使坏瓶', '/activity/rain-poem/frog-prank-bottle.png']],
     [5006, ['乌云使坏瓶', '/activity/rain-poem/cloud-prank-bottle.png']],
-    [2159, ['雨落成诗头像框', '/activity/rain-poem/avatar-frame.png']],
+    [2159, ['雨落成诗头像框', '/activity/rain-poem/avatar-frame.png?v=2']],
     [100003, ['化肥礼包', '/game-config/seed_images_named/100003_pack_03.png']],
   ]);
 
   for (const [itemId, [name, imageUrl]] of expected) {
     assert.equal(getItemById(itemId)?.name, name);
     assert.equal(getItemImageById(itemId), imageUrl);
-    const publicPath = imageUrl.startsWith('/activity/')
-      ? path.join(__dirname, '..', '..', 'web', 'public', imageUrl)
+    const imagePath = imageUrl.split('?', 1)[0];
+    const publicPath = imagePath.startsWith('/activity/')
+      ? path.join(__dirname, '..', '..', 'web', 'public', imagePath)
       : path.join(__dirname, '..', 'src', 'gameConfig', imageUrl.replace('/game-config/', ''));
     assert.equal(fs.existsSync(publicPath), true, `${name} image file`);
   }

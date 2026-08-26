@@ -148,7 +148,7 @@ const mutantEffects = computed(() => {
         name: String(effect?.name || effect?.effect_name || icon || '变异').trim(),
         icon,
         image: icon === 'lightning'
-          ? '/activity/rain-poem/lightning-sense.png'
+          ? '/activity/rain-poem/lightning-sense.png?v=2'
           : (icon ? `/game-config/seed_images_named/mutant/${icon}.png` : ''),
         tag: String(effect?.tag || '').trim(),
         description: String(effect?.description || effect?.desc || effect?.tips || '').trim(),

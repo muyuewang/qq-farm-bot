@@ -43,9 +43,9 @@ const staticItemImageMap = new Map([
     [5005, '/activity/rain-poem/frog-prank-bottle.png'],
     [5006, '/activity/rain-poem/cloud-prank-bottle.png'],
     [1027, '/activity/rain-poem/lightning-badge.svg'],
-    [4002, '/activity/rain-poem/lightning-sense.png'],
-    [4003, '/activity/rain-poem/lightning-sense.png'],
-    [2159, '/activity/rain-poem/avatar-frame.png'],
+    [4002, '/activity/rain-poem/lightning-sense.png?v=2'],
+    [4003, '/activity/rain-poem/lightning-sense.png?v=2'],
+    [2159, '/activity/rain-poem/avatar-frame.png?v=2'],
 ]);
 
 // 变异效果配置

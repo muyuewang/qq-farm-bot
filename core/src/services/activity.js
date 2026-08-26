@@ -650,7 +650,10 @@ async function unlockRainPoemResearch() {
   if (before.items.badges < stage.cost.itemCount) {
     throw new Error(`雷电徽章不足，需要 ${stage.cost.itemCount}，当前 ${before.items.badges}`);
   }
-  await operateActivityReply(RAIN_POEM_RESEARCH_ACTIVITY_ID, RAIN_POEM_RESEARCH_UNLOCK_CMD);
+  // 气象研究沿用 OperateRequest.draw：id 是要推进的研究节点，不能省略。
+  await operateActivityReply(RAIN_POEM_RESEARCH_ACTIVITY_ID, RAIN_POEM_RESEARCH_UNLOCK_CMD, {
+    draw: { id: stage.id, count: 1 },
+  });
   return {
     ok: true, unlocked: true, stageId: stage.id, cost: stage.cost, reward: stage.reward,
     activity: await getRainPoemActivity(),
