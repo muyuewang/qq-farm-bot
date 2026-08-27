@@ -635,7 +635,7 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
 
   // Skip if exp limit reached and no guard dog
   if (checkExpLimit && !getCanGetHelpExp() && !hasGuardDog) {
-    return { acted: false, entered: false };
+    return { acted: false, entered: false, status: 'skipped_exp_limit' };
   }
 
   let enterReply;
@@ -644,7 +644,7 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
   } catch (err) {
     const handled = handleFriendEnterError(gid, name, err);
     if (handled.handled) {
-      return { acted: false, entered: false };
+      return { acted: false, entered: false, status: 'enter_failed' };
     }
     logWarn('好友', `进入 ${name} 农场失败: ${err.message}`, {
       module: 'friend',
@@ -653,13 +653,13 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
       friendName: name,
       friendGid: gid,
     });
-    return { acted: false, entered: false };
+    return { acted: false, entered: false, status: 'enter_failed' };
   }
 
   const lands = enterReply.lands || [];
   if (lands.length === 0) {
     await leaveFriendFarm(gid);
-    return { acted: false, entered: true };
+    return { acted: false, entered: true, status: 'no_action' };
   }
 
   const analysis = analyzeFriendLands(lands, myGid, name, {});
@@ -741,7 +741,7 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
   }
 
   await leaveFriendFarm(gid);
-  return { acted: actionLogs.length > 0, entered: true };
+  return { acted: actionLogs.length > 0, entered: true, status: actionLogs.length > 0 ? 'helped' : 'no_action' };
 }
 
 // ===== Exports =====
