@@ -12,7 +12,6 @@ import { useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
 import { useShopStore } from '@/stores/shop'
 import { useStatusStore } from '@/stores/status'
-import { useToastStore } from '@/stores/toast'
 import { formatTimeDuration, getCardQuotaValue, useUserStore } from '@/stores/user'
 
 const accountStore = useAccountStore()
@@ -28,9 +27,6 @@ const { mysteryOffer, mysteryOfferAccountId } = storeToRefs(shopStore)
 const { loginPageConfig, sidebarOpen } = storeToRefs(appStore)
 
 const wsErrorNotifiedAt = ref<Record<string, number>>({})
-const hasUnadaptedActivities = ref(false)
-const unadaptedActivityIds = ref<number[]>([])
-const notifiedActivitySignature = ref('')
 const brandLogoFailed = ref(false)
 
 const systemConnected = ref(true)
@@ -91,7 +87,6 @@ onMounted(() => {
   userStore.fetchUserInfo()
   // 获取公告（普通用户）
   fetchAnnouncement()
-  refreshActivityUpdateReminder()
 })
 
 watch(() => loginPageConfig.value.logoUrl, () => {
