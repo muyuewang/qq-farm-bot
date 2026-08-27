@@ -26,9 +26,16 @@ test('frog bottle request matches the successful official ItemService.Use captur
   assert.equal(Buffer.from(frog).toString('hex'), '0a08088d27100130da52120808c4adeddc031800');
 });
 
+test('cloud bottle request carries the target land from the successful official capture', () => {
+  const cloud = encodeRainPoemPrankRequest(1176698833, 5006, 392, 5);
+
+  assert.equal(Buffer.from(cloud).toString('hex'), '0a08088e271001308803120908d1ff8bb104120105');
+});
+
 test('unknown items cannot be sent through the prank placement helper', () => {
   assert.throws(() => encodeRainPoemPrankRequest(1, 5002, 1), /不支持的使坏瓶/);
   assert.throws(() => encodeRainPoemPrankRequest(1, 5005, 0), /缺少背包 UID/);
+  assert.throws(() => encodeRainPoemPrankRequest(1, 5006, 1), /缺少目标地块/);
 });
 
 test('an existing prank event limit is recognized as an active effect', () => {

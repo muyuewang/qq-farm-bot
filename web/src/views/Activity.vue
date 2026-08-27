@@ -8,7 +8,7 @@ import HeluSolarTermsPanel from '@/components/activity/HeluSolarTermsPanel.vue'
 import QixiActivityPanel from '@/components/activity/QixiActivityPanel.vue'
 import RainPoemActivityPanel from '@/components/activity/RainPoemActivityPanel.vue'
 import StarRecordPanel from '@/components/activity/StarRecordPanel.vue'
-import AdminActivityUpdatePanel from '@/components/admin/AdminActivityUpdatePanel.vue'
+import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 import { useAccountStore } from '@/stores/account'
@@ -102,10 +102,56 @@ const SHOW_STAR_ACTIVITY = false
 const nowMs = ref(Date.now())
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
-const selectedActivity = ref<'rain-poem' | null>(null)
+const selectedActivity = ref<string | null>(null)
 const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
 const activeSection = ref<ActivitySectionKey>('journey')
-const showActivityAnalysis = ref(false)
+const activityDirectoryWindows = ref<Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string }>>([])
+interface ActivityDirectoryNode {
+  id: number
+  parentId?: number
+  title?: string
+  type?: number
+  status?: number
+  startTime?: number
+  endTime?: number
+  visible?: boolean
+  enabled?: boolean
+  sort?: number
+  features?: Record<string, boolean>
+  children?: ActivityDirectoryNode[]
+  payload?: Record<string, unknown> | null
+  error?: string
+}
+interface ActivityClientPreview {
+  source: string
+  entryId: number
+  entryUid: string
+  modules: Array<{ title: string, description: string }>
+  pending: string[]
+}
+
+const ACTIVITY_CLIENT_PREVIEWS: Array<{ ids: number[], title: string, preview: ActivityClientPreview }> = [
+  {
+    ids: [2026090900, 2026090901],
+    title: '公益小红花',
+    preview: {
+      source: '最新版官方客户端 delayRes 配置与 Prefab',
+      entryId: 2026090901,
+      entryUid: 'RedFlowerActivity',
+      modules: [
+        { title: '个人与活动进度', description: '客户端已预置个人进度、活动总进度及进度条界面。' },
+        { title: '小红花与阶段礼物', description: '已发现小红花展示、阶段条目和礼物界面，共有 5 个静态阶段素材。' },
+        { title: '好友互动', description: '已发现赠送、分享、好友助力及授权相关界面。' },
+        { title: '装扮线索', description: '客户端包含“穿戴”状态素材，但奖励内容和取得条件尚未下发。' },
+      ],
+      pending: ['任务与进度阈值', '奖励名称和数量', '每日次数与消耗', '服务端操作协议'],
+    },
+  },
+]
+const activityDirectoryActivities = ref<ActivityDirectoryNode[]>([])
+const activityDirectoryGroups = ref<ActivityDirectoryNode[]>([])
+const unknownActivityIds = ref(new Set<number>())
+const activityScanLoading = ref(false)
 const ACTIVITY_REFRESH_INTERVAL_MS = 30_000
 const sections = computed<ActivitySection[]>(() => [
   ...(SHOW_QIXI_ACTIVITY ? [{ key: 'qixi' as const, label: '鹊桥寄情', icon: 'i-carbon-favorite', count: qixiActivity.value?.gift.remainingCount || 0 }] : []),
@@ -123,21 +169,96 @@ function activityWindowStatus(window: { startMs: number, endMs: number }): 'upco
   return 'active'
 }
 
-const activityCards = computed(() => [
-  {
-    key: 'rain-poem' as const,
+const activityCards = computed(() => {
+  const groups: Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string, activityIds: number[] }> = []
+  for (const item of activityDirectoryWindows.value) {
+    const existing = groups.find(group => group.title === item.title
+      && group.startTime <= item.endTime && item.startTime <= group.endTime)
+    if (existing) {
+      existing.activityIds.push(item.id)
+      existing.startTime = Math.min(existing.startTime, item.startTime)
+      existing.endTime = Math.max(existing.endTime, item.endTime)
+      if (!existing.imageUrl && item.imageUrl) existing.imageUrl = item.imageUrl
+      if (!String(existing.id).endsWith('00') && String(item.id).endsWith('00')) existing.id = item.id
+    }
+    else {
+      groups.push({ ...item, activityIds: [item.id] })
+    }
+  }
+  const source = groups.length ? groups : [{
+    id: 2026070300,
     title: '雨落成诗',
-    description: '查看天气、每日进度与气象研究',
-    image: '/activity/rain-poem/day-rain-bg.jpg',
-    icon: 'i-carbon-rain-heavy',
-    window: RAIN_POEM_ACTIVITY_WINDOW,
-    updatedMs: RAIN_POEM_ACTIVITY_WINDOW.updatedMs,
-    status: activityWindowStatus(RAIN_POEM_ACTIVITY_WINDOW),
-  },
-].sort((left, right) => right.updatedMs - left.updatedMs || right.window.startMs - left.window.startMs))
+    startTime: RAIN_POEM_ACTIVITY_WINDOW.startMs / 1000,
+    endTime: RAIN_POEM_ACTIVITY_WINDOW.endMs / 1000,
+    activityIds: [2026070300],
+  }]
+  return source.map((group) => {
+    const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const : null
+    const window = { startMs: group.startTime * 1000, endMs: group.endTime * 1000 }
+    const hue = Math.abs(group.id * 37) % 360
+    return {
+      key: String(group.id),
+      activityIds: group.activityIds,
+      adaptedKey,
+      title: group.title || `活动 ${group.id}`,
+      description: adaptedKey
+        ? '查看天气、每日进度与气象研究'
+        : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
+          ? '已读取客户端静态预览，动态规则待服务端开放'
+          : '暂未适配详情',
+      image: group.imageUrl || (adaptedKey ? '/activity/rain-poem/day-rain-bg.jpg' : ''),
+      window,
+      updatedMs: window.startMs,
+      status: activityWindowStatus(window),
+      pending: group.activityIds.some(id => unknownActivityIds.value.has(id)),
+      backgroundStyle: {
+        background: `radial-gradient(circle at 84% 18%, hsl(${(hue + 42) % 360} 82% 68% / 0.38), transparent 34%), radial-gradient(circle at 12% 92%, hsl(${(hue + 310) % 360} 75% 58% / 0.26), transparent 38%), linear-gradient(135deg, hsl(${hue} 52% 38%), hsl(${(hue + 32) % 360} 58% 18%))`,
+      },
+    }
+  }).sort((left, right) => {
+    const activePriority = Number(right.status === 'active') - Number(left.status === 'active')
+    return activePriority
+      || right.updatedMs - left.updatedMs
+      || right.window.startMs - left.window.startMs
+  })
+})
 const filteredActivityCards = computed(() => activityStatusFilter.value === 'all'
   ? activityCards.value
   : activityCards.value.filter(card => card.status === activityStatusFilter.value))
+const selectedActivityCard = computed(() => activityCards.value.find(card => card.key === selectedActivity.value) || null)
+const selectedActivityClientPreview = computed(() => {
+  const card = selectedActivityCard.value
+  if (!card)
+    return null
+  return ACTIVITY_CLIENT_PREVIEWS.find(item => item.title === card.title
+    || item.ids.some(id => card.activityIds.includes(id)))?.preview || null
+})
+const selectedActivityDetails = computed(() => {
+  const card = selectedActivityCard.value
+  if (!card)
+    return []
+  const ids = new Set(card.activityIds.map(Number))
+  const matchingGroups = activityDirectoryGroups.value.filter(group => ids.has(Number(group.id))
+    || (group.title && group.title === card.title))
+  if (matchingGroups.length)
+    return matchingGroups
+
+  const matchingActivities = activityDirectoryActivities.value.filter(node => ids.has(Number(node.id))
+    || ids.has(Number(node.parentId))
+    || (node.title && node.title === card.title))
+  if (!matchingActivities.length)
+    return []
+  const byId = new Map(matchingActivities.map(node => [Number(node.id), { ...node, children: [] as ActivityDirectoryNode[] }]))
+  const roots: ActivityDirectoryNode[] = []
+  for (const node of byId.values()) {
+    const parent = byId.get(Number(node.parentId))
+    if (parent)
+      parent.children?.push(node)
+    else
+      roots.push(node)
+  }
+  return roots
+})
 const activityStatusFilters = [
   { key: 'all' as const, label: '全部' },
   { key: 'active' as const, label: '进行中' },
@@ -154,6 +275,63 @@ function formatActivityDateTime(timestampMs: number) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(timestampMs))
+}
+
+function applyActivityDirectoryReport(report: any) {
+  activityDirectoryWindows.value = Array.isArray(report?.online?.activityWindows) ? report.online.activityWindows : []
+  activityDirectoryActivities.value = Array.isArray(report?.online?.activities) ? report.online.activities : []
+  activityDirectoryGroups.value = Array.isArray(report?.online?.groups) ? report.online.groups : []
+  unknownActivityIds.value = new Set((report?.online?.unknownActivityIds || []).map(Number))
+}
+
+function flattenActivityDetails(node: ActivityDirectoryNode): ActivityDirectoryNode[] {
+  return [node, ...(node.children || []).flatMap(flattenActivityDetails)]
+}
+
+function activityFeatureLabels(node: ActivityDirectoryNode) {
+  const labels: Record<string, string> = {
+    exchangeShop: '兑换商店', randomShop: '随机商店', draw: '抽奖', starRecord: '图鉴',
+    qixiBridge: '阶段建设', qixiGift: '好友赠礼', weatherTasks: '活动任务', weatherResearch: '阶段研究',
+  }
+  return Object.entries(node.features || {}).filter(([, enabled]) => enabled).map(([key]) => labels[key] || key)
+}
+
+function activityRuleSections(nodes: ActivityDirectoryNode[]) {
+  return nodes.flatMap(flattenActivityDetails).flatMap((node) => {
+    const tips = node.payload?.tips
+    if (!tips || typeof tips !== 'object')
+      return []
+    const value = tips as Record<string, unknown>
+    const lines = Array.isArray(value.txt)
+      ? value.txt.filter(item => typeof item === 'string' || typeof item === 'number').map(item => String(item).replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim()).filter(Boolean)
+      : []
+    return lines.length ? [{ id: node.id, title: String(value.title || '活动说明').replace(/<[^>]+>/g, ''), lines }] : []
+  })
+}
+
+async function loadActivityDirectory() {
+  try {
+    const { data } = await api.get('/api/activity/directory')
+    applyActivityDirectoryReport({ online: data })
+  }
+  catch {
+    // 活动中心仍可使用本地已登记活动作为回退。
+  }
+}
+
+async function rescanActivityDirectory() {
+  activityScanLoading.value = true
+  try {
+    const { data } = await api.post('/api/activity/update/scan')
+    applyActivityDirectoryReport(data.report)
+    toast.success('活动目录已更新')
+  }
+  catch (error: any) {
+    toast.error(error?.response?.data?.error || error.message || '活动目录更新失败')
+  }
+  finally {
+    activityScanLoading.value = false
+  }
 }
 
 async function refreshAll() {
@@ -286,6 +464,7 @@ onMounted(() => {
   }, ACTIVITY_REFRESH_INTERVAL_MS)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   refreshAll()
+  loadActivityDirectory()
 })
 onUnmounted(() => {
   if (nowTimer)
@@ -343,9 +522,9 @@ onUnmounted(() => {
           <BaseButton variant="primary" :loading="heluLoading" :disabled="!currentAccountId" @click="refreshAll">
             {{ L.refresh }}
           </BaseButton>
-          <BaseButton v-if="userStore.isAdmin" variant="secondary" @click="showActivityAnalysis = true">
-            <span class="i-carbon-analytics mr-1.5" />
-            活动分析
+          <BaseButton v-if="userStore.isAdmin" variant="secondary" :loading="activityScanLoading" @click="rescanActivityDirectory">
+            <span class="i-carbon-renew mr-1.5" />
+            更新活动目录
           </BaseButton>
         </div>
       </div>
@@ -373,9 +552,9 @@ onUnmounted(() => {
             </button>
           </div>
         </div>
-        <BaseButton v-if="userStore.isAdmin" variant="secondary" @click="showActivityAnalysis = true">
-          <span class="i-carbon-analytics mr-1.5" />
-          活动分析
+        <BaseButton v-if="userStore.isAdmin" variant="secondary" :loading="activityScanLoading" @click="rescanActivityDirectory">
+          <span class="i-carbon-renew mr-1.5" />
+          更新活动目录
         </BaseButton>
       </header>
 
@@ -384,19 +563,26 @@ onUnmounted(() => {
           v-for="card in filteredActivityCards"
           :key="card.key"
           class="group relative min-h-52 overflow-hidden rounded-lg text-left text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
-          :class="card.status === 'ended' ? 'cursor-not-allowed grayscale opacity-60' : card.status === 'upcoming' ? 'cursor-not-allowed opacity-75' : 'hover:-translate-y-0.5 hover:shadow-lg'"
-          :disabled="card.status !== 'active'"
+          :class="card.status === 'ended' ? 'cursor-not-allowed grayscale saturate-0' : 'hover:-translate-y-0.5 hover:shadow-lg'"
+          :disabled="card.status === 'ended'"
           @click="selectedActivity = card.key"
         >
-          <img :src="card.image" alt="" class="absolute inset-0 h-full w-full object-cover transition duration-500" :class="card.status === 'active' && 'group-hover:scale-105'">
-          <div class="absolute inset-0 bg-gradient-to-t from-[#071621]/95 via-[#102b3c]/48 to-[#173445]/15" />
+          <img v-if="card.image" :src="card.image" alt="" class="absolute inset-0 h-full w-full object-cover transition duration-500" :class="card.status === 'active' && 'group-hover:scale-105'">
+          <div v-else class="absolute inset-0" :style="card.backgroundStyle">
+            <div class="absolute -right-8 -top-10 h-40 w-40 rounded-full border border-white/15" />
+            <div class="absolute -right-2 top-12 h-24 w-24 rounded-full border border-white/10" />
+            <span class="i-carbon-calendar absolute bottom-2 right-5 text-7xl text-white/8" />
+          </div>
+          <div class="absolute inset-0 bg-gradient-to-t from-[#071621]/90 via-[#102b3c]/30 to-transparent" />
+          <div v-if="card.status === 'ended'" class="absolute inset-0 bg-gray-600/35" />
           <div class="relative flex min-h-52 flex-col justify-between p-5">
             <div class="flex items-start justify-between gap-3">
               <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm" :class="card.status === 'active' ? 'bg-cyan-100/90 text-cyan-950' : 'bg-gray-100/85 text-gray-700'">
                 <span :class="card.status === 'active' ? 'i-carbon-events' : card.status === 'upcoming' ? 'i-carbon-time' : 'i-carbon-checkmark'" />
                 {{ card.status === 'active' ? '进行中' : card.status === 'upcoming' ? '未开始' : '已结束' }}
               </span>
-              <span v-if="card.status === 'active'" class="i-carbon-arrow-up-right text-xl text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <span v-if="card.pending" class="rounded-full bg-amber-100/90 px-2.5 py-1 text-xs font-medium text-amber-900">待适配</span>
+              <span v-else-if="card.status === 'active' && card.adaptedKey" class="i-carbon-arrow-up-right text-xl text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
             </div>
             <div>
               <h2 class="text-2xl font-semibold">
@@ -406,7 +592,8 @@ onUnmounted(() => {
                 {{ formatActivityDateTime(card.window.startMs) }} — {{ formatActivityDateTime(card.window.endMs) }}
               </p>
               <div class="mt-4 flex items-center gap-2 text-xs text-white/65">
-                <span :class="card.icon" class="text-base text-cyan-200" />
+                <span v-if="card.adaptedKey" class="i-carbon-rain-heavy text-base text-cyan-200" />
+                <span v-else class="i-carbon-calendar text-base text-cyan-200" />
                 {{ card.description }}
               </div>
             </div>
@@ -418,7 +605,7 @@ onUnmounted(() => {
       </div>
     </section>
 
-    <div v-else-if="selectedActivity === 'rain-poem'" class="space-y-3">
+    <div v-else-if="selectedActivityCard?.adaptedKey === 'rain-poem' && selectedActivityCard.status === 'active'" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
         <span class="i-carbon-arrow-left" />
         返回活动列表
@@ -440,13 +627,120 @@ onUnmounted(() => {
         {{ L.needAccount }}
       </div>
     </div>
-    <div v-else-if="!SHOW_STAR_ACTIVITY && selectedActivity" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
-      <div class="i-carbon-events mx-auto mb-3 text-4xl text-gray-300" />
-      <p>当前暂无进行中的活动。</p>
-      <BaseButton v-if="userStore.isAdmin" class="mt-4" variant="secondary" @click="showActivityAnalysis = true">
-        <span class="i-carbon-analytics mr-1.5" />
-        活动分析
-      </BaseButton>
+    <div v-else-if="selectedActivityCard" class="space-y-3">
+      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
+        <span class="i-carbon-arrow-left" />
+        返回活动列表
+      </button>
+      <section class="overflow-hidden rounded-lg bg-white shadow-sm dark:bg-gray-800">
+        <div class="relative min-h-48 overflow-hidden text-white">
+          <img v-if="selectedActivityCard.image" :src="selectedActivityCard.image" alt="" class="absolute inset-0 h-full w-full object-cover">
+          <div v-else class="absolute inset-0" :style="selectedActivityCard.backgroundStyle" />
+          <div class="absolute inset-0 bg-gradient-to-r from-[#071621]/95 via-[#102b3c]/75 to-[#102b3c]/25" />
+          <div class="relative flex min-h-48 flex-col justify-end p-6">
+            <span class="mb-3 w-fit rounded-full bg-amber-100/90 px-2.5 py-1 text-xs font-medium text-amber-900">
+              {{ selectedActivityCard.status === 'upcoming' ? '未开始' : '进行中' }}
+            </span>
+            <h1 class="text-3xl font-semibold">{{ selectedActivityCard.title }}</h1>
+            <p class="mt-2 text-sm text-white/75">
+              {{ formatActivityDateTime(selectedActivityCard.window.startMs) }} — {{ formatActivityDateTime(selectedActivityCard.window.endMs) }}
+            </p>
+          </div>
+        </div>
+        <div class="grid gap-4 p-6 sm:grid-cols-3">
+          <div>
+            <div class="text-xs text-gray-400">活动 ID</div>
+            <div class="mt-1 font-mono text-sm text-gray-800 dark:text-gray-100">{{ selectedActivityCard.key }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">当前状态</div>
+            <div class="mt-1 text-sm text-gray-800 dark:text-gray-100">{{ selectedActivityCard.status === 'upcoming' ? '等待开始' : '活动进行中' }}</div>
+          </div>
+          <div>
+            <div class="text-xs text-gray-400">分析状态</div>
+            <div class="mt-1 text-sm text-gray-800 dark:text-gray-100">{{ selectedActivityClientPreview ? '客户端静态信息已解析' : selectedActivityCard.pending ? '已发现，等待功能适配' : selectedActivityCard.adaptedKey ? '已适配' : '已收录活动时间' }}</div>
+          </div>
+        </div>
+        <div class="border-t border-gray-100 p-6 dark:border-gray-700">
+          <section v-if="selectedActivityClientPreview" class="mb-5 rounded-lg border border-cyan-200 bg-cyan-50/60 p-4 dark:border-cyan-900 dark:bg-cyan-950/20">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="i-carbon-application-web text-lg text-cyan-700 dark:text-cyan-300" />
+                  <h2 class="font-semibold text-gray-900 dark:text-white">客户端静态预解析</h2>
+                </div>
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ selectedActivityClientPreview.source }}</p>
+              </div>
+              <span class="rounded-full bg-cyan-100 px-2.5 py-1 text-xs text-cyan-800 dark:bg-cyan-900/50 dark:text-cyan-200">非实时数据</span>
+            </div>
+            <div class="mt-4 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg bg-white/80 p-3 dark:bg-gray-900/50">
+                <div class="text-xs text-gray-400">实际入口子活动 ID</div>
+                <code class="mt-1 block text-sm text-gray-800 dark:text-gray-100">{{ selectedActivityClientPreview.entryId }}</code>
+              </div>
+              <div class="rounded-lg bg-white/80 p-3 dark:bg-gray-900/50">
+                <div class="text-xs text-gray-400">客户端入口 UID</div>
+                <code class="mt-1 block text-sm text-gray-800 dark:text-gray-100">{{ selectedActivityClientPreview.entryUid }}</code>
+              </div>
+            </div>
+            <div class="mt-3 grid gap-2 sm:grid-cols-2">
+              <article v-for="module in selectedActivityClientPreview.modules" :key="module.title" class="rounded-lg bg-white/80 p-3 dark:bg-gray-900/50">
+                <h3 class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ module.title }}</h3>
+                <p class="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">{{ module.description }}</p>
+              </article>
+            </div>
+            <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+              <p class="text-xs font-medium text-amber-800 dark:text-amber-200">仍待服务端确认</p>
+              <div class="mt-2 flex flex-wrap gap-1.5">
+                <span v-for="item in selectedActivityClientPreview.pending" :key="item" class="rounded bg-white/80 px-2 py-1 text-xs text-amber-700 dark:bg-gray-900/50 dark:text-amber-200">{{ item }}</span>
+              </div>
+            </div>
+          </section>
+          <template v-if="selectedActivityDetails.length">
+            <div class="flex items-baseline gap-2">
+              <h2 class="font-semibold text-gray-900 dark:text-white">扫描内容</h2>
+              <span class="text-xs text-gray-400">{{ selectedActivityDetails.flatMap(flattenActivityDetails).length }} 个节点</span>
+            </div>
+            <div class="mt-3 space-y-3">
+              <article v-for="group in selectedActivityDetails" :key="group.id" class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 class="font-medium text-gray-900 dark:text-white">{{ group.title || selectedActivityCard.title }}</h3>
+                    <code class="mt-1 block text-xs text-gray-400">ID {{ group.id }}<template v-if="group.type != null"> · 类型 {{ group.type }}</template></code>
+                  </div>
+                  <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                    {{ group.enabled === false ? '未启用' : group.visible === false ? '未展示' : '服务端已收录' }}
+                  </span>
+                </div>
+                <div v-if="group.children?.length" class="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  <div v-for="node in group.children" :key="node.id" class="rounded-lg bg-gray-50 p-3 dark:bg-gray-900/40">
+                    <div class="flex items-start justify-between gap-2">
+                      <span class="text-sm font-medium text-gray-800 dark:text-gray-100">{{ node.title || `功能节点 ${node.id}` }}</span>
+                      <code class="shrink-0 text-xs text-gray-400">{{ node.id }}</code>
+                    </div>
+                    <div v-if="activityFeatureLabels(node).length" class="mt-2 flex flex-wrap gap-1.5">
+                      <span v-for="label in activityFeatureLabels(node)" :key="label" class="rounded bg-cyan-50 px-1.5 py-0.5 text-[11px] text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200">{{ label }}</span>
+                    </div>
+                    <p v-else class="mt-2 text-xs text-gray-400">已发现节点，玩法字段尚未确认</p>
+                  </div>
+                </div>
+                <p v-else-if="group.error" class="mt-3 text-sm text-amber-700 dark:text-amber-300">读取详情失败：{{ group.error }}</p>
+                <p v-else class="mt-3 text-sm text-gray-500">服务端仅返回活动基础信息，暂未发现子功能节点。</p>
+              </article>
+            </div>
+            <div v-if="activityRuleSections(selectedActivityDetails).length" class="mt-5 space-y-3">
+              <section v-for="section in activityRuleSections(selectedActivityDetails)" :key="section.id" class="rounded-lg bg-gray-50 p-4 dark:bg-gray-900/40">
+                <h3 class="font-medium text-gray-900 dark:text-white">{{ section.title }}</h3>
+                <p v-for="(line, index) in section.lines" :key="`${section.id}-${index}`" class="mt-2 whitespace-pre-line text-sm leading-6 text-gray-600 dark:text-gray-300">{{ line }}</p>
+              </section>
+            </div>
+          </template>
+          <div v-else class="rounded-lg border border-dashed border-gray-200 p-6 text-center dark:border-gray-700">
+            <p class="text-sm text-gray-500">服务端当前只返回活动名称和时间，尚未下发可展示的动态节点或规则。</p>
+            <p class="mt-1 text-xs text-gray-400">{{ selectedActivityClientPreview ? '上方内容来自官方客户端静态资源，不代表最终玩法规则。' : '活动开放后重新扫描可能取得更多只读信息。' }}</p>
+          </div>
+        </div>
+      </section>
     </div>
     <div v-else-if="!currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
       {{ L.needAccount }}
@@ -508,34 +802,5 @@ onUnmounted(() => {
       />
     </template>
 
-    <Teleport to="body">
-      <div
-        v-if="showActivityAnalysis"
-        class="fixed inset-0 z-60 flex items-center justify-center bg-black/55 p-3 sm:p-6"
-        role="dialog"
-        aria-modal="true"
-        aria-label="活动分析"
-        @click.self="showActivityAnalysis = false"
-      >
-        <div class="flex max-h-[92vh] w-full max-w-7xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-gray-800">
-          <header class="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
-            <div>
-              <h2 class="font-semibold text-gray-900 dark:text-white">活动分析</h2>
-              <p class="mt-0.5 text-xs text-gray-500">在线发现未适配活动并读取只读活动树</p>
-            </div>
-            <button
-              class="grid h-9 w-9 place-items-center rounded-lg text-gray-500 transition hover:bg-gray-100 dark:hover:bg-gray-700"
-              aria-label="关闭活动分析"
-              @click="showActivityAnalysis = false"
-            >
-              <span class="i-carbon-close text-xl" />
-            </button>
-          </header>
-          <div class="min-h-0 flex-1 overflow-y-auto p-4">
-            <AdminActivityUpdatePanel />
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </section>
 </template>

@@ -136,34 +136,9 @@ CDN URL，只有用户明确要求保存素材时才使用 `--download <文件>`
 ### 活动 Operate 协议静态恢复流程
 
 遇到 `ActivityService.Operate` 字段不明、动态抓包没有命中、账号已无可操作次数，或仓库 proto
-与客户端行为不一致时，应优先向用户建议并按以下流程静态恢复官方生成协议，不要继续盲猜字段，
-也不要把“枚举到 hook 候选函数”误报成“已捕获 protobuf 明文”：
-
-1. 按本文前述 `tsdk/tsdk.wasm` 修改时间选择最新且完整的 QQ 农场 `miniapp_src`，记录版本目录；
-   官方目录只读，需加工时先复制到临时目录。
-2. 在最新版 `game.js` 中定位主 bundle 和内置字节码解释器。在隔离的 Node `vm` 中注册
-   `define` factory、恢复 `System.register` 模块，执行官方生成的 `chunks:///_virtual/activitypb.ts`；
-   不启动 QQ 业务代码，不修改客户端文件。
-3. 从官方导出的 `OperateType`、`OperateRequest`、`OperateReply` 及动作专用 Req/Rsp 类型读取
-   字段名。不要默认 `core/src/proto/activitypb.proto` 是最新真值；它只能作为待核对的本地副本。
-4. 对每个候选属性使用官方消息类型的 `create` + `encode` 注入最小哨兵值，解析首个 protobuf
-   tag，以确定字段号和 wire type。嵌套消息继续单独编码，确定其内部字段号和类型；不要根据字段
-   出现顺序或旧活动的同号字段推断含义。
-5. 用真实活动 ID、命令字和一个已知节点/商品等参数通过官方编码器重构完整请求，记录语义对象、
-   分段 hex 和连续 hex。明确标注这是“官方编码器重构”，不能称为“现场抓包”。
-6. 将静态结果与历史 HAR/WS、`GetGroup`/`List` 响应和资源 Prefab 交叉验证。动态数据只能拿到
-   密文时必须标记 `encrypted: true, decoded: false`，不能尝试当 protobuf 解释。
-7. 修改本地 proto 和 service 后增加固定 hex 回归测试，至少覆盖外层活动 ID、cmd、动作专用字段
-   和嵌套参数。先跑目标测试，再跑完整核心测试。
-8. 只有用户明确安排真实账号验证时，才用当前可操作状态发送一次最小请求；日志记录脱敏后的参数、
-   request hex、响应错误码和刷新前后状态。成功标准是服务端无错误且状态刷新确认推进，不能仅凭
-   “请求已发送”判断成功。
-
-2026 年“雨落成诗”气象研究是该流程的已验证样例：官方生成代码确认
-`TECH_TREE_SUBMIT_NODE = 40`，`OperateRequest.tech_tree_submit_node = 140`，其内部
-`TechTreeSubmitNodeReq.node_id = 1`。节点 `1000` 的重构请求 hex 为
-`08a0c28dc6071028e2080308e807`，随后经真实账号验证成功。这个样例只用于说明恢复方法；后续活动
-仍必须从当时最新版官方代码重新确认，不能永久复用 field 140 或具体消息名。
+与客户端行为不一致时，使用项目 Skill `$qq-farm-activity-protocol-recovery` 恢复官方生成协议。
+不得猜测字段号，也不得把枚举或 hook 候选、官方编码器重构、加密抓包误报成 protobuf 明文抓包。
+官方 QQ 容器目录只读；真实账号请求仍须用户在当前任务中明确授权。
 
 后端适配应先补齐可复用的数据模型和只读查询，再接入自动执行流程：
 

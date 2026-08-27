@@ -108,40 +108,12 @@ function resetBadFailureCount() {
   consecutiveBadFailureCount = 0;
 }
 
-function getLocalDateKey(offsetDays = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function pauseFriendBadUntilTomorrow(reason) {
-  const accountId = process.env.FARM_ACCOUNT_ID || '';
-  const retryDate = getLocalDateKey(1);
-  applyConfigSnapshot(
-    { friendBadRetryDate: retryDate },
-    { accountId }
-  );
-  syncAutomationPatchToMaster({ friendBadRetryDate: retryDate });
-  resetBadFailureCount();
-  log('好友', `捣乱连续失败 ${BAD_FAILURE_LIMIT} 次，已暂停至 ${retryDate} 再尝试。最后错误: ${reason || '未知'}`, {
-    module: 'friend',
-    event: '自动暂停捣乱',
-    result: 'paused',
-    failureCount: BAD_FAILURE_LIMIT,
-    retryDate,
-    reason,
-  });
-}
-
 function isFriendBadPaused() {
   const accountId = process.env.FARM_ACCOUNT_ID || '';
   const retryDate = getFriendBadRetryDate(accountId);
   if (!retryDate) return false;
-  if (getLocalDateKey() < retryDate) return true;
-
+  // Generic target failures no longer pause all bad operations. Clear a pause
+  // persisted by older versions so the corrected limit logic takes effect now.
   applyConfigSnapshot({ friendBadRetryDate: '' }, { accountId });
   syncAutomationPatchToMaster({ friendBadRetryDate: '' });
   resetBadFailureCount();
@@ -160,11 +132,9 @@ function recordBadFailure(reason, context = {}) {
     ...context,
   });
 
-  if (consecutiveBadFailureCount >= BAD_FAILURE_LIMIT) {
-    pauseFriendBadUntilTomorrow(reason);
-    return true;
-  }
-
+  // A target-specific failure does not prove the shared daily limit is exhausted.
+  // Keep scanning other friends; operation_limits is the authoritative stop signal.
+  if (consecutiveBadFailureCount >= BAD_FAILURE_LIMIT) resetBadFailureCount();
   return false;
 }
 
@@ -439,12 +409,12 @@ async function checkFriends(options = {}) {
 
       badCandidates.sort((a, b) => b.level - a.level);
 
-      const topCount = Math.min(20, badCandidates.length);
+      const topCount = badCandidates.length;
       const topTargets = badCandidates.slice(0, topCount);
 
       if (topTargets.length > 0) {
         log('好友',
-          `找到 ${badCandidates.length} 个可捣乱的好友，处理等级最高的前${topTargets.length}个`,
+          `找到 ${badCandidates.length} 个可捣乱的好友，按等级从高到低处理`,
           {
             module: 'friend',
             event: '放虫放草好友列表',
@@ -787,7 +757,7 @@ async function runBadOnceOnStartup(force = false) {
 
     badCandidates.sort((a, b) => b.level - a.level);
 
-    const topCount = Math.min(20, badCandidates.length);
+    const topCount = badCandidates.length;
     const topTargets = badCandidates.slice(0, topCount);
 
     log('好友',

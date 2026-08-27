@@ -31,6 +31,7 @@ interface ActivityUpdateReport {
     error?: string
     activities: Array<{
       id: number
+      parentId?: number
       title: string
       type?: number
       status?: number
@@ -38,6 +39,7 @@ interface ActivityUpdateReport {
       endTime?: number
       visible?: boolean
       enabled?: boolean
+      sort?: number
     }>
     groups: Array<{
       id: number
@@ -72,6 +74,10 @@ interface ActivityFeatures {
   exchangeShop?: boolean
   draw?: boolean
   starRecord?: boolean
+  qixiBridge?: boolean
+  qixiGift?: boolean
+  weatherTasks?: boolean
+  weatherResearch?: boolean
 }
 
 interface ActivityGroup {
@@ -84,6 +90,7 @@ interface ActivityGroup {
   endTime?: number
   visible?: boolean
   enabled?: boolean
+  sort?: number
   features?: ActivityFeatures
   children?: ActivityGroup[]
   payload?: Record<string, unknown> | null
@@ -96,8 +103,84 @@ const report = ref<ActivityUpdateReport | null>(null)
 const error = ref('')
 const intervalMs = ref(0)
 const nextScanAt = ref(0)
+const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended' | 'disabled' | 'unknown'>('all')
+const selectedActivityId = ref<number | null>(null)
 
 const discoveredGroups = computed(() => report.value?.online?.groups || [])
+const unknownActivityIds = computed(() => new Set(report.value?.online?.unknownActivityIds || []))
+
+const allActivityGroups = computed(() => {
+  const nodes = (report.value?.online?.activities || []).map(item => ({ ...item, children: [] as ActivityGroup[] }))
+  const byId = new Map(nodes.map(item => [Number(item.id), item]))
+  const roots: ActivityGroup[] = []
+  for (const node of nodes) {
+    const parent = byId.get(Number(node.parentId))
+    if (parent)
+      parent.children?.push(node)
+    else
+      roots.push(node)
+  }
+  for (const node of nodes)
+    node.children?.sort((left, right) => Number(left.sort || 0) - Number(right.sort || 0) || left.id - right.id)
+  return roots.sort((left, right) => {
+    const leftDate = Number(left.startTime || left.endTime || 0)
+    const rightDate = Number(right.startTime || right.endTime || 0)
+    return rightDate - leftDate || right.id - left.id
+  })
+})
+
+type ActivityLifecycleStatus = 'active' | 'upcoming' | 'ended' | 'disabled' | 'unknown'
+
+function activityLifecycleStatus(group: ActivityGroup): ActivityLifecycleStatus {
+  const now = Date.now() / 1000
+  if (!group.startTime && !group.endTime)
+    return 'unknown'
+  if (group.startTime && now < group.startTime)
+    return 'upcoming'
+  if (group.endTime && now > group.endTime)
+    return 'ended'
+  if (!flattenGroup(group).some(node => node.enabled !== false))
+    return 'disabled'
+  return 'active'
+}
+
+const activityStatusFilters: Array<{ key: typeof activityStatusFilter.value, label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'active', label: '进行中' },
+  { key: 'upcoming', label: '未开始' },
+  { key: 'ended', label: '已结束' },
+  { key: 'disabled', label: '未启用' },
+  { key: 'unknown', label: '时间未知' },
+]
+
+const filteredActivityGroups = computed(() => activityStatusFilter.value === 'all'
+  ? allActivityGroups.value
+  : allActivityGroups.value.filter(group => activityLifecycleStatus(group) === activityStatusFilter.value))
+const selectedActivityGroup = computed(() => allActivityGroups.value.find(group => group.id === selectedActivityId.value) || null)
+
+function lifecycleLabel(status: ActivityLifecycleStatus) {
+  return {
+    active: '进行中',
+    upcoming: '未开始',
+    ended: '已结束',
+    disabled: '未启用',
+    unknown: '时间未知',
+  }[status]
+}
+
+function lifecycleClass(status: ActivityLifecycleStatus) {
+  return {
+    active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200',
+    upcoming: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+    ended: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
+    disabled: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200',
+    unknown: 'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-200',
+  }[status]
+}
+
+function groupHasUnknownNode(group: ActivityGroup) {
+  return flattenGroup(group).some(node => unknownActivityIds.value.has(node.id))
+}
 
 const statusLabel = computed(() => {
   if (!report.value)
@@ -119,6 +202,19 @@ const statusClass = computed(() => {
 
 function formatTime(value?: number) {
   return value ? new Date(value).toLocaleString() : '—'
+}
+
+function formatActivityDate(value?: number) {
+  if (!value)
+    return '时间待服务端确认'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(value * 1000))
 }
 
 function activityStatus(group: ActivityGroup) {
@@ -163,6 +259,12 @@ function plainActivityText(value: unknown) {
     .trim()
 }
 
+function activityRuleImage(value: unknown) {
+  if (!value || typeof value !== 'object')
+    return ''
+  return plainActivityText((value as Record<string, unknown>).imageUrl)
+}
+
 function activityRuleSections(group: ActivityGroup) {
   return flattenGroup(group).flatMap((node) => {
     const payload = node.payload as Record<string, unknown> | null | undefined
@@ -173,27 +275,44 @@ function activityRuleSections(group: ActivityGroup) {
       return []
     const tips = tipsValue as Record<string, unknown>
     const lines = Array.isArray(tips.txt)
-      ? tips.txt.map(plainActivityText).filter(Boolean)
+      ? tips.txt
+          .filter(value => typeof value === 'string' || typeof value === 'number')
+          .map(plainActivityText)
+          .filter(Boolean)
       : []
-    if (!lines.length)
+    const images = Array.isArray(tips.txt)
+      ? tips.txt.map(activityRuleImage).filter(Boolean)
+      : []
+    if (!lines.length && !images.length)
       return []
     return [{
       id: node.id,
       title: plainActivityText(tips.title) || '活动说明',
       uid: plainActivityText(payload?.uid),
       lines,
+      images,
     }]
   })
 }
 
 function activityNodeLabel(node: ActivityGroup) {
-  if (!node.parentId || node.type === 1)
-    return '主活动'
-  if (node.type === 15)
-    return '核心玩法节点'
-  if (node.type === 16)
-    return '赠礼关联节点'
-  return `功能节点 · 类型 ${node.type || '未知'}`
+  if (node.features?.weatherTasks)
+    return '活动任务'
+  if (node.features?.weatherResearch)
+    return '阶段研究'
+  if (node.features?.qixiBridge)
+    return '阶段建设'
+  if (node.features?.qixiGift)
+    return '好友赠礼'
+  if (node.features?.exchangeShop)
+    return '活动商店'
+  if (node.features?.randomShop)
+    return '随机商店'
+  if (node.features?.draw)
+    return '抽取或次数玩法'
+  if (node.features?.starRecord)
+    return '收集图鉴'
+  return '关联功能'
 }
 
 function activityNodeDescription(node: ActivityGroup) {
@@ -250,145 +369,170 @@ onMounted(loadUpdateStatus)
 </script>
 
 <template>
-  <section class="space-y-4">
-    <div class="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-900/40 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h3 class="font-semibold text-gray-900 dark:text-white">
-          活动自动更新
-        </h3>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          服务端会定时读取在线 ActivityService.List，发现未知活动后再只读调用 GetGroup。不会执行活动操作。
-        </p>
-      </div>
-      <BaseButton variant="primary" :loading="loading" @click="scanUpdates">
-        <span class="i-carbon-search mr-2" />
-        立即重新分析
-      </BaseButton>
-    </div>
-
+  <section class="space-y-3">
     <div v-if="error" class="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-300">
       {{ error }}
     </div>
 
     <template v-if="report">
-      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <div class="text-xs text-gray-500">扫描状态</div>
-          <span class="mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass">{{ statusLabel }}</span>
-        </div>
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <div class="text-xs text-gray-500">发现方式</div>
-          <div class="mt-2 break-all text-sm font-medium text-gray-900 dark:text-white">在线 List + GetGroup</div>
-        </div>
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <div class="text-xs text-gray-500">在线读取时间</div>
-          <div class="mt-2 text-sm text-gray-900 dark:text-white">{{ formatTime(report.online?.scannedAt) }}</div>
-          <div class="text-xs text-gray-500">{{ report.online?.accountName || '等待在线账号' }}</div>
-        </div>
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <div class="text-xs text-gray-500">在线活动树</div>
-          <div class="mt-2 text-sm font-medium text-gray-900 dark:text-white">{{ report.online?.activities.length || 0 }} 个服务端节点</div>
-          <div class="text-xs text-gray-500">仅统计 ActivityService 在线响应</div>
-        </div>
-      </div>
-
-      <div class="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-200">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <span>{{ report.analysis?.summary || '自动分析已完成' }}</span>
-          <span class="text-xs opacity-75">
-            每 {{ Math.round(intervalMs / 60000) || 30 }} 分钟自动分析 · 下次 {{ formatTime(nextScanAt) }}
-          </span>
-        </div>
-      </div>
-
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-white">候选新活动 ID</h4>
-          <div v-if="report.unknownActivityIds.length" class="mt-3 flex flex-wrap gap-2">
-            <code v-for="id in report.unknownActivityIds" :key="id" class="rounded bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">{{ id }}</code>
+      <div class="flex flex-col gap-3 rounded-lg border border-gray-200 px-4 py-3 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium" :class="statusClass">{{ statusLabel }}</span>
+            <span class="text-sm font-medium text-gray-900 dark:text-white">
+              {{ report.online?.accountName || '等待在线账号' }}
+            </span>
+            <span class="text-xs text-gray-500">{{ formatTime(report.online?.scannedAt || report.scannedAt) }}</span>
           </div>
-          <p v-else class="mt-3 text-sm text-gray-500">没有发现当前代码尚未登记的活动 ID。</p>
-          <p class="mt-3 text-xs text-gray-400">共识别 {{ report.detectedActivityIds.length }} 个日期型活动 ID；候选项仍需协议样本确认。</p>
-          <div v-if="report.analysis?.candidateGroups.length" class="mt-3 space-y-2 border-t border-gray-100 pt-3 dark:border-gray-700">
-            <div v-for="group in report.analysis.candidateGroups" :key="group.date" class="text-xs text-gray-500">
-              {{ group.date }}：{{ group.ids.join('、') }}
-            </div>
-          </div>
+          <p class="mt-1 truncate text-xs text-gray-500">
+            {{ allActivityGroups.length }} 个活动 · {{ report.online?.activities.length || 0 }} 个节点 · 每 {{ Math.round(intervalMs / 60000) || 30 }} 分钟更新
+          </p>
         </div>
-
-        <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-white">扫描提示</h4>
-          <ul v-if="report.warnings.length" class="mt-3 space-y-2 text-sm text-amber-700 dark:text-amber-300">
-            <li v-for="warning in report.warnings" :key="warning" class="flex gap-2">
-              <span class="i-carbon-warning-alt mt-0.5 shrink-0" />{{ warning }}
-            </li>
-          </ul>
-          <p v-else class="mt-3 text-sm text-gray-500">源码目录与资源缓存检查正常。</p>
-          <div class="mt-3 text-xs text-gray-400">扫描时间：{{ formatTime(report.scannedAt) }}</div>
-        </div>
+        <BaseButton variant="primary" :loading="loading" @click="scanUpdates">
+          <span class="i-carbon-search mr-2" />
+          重新分析
+        </BaseButton>
       </div>
 
-      <div class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <h4 class="text-sm font-semibold text-gray-900 dark:text-white">在线 ActivityService 分析</h4>
-          <span
-            class="rounded-full px-2.5 py-1 text-xs"
-            :class="report.online?.available
-              ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-200'
-              : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'"
-          >
-            {{ report.online?.available ? `已通过 ${report.online.accountName || '在线账号'} 读取` : '等待在线账号' }}
-          </span>
-        </div>
-        <p v-if="!report.online?.available" class="mt-3 text-sm text-gray-500">
+      <div v-if="report.unknownActivityIds.length" class="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+        <span class="i-carbon-warning-alt shrink-0" />
+        <strong>发现 {{ report.unknownActivityIds.length }} 个待适配节点</strong>
+        <code v-for="id in report.unknownActivityIds" :key="id" class="rounded bg-white/70 px-1.5 py-0.5 text-xs dark:bg-gray-900/40">{{ id }}</code>
+      </div>
+
+      <ul v-if="report.warnings.length" class="rounded-lg bg-amber-50 px-4 py-2.5 text-sm text-amber-700 dark:bg-amber-900/20 dark:text-amber-300">
+        <li v-for="warning in report.warnings" :key="warning" class="flex gap-2">
+          <span class="i-carbon-warning-alt mt-0.5 shrink-0" />{{ warning }}
+        </li>
+      </ul>
+
+      <div v-if="!report.online?.available" class="rounded-lg border border-dashed border-gray-200 p-8 text-center dark:border-gray-700">
+        <span class="i-carbon-unlink mx-auto text-3xl text-gray-300" />
+        <p class="mt-2 text-sm text-gray-500">
           {{ report.online?.error || '启动并连接任意账号后，定时器会自动读取服务端活动列表。' }}
         </p>
-        <template v-else>
-          <div class="mt-3 grid gap-3 sm:grid-cols-3">
-            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
-              <div class="text-xs text-gray-500">服务端活动</div>
-              <div class="mt-1 font-medium">{{ report.online.activities.length }} 个</div>
-            </div>
-            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
-              <div class="text-xs text-gray-500">新增候选</div>
-              <div class="mt-1 font-medium">{{ report.online.unknownActivityIds.length }} 个</div>
-            </div>
-            <div class="rounded-lg bg-gray-50 px-3 py-2 dark:bg-gray-900/40">
-              <div class="text-xs text-gray-500">GetGroup 探测</div>
-              <div class="mt-1 font-medium">{{ report.online.probes?.activityGroups || 0 }} 组 · {{ report.online.probes?.matched || 0 }} 节点</div>
-            </div>
-          </div>
-          <div v-if="report.online.groups.length" class="mt-3 space-y-2">
-            <div v-for="group in report.online.groups" :key="group.id" class="rounded-lg border border-gray-100 px-3 py-2 text-sm dark:border-gray-700">
-              <div class="flex flex-wrap justify-between gap-2">
-                <span class="font-medium text-gray-900 dark:text-white">{{ group.title || `活动 ${group.id}` }}</span>
-                <code class="text-xs text-gray-500">{{ group.id }}</code>
-              </div>
-              <div class="mt-1 text-xs text-gray-500">
-                {{ group.error || `${formatTime(group.startTime && group.startTime * 1000)} — ${formatTime(group.endTime && group.endTime * 1000)}` }}
-              </div>
-            </div>
-          </div>
-        </template>
       </div>
 
-      <div
-        v-if="discoveredGroups.length"
-        class="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200"
-      >
-        <h4 class="font-semibold">新活动待适配</h4>
-        <p class="mt-2 text-sm">
-          已自动发现 {{ discoveredGroups.length }} 个活动入口。当前仅保存只读结构快照，等待确认兑换、抽奖或任务规则。
-        </p>
-        <div class="mt-3 space-y-2">
-          <div v-for="group in discoveredGroups" :key="group.id" class="rounded-lg bg-white/70 px-3 py-2 dark:bg-gray-900/40">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <strong>{{ group.title || `活动 ${group.id}` }}</strong>
-              <code class="text-xs">ID {{ group.id }}</code>
+      <div v-else class="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div class="flex items-baseline gap-2">
+              <h4 class="font-semibold text-gray-900 dark:text-white">全部活动</h4>
+              <span class="text-xs text-gray-400">{{ allActivityGroups.length }} 个</span>
             </div>
-            <div class="mt-1 text-xs opacity-80">来源 List + GetGroup · {{ contentSummary(group) }}</div>
+            <p class="mt-0.5 text-xs text-gray-500">按开始日期倒序 · 点击卡片查看节点详情</p>
+          </div>
+          <div class="inline-flex max-w-full overflow-x-auto rounded-lg bg-gray-100 p-0.5 dark:bg-gray-900" role="group" aria-label="活动状态筛选">
+            <button
+              v-for="filter in activityStatusFilters"
+              :key="filter.key"
+              class="shrink-0 rounded-md px-2.5 py-1 text-xs transition"
+              :class="activityStatusFilter === filter.key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'"
+              :aria-pressed="activityStatusFilter === filter.key"
+              @click="activityStatusFilter = filter.key"
+            >
+              {{ filter.label }}
+            </button>
           </div>
         </div>
+        <div v-if="filteredActivityGroups.length" class="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <button
+              v-for="group in filteredActivityGroups"
+              :key="group.id"
+              class="relative overflow-hidden rounded-lg border bg-gradient-to-br from-white via-gray-50 to-slate-100 p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 dark:from-gray-800 dark:via-gray-850 dark:to-gray-900"
+              :class="[
+                activityLifecycleStatus(group) === 'ended' && 'opacity-70',
+                selectedActivityId === group.id ? 'border-cyan-500 ring-1 ring-cyan-500' : 'border-gray-200 dark:border-gray-700',
+              ]"
+              @click="selectedActivityId = selectedActivityId === group.id ? null : group.id"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium" :class="lifecycleClass(activityLifecycleStatus(group))">
+                  <span :class="activityLifecycleStatus(group) === 'active' ? 'i-carbon-events' : activityLifecycleStatus(group) === 'upcoming' ? 'i-carbon-time' : activityLifecycleStatus(group) === 'ended' ? 'i-carbon-checkmark' : 'i-carbon-warning-alt'" />
+                  {{ lifecycleLabel(activityLifecycleStatus(group)) }}
+                </span>
+                <span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="groupHasUnknownNode(group) ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-200'">
+                  {{ groupHasUnknownNode(group) ? '待适配' : '已适配' }}
+                </span>
+              </div>
+              <div class="mt-4">
+                <h6 class="text-lg font-semibold text-gray-900 dark:text-white">{{ group.title || `活动 ${group.id}` }}</h6>
+                <code class="mt-1 block text-xs text-gray-400">ID {{ group.id }}</code>
+                <div class="mt-3 space-y-1.5 text-xs text-gray-600 dark:text-gray-300">
+                  <div class="flex items-start gap-2">
+                    <span class="i-carbon-calendar mt-0.5 shrink-0 text-gray-400" />
+                    <span>{{ formatActivityDate(group.startTime) }}</span>
+                  </div>
+                  <div class="flex items-start gap-2">
+                    <span class="i-carbon-flag mt-0.5 shrink-0 text-gray-400" />
+                    <span>{{ formatActivityDate(group.endTime) }}</span>
+                  </div>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
+                  <span class="rounded bg-white/80 px-2 py-1 dark:bg-gray-800">{{ contentSummary(group) }}</span>
+                </div>
+              </div>
+              <span class="i-carbon-chevron-right absolute bottom-4 right-4 text-gray-300 transition" :class="selectedActivityId === group.id && 'rotate-90 text-cyan-500'" />
+            </button>
+        </div>
+        <div v-else class="mt-3 rounded-lg border border-dashed border-gray-200 p-8 text-center text-sm text-gray-500 dark:border-gray-700">
+          当前状态下暂无活动
+        </div>
+
+        <article v-if="selectedActivityGroup" class="mt-4 rounded-lg border border-cyan-200 bg-cyan-50/40 p-4 dark:border-cyan-900 dark:bg-cyan-950/20">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <h5 class="text-lg font-semibold text-gray-900 dark:text-white">{{ selectedActivityGroup.title || `活动 ${selectedActivityGroup.id}` }}</h5>
+                <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="lifecycleClass(activityLifecycleStatus(selectedActivityGroup))">
+                  {{ lifecycleLabel(activityLifecycleStatus(selectedActivityGroup)) }}
+                </span>
+              </div>
+              <p class="mt-1 text-xs text-gray-500">
+                ID {{ selectedActivityGroup.id }} · {{ formatActivityDate(selectedActivityGroup.startTime) }} — {{ formatActivityDate(selectedActivityGroup.endTime) }}
+              </p>
+            </div>
+            <button class="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-gray-500 hover:bg-white dark:hover:bg-gray-800" aria-label="关闭活动详情" @click="selectedActivityId = null">
+              <span class="i-carbon-close" />
+            </button>
+          </div>
+
+          <div v-if="selectedActivityGroup.children?.length" class="mt-4">
+            <h6 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">功能节点</h6>
+            <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            <div
+              v-for="node in selectedActivityGroup.children"
+              :key="node.id"
+              class="rounded-lg border border-gray-200 bg-white px-3 py-2.5 dark:border-gray-700 dark:bg-gray-800"
+            >
+              <div class="flex items-start justify-between gap-2">
+                <span class="text-sm font-medium text-gray-900 dark:text-white">{{ activityNodeLabel(node) }}</span>
+                <code class="shrink-0 text-xs text-gray-400">{{ node.id }}</code>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1.5 text-[11px]">
+                <span v-if="node.features?.exchangeShop" class="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">兑换</span>
+                <span v-if="node.features?.randomShop" class="rounded bg-violet-50 px-1.5 py-0.5 text-violet-700 dark:bg-violet-900/30 dark:text-violet-200">刷新店</span>
+                <span v-if="node.features?.draw" class="rounded bg-amber-50 px-1.5 py-0.5 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200">抽奖</span>
+                <span v-if="node.features?.starRecord" class="rounded bg-teal-50 px-1.5 py-0.5 text-teal-700 dark:bg-teal-900/30 dark:text-teal-200">图鉴</span>
+                <span v-if="node.features?.weatherTasks" class="rounded bg-orange-50 px-1.5 py-0.5 text-orange-700 dark:bg-orange-900/30 dark:text-orange-200">任务</span>
+                <span v-if="node.features?.weatherResearch" class="rounded bg-cyan-50 px-1.5 py-0.5 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200">研究</span>
+                <span v-if="node.features?.qixiBridge" class="rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-200">建设</span>
+                <span v-if="node.features?.qixiGift" class="rounded bg-pink-50 px-1.5 py-0.5 text-pink-700 dark:bg-pink-900/30 dark:text-pink-200">赠礼</span>
+              </div>
+            </div>
+            </div>
+          </div>
+
+          <div v-if="activityRuleSections(selectedActivityGroup).length" class="mt-4 border-t border-cyan-100 pt-4 dark:border-cyan-900">
+            <section v-for="section in activityRuleSections(selectedActivityGroup)" :key="section.id">
+              <h6 class="text-sm font-semibold text-gray-900 dark:text-white">{{ section.title }}</h6>
+              <img v-for="image in section.images" :key="image" :src="image" :alt="section.title" class="mt-3 max-h-96 w-full rounded-lg bg-white object-contain dark:bg-gray-900">
+              <div class="mt-2 space-y-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                <p v-for="(line, index) in section.lines" :key="`${section.id}-${index}`" class="whitespace-pre-line">{{ line }}</p>
+              </div>
+            </section>
+          </div>
+        </article>
       </div>
 
       <div v-if="discoveredGroups.length" class="space-y-4">
@@ -442,6 +586,7 @@ onMounted(loadUpdateStatus)
                   节点 {{ section.id }}<template v-if="section.uid"> · {{ section.uid }}</template>
                 </span>
               </div>
+              <img v-for="image in section.images" :key="image" :src="image" :alt="section.title" class="mt-3 max-h-96 w-full rounded-lg bg-white object-contain dark:bg-gray-900">
               <div class="mt-3 space-y-2 text-sm leading-6 text-gray-700 dark:text-gray-300">
                 <p v-for="(line, index) in section.lines" :key="`${section.id}-${index}`" class="whitespace-pre-line">
                   {{ line }}

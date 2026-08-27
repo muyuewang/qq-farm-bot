@@ -23,28 +23,28 @@ const L = {
 const resourcePills = [
   {
     label: L.gold,
-    icon: 'i-fas-coins',
+    icon: '/game-config/resource-icons/gold.png',
     value: () => props.gold,
     currency: 'gold' as ResourceCurrency,
     class: 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400',
   },
   {
     label: L.coupon,
-    icon: 'i-fas-ticket-alt',
+    icon: '/game-config/resource-icons/coupon.png',
     value: () => props.coupon,
     currency: 'coupon' as ResourceCurrency,
     class: 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400',
   },
   {
     label: L.diamond,
-    icon: 'i-carbon-diamond-outline',
+    icon: '/game-config/resource-icons/diamond.png',
     value: () => props.diamond,
     currency: 'coupon' as ResourceCurrency,
     class: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300',
   },
   {
     label: L.goldBean,
-    icon: 'i-carbon-data-vis-4',
+    icon: '/game-config/resource-icons/gold-bean.png',
     value: () => props.goldBean,
     currency: 'goldBean' as ResourceCurrency,
     class: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400',
@@ -68,7 +68,7 @@ const resourcePills = [
         class="h-8 flex items-center gap-2 rounded-lg px-3 text-xs"
         :class="item.class"
       >
-        <span :class="item.icon" />
+        <img :src="item.icon" :alt="item.label" class="h-5 w-5 shrink-0 object-contain">
         <span>{{ item.label }} {{ formatCurrencyAmount(item.value(), item.currency) }}</span>
       </div>
       <div class="h-8 flex items-center rounded-lg bg-gray-50 px-3 text-xs text-gray-700 dark:bg-gray-900/40 dark:text-gray-300">

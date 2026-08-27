@@ -79,6 +79,10 @@ function scanProtobufMessage(buf) {
  */
 function decodeIllustratedReplyRaw(rawBody) {
   const fields = scanProtobufMessage(Buffer.from(rawBody));
+  const topLevelVarint = (field) => {
+    const match = fields.find(item => item.field === field && item.wire === 0);
+    return match ? Number(match.value) : 0;
+  };
 
   // 提取 field=1, wire=2 的子消息（图鉴条目列表）
   const rawItems = fields
@@ -134,6 +138,11 @@ function decodeIllustratedReplyRaw(rawBody) {
     rawItemCount: rawItems.length,
     rawItems,
     normalizedItems: normalized,
+    currentScore: topLevelVarint(2),
+    level: topLevelVarint(3),
+    currentTier: topLevelVarint(6),
+    nextScore: topLevelVarint(7),
+    hasLevelReward: topLevelVarint(9) === 1,
   };
 }
 
@@ -177,10 +186,17 @@ async function getIllustratedListV2(refresh = false, illustratedType = 1) {
     // 原始解析作为回退和辅助
     const raw = decodeIllustratedReplyRaw(body);
     logger.info('图鉴原始数据解析', { rawItemCount: raw.rawItemCount, normalizedCount: raw.normalizedItems.length });
+    const summary = {
+      current_score: raw.currentScore,
+      level: raw.level,
+      current_tier: raw.currentTier,
+      next_score: raw.nextScore,
+      has_level_reward: raw.hasLevelReward,
+    };
 
     // 优先使用 proto 解码的结果
     if (decoded.items && decoded.items.length > 0) {
-      return { ...decoded, __raw: raw };
+      return { ...decoded, ...summary, __raw: raw };
     }
 
     // 回退：用原始解析构建 items
@@ -194,10 +210,10 @@ async function getIllustratedListV2(refresh = false, illustratedType = 1) {
         category: 1,
         has_reward: item.hasReward,
       }));
-      return { items, __raw: raw };
+      return { items, ...summary, __raw: raw };
     }
 
-    return { items: [], __raw: raw };
+    return { items: [], ...summary, __raw: raw };
   } catch (err) {
     logger.error('获取图鉴列表失败', { error: err.message, stack: err.stack });
     return {

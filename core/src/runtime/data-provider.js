@@ -53,6 +53,34 @@ function createDataProvider(deps) {
     const SYNC_TIMEOUT = { _timeoutMs: 180000 };          // 3分钟
     const DOG_INFO_TIMEOUT = { _timeoutMs: 600000 };     // 10分钟
 
+    // 浏览器整页刷新后，旧 HTTP 请求仍会在服务端继续执行。按账号合并并发的
+    // 背包只读请求，避免刷新风暴把同一个 Bag RPC 重复塞进游戏连接队列。
+    const pendingReadRequests = new Map();
+
+    function callWorkerReadOnce(key, accountId, method, ...args) {
+        const pending = pendingReadRequests.get(key);
+        if (pending) return pending;
+
+        const request = Promise.resolve()
+            .then(() => callWorkerApi(accountId, method, ...args))
+            .finally(() => {
+                if (pendingReadRequests.get(key) === request) pendingReadRequests.delete(key);
+            });
+        pendingReadRequests.set(key, request);
+        return request;
+    }
+
+    function getBag(ref) {
+        const accountId = resolveAccountId(ref);
+        return callWorkerReadOnce(`bag:${String(accountId || '')}`, accountId, 'getBag');
+    }
+
+    function getIllustratedList(ref, type, level) {
+        const accountId = resolveAccountId(ref);
+        const key = `illustrated:${String(accountId || '')}:${String(type)}:${String(level)}`;
+        return callWorkerReadOnce(key, accountId, 'getIllustratedList', type, level);
+    }
+
     return {
         /** 获取账号运行状态 */
         getStatus: (ref) => {
@@ -140,7 +168,7 @@ function createDataProvider(deps) {
         // ========== Farm API ==========
         getLands: (ref) => callWorkerApi(resolveAccountId(ref), 'getLands'),
         getSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'getSeeds'),
-        getBag: (ref) => callWorkerApi(resolveAccountId(ref), 'getBag'),
+        getBag,
         getBagSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'getBagSeeds'),
         getDogSkillGiftStatus: (ref) => callWorkerApi(resolveAccountId(ref), 'getDogSkillGiftStatus'),
         claimDogSkillGifts: (ref) => callWorkerApi(resolveAccountId(ref), 'claimDogSkillGifts'),
@@ -189,6 +217,7 @@ function createDataProvider(deps) {
         // ========== Activity ==========
         getActivityShop: (ref) => callWorkerApi(resolveAccountId(ref), 'getActivityShop'),
         getActivityDiscoveryList: (ref) => callWorkerApi(resolveAccountId(ref), 'getActivityDiscoveryList'),
+        getActivityDiscoverySnapshot: (ref) => callWorkerApi(resolveAccountId(ref), 'getActivityDiscoverySnapshot'),
         getActivityGroupSnapshot: (ref, activityId, uid = '') => callWorkerApi(resolveAccountId(ref), 'getActivityGroupSnapshot', activityId, uid),
         buyActivityShopItem: (ref, itemId, count) => callWorkerApi(resolveAccountId(ref), 'buyActivityShopItem', itemId, count),
         refreshActivityShop: (ref) => callWorkerApi(resolveAccountId(ref), 'refreshActivityShop'),
@@ -216,7 +245,7 @@ function createDataProvider(deps) {
         brewAndSellQingmeiWine: (ref, options) => callWorkerApi(resolveAccountId(ref), 'brewAndSellQingmeiWine', options || {}),
 
         // ========== Illustrated ==========
-        getIllustratedList: (ref, type, level) => callWorkerApi(resolveAccountId(ref), 'getIllustratedList', type, level),
+        getIllustratedList,
         claimIllustratedRewards: (ref, type) => callWorkerApi(resolveAccountId(ref), 'claimIllustratedRewards', type),
 
         // ========== Career ==========

@@ -29,9 +29,11 @@ const QIXI_DEW_DAILY_LIMIT = 15;
 const RAIN_POEM_ACTIVITY_UID = 'WeatherBottleUI';
 const RAIN_POEM_ACTIVITY_ID = 2026070300;
 const RAIN_POEM_SHOP_ACTIVITY_ID = 2026070301;
+const RAIN_POEM_PRANK_ACTIVITY_ID = 2026070302;
 const RAIN_POEM_COLLECTION_ACTIVITY_ID = 2026070303;
 const RAIN_POEM_COLLECTION_CMD = 9;
 const RAIN_POEM_RESEARCH_ACTIVITY_ID = 2026070304;
+const RAIN_POEM_TASK_ACTIVITY_ID = 2026070305;
 const RAIN_POEM_RESEARCH_UNLOCK_CMD = 40;
 const RAIN_POEM_BOTTLE_ITEM_ID = 5001;
 const RAIN_POEM_SUMMON_ITEM_ID = 5002;
@@ -241,6 +243,10 @@ async function listActivityGroups() {
 
 function normalizeDiscoveryActivity(node) {
   const raw = node?.activity || node || {};
+  const weatherTasks = node?.weather_tasks || raw.weather_tasks;
+  const weatherResearch = node?.weather_research || raw.weather_research;
+  const qixiBridge = node?.qixi_bridge || raw.qixi_bridge;
+  const qixiGift = node?.qixi_gift || raw.qixi_gift;
   const payloadText = String(raw.payload || '').trim();
   let payload = null;
   if (payloadText) {
@@ -267,6 +273,10 @@ function normalizeDiscoveryActivity(node) {
       exchangeShop: !!(node?.exchange_shop || raw.exchange_shop),
       draw: !!(node?.draw_info || raw.draw_info),
       starRecord: !!node?.star_record,
+      qixiBridge: !!qixiBridge,
+      qixiGift: !!qixiGift,
+      weatherTasks: !!weatherTasks,
+      weatherResearch: !!weatherResearch,
     },
     children: (node?.children || []).map(normalizeDiscoveryActivity),
   };
@@ -284,6 +294,19 @@ function flattenDiscoveryActivities(nodes, output = []) {
 async function getActivityDiscoveryList() {
   const reply = await listActivityGroups();
   return flattenDiscoveryActivities(reply?.groups).sort((a, b) => b.id - a.id);
+}
+
+async function getActivityDiscoverySnapshot() {
+  const reply = await listActivityGroups();
+  return {
+    activities: flattenDiscoveryActivities(reply?.groups).sort((a, b) => b.id - a.id),
+    activityWindows: (reply?.activity_windows || []).map(item => ({
+      id: toNum(item?.id),
+      title: String(item?.name || ''),
+      startTime: toNum(item?.begin_time),
+      endTime: toNum(item?.end_time),
+    })).filter(item => item.id > 0),
+  };
 }
 
 async function getActivityGroupSnapshot(activityId, uid = '') {
@@ -482,10 +505,10 @@ async function getQixiActivity() {
 
 function normalizeRainPoemActivity(reply, nowSeconds = Math.floor(Date.now() / 1000)) {
   const root = reply?.group || null;
-  const shopNode = findActivityNodeById([root], 2026070301);
-  const drawNode = findActivityNodeById([root], 2026070303);
-  const researchNode = findActivityNodeById([root], 2026070304);
-  const taskNode = findActivityNodeById([root], 2026070305);
+  const shopNode = findActivityNodeById([root], RAIN_POEM_SHOP_ACTIVITY_ID);
+  const drawNode = findActivityNodeById([root], RAIN_POEM_COLLECTION_ACTIVITY_ID);
+  const researchNode = findActivityNodeById([root], RAIN_POEM_RESEARCH_ACTIVITY_ID);
+  const taskNode = findActivityNodeById([root], RAIN_POEM_TASK_ACTIVITY_ID);
   const startTime = toNum(root?.activity?.start_time) || RAIN_POEM_START_TIME;
   const endTime = toNum(root?.activity?.end_time) || RAIN_POEM_END_TIME;
   // type=3 天气商店的数据位于 ActivityInfo 内；部分旧响应则直接挂在 ActivityNode。
@@ -2918,6 +2941,8 @@ module.exports = {
   STAR_SHOP_EXCHANGE_CMD,
   HELU_DRAW_ACTIVITY_ID,
   HELU_EXCHANGE_ACTIVITY_ID,
+  HELU_JOURNEY_ACTIVITY_ID,
+  HELU_NOTES_ACTIVITY_ID,
   QINGMEI_ACTIVITY_ID,
   QINGMEI_SEED_CLAIM_ACTIVITY_ID,
   QINGMEI_WINE_ACTIVITY_ID,
@@ -2925,8 +2950,11 @@ module.exports = {
   QIXI_BRIDGE_ACTIVITY_ID,
   QIXI_GIFT_ACTIVITY_ID,
   RAIN_POEM_ACTIVITY_ID,
+  RAIN_POEM_SHOP_ACTIVITY_ID,
+  RAIN_POEM_PRANK_ACTIVITY_ID,
   RAIN_POEM_COLLECTION_ACTIVITY_ID,
   RAIN_POEM_RESEARCH_ACTIVITY_ID,
+  RAIN_POEM_TASK_ACTIVITY_ID,
   HELU_SUB_ACTIVITY_KEYS,
   NANGUA_SHOP_BUY_CMD,
   NANGUA_SHOP_REFRESH_CMD,
@@ -2934,7 +2962,9 @@ module.exports = {
   HELU_DRAW_CMD,
   getActivityGroup,
   getActivityDiscoveryList,
+  getActivityDiscoverySnapshot,
   getActivityGroupSnapshot,
+  normalizeDiscoveryActivity,
   getNanguaShop,
   getHeluActivity,
   getStarActivity,

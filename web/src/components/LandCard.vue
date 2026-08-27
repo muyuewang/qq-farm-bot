@@ -135,7 +135,8 @@ const landTextureUrl = computed(() => {
 
 const shouldRotateLandTexture = computed(() => {
   const level = Number(land.value?.level) || 1
-  return level === 5
+  // 与 FarmPanel 的 Canvas 保持一致，避免选中 2x2 土地后再次翻转。
+  return level === 5 && Number(land.value?.plantSize) <= 1
 })
 
 const mutantEffects = computed(() => {

@@ -109,6 +109,9 @@ function registerAdminIllustratedRoutes({
           items,
           summary,
           userLevel,
+          level: Number(illustratedList?.level) || 0,
+          currentScore: Number(illustratedList?.current_score) || 0,
+          nextScore: Number(illustratedList?.next_score) || 0,
         },
       });
     } catch (err) {

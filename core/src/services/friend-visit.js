@@ -214,11 +214,11 @@ async function doFriendOperation(gid, opType) {
       let failedMsgs = [];
 
       // Put insects
-      if (analysis.canPutBug.length && getBadRemainingTimes() > 0) {
+      if (analysis.canPutBug.length && getBadRemainingTimes(PUT_BUG_OPERATION_ID) > 0) {
         const canPutBug = await checkCanOperateRemote(numericGid, PUT_BUG_OPERATION_ID);
         const remainingBug = Math.min(
           getRemainingTimes(PUT_BUG_OPERATION_ID, BAD_DAILY_LIMIT),
-          getBadRemainingTimes()
+          getBadRemainingTimes(PUT_BUG_OPERATION_ID)
         );
         const targets = canPutBug.canOperate ? analysis.canPutBug.slice(0, remainingBug) : [];
         const result = targets.length > 0
@@ -232,11 +232,11 @@ async function doFriendOperation(gid, opType) {
       }
 
       // Put weeds
-      if (analysis.canPutWeed.length && getBadRemainingTimes() > 0) {
+      if (analysis.canPutWeed.length && getBadRemainingTimes(PUT_WEED_OPERATION_ID) > 0) {
         const canPutWeed = await checkCanOperateRemote(numericGid, PUT_WEED_OPERATION_ID);
         const remainingWeed = Math.min(
           getRemainingTimes(PUT_WEED_OPERATION_ID, BAD_DAILY_LIMIT),
-          getBadRemainingTimes()
+          getBadRemainingTimes(PUT_WEED_OPERATION_ID)
         );
         const targets = canPutWeed.canOperate ? analysis.canPutWeed.slice(0, remainingWeed) : [];
         const result = targets.length > 0
@@ -442,10 +442,10 @@ async function visitFriend(friend, tally, myGid, accountId) {
     const canPutWeed = await checkCanOperateRemote(gid, PUT_WEED_OPERATION_ID);
 
     // Put insects
-    if (analysis.canPutBug.length > 0 && canPutBug.canOperate && getBadRemainingTimes() > 0) {
+    if (analysis.canPutBug.length > 0 && canPutBug.canOperate && getBadRemainingTimes(PUT_BUG_OPERATION_ID) > 0) {
       const remainingBug = Math.min(
         getRemainingTimes(PUT_BUG_OPERATION_ID, BAD_DAILY_LIMIT),
-        getBadRemainingTimes()
+        getBadRemainingTimes(PUT_BUG_OPERATION_ID)
       );
       const targets = analysis.canPutBug.slice(0, remainingBug);
       const result = await putInsectsDetailed(gid, targets);
@@ -461,10 +461,10 @@ async function visitFriend(friend, tally, myGid, accountId) {
     }
 
     // Put weeds
-    if (analysis.canPutWeed.length > 0 && canPutWeed.canOperate && getBadRemainingTimes() > 0) {
+    if (analysis.canPutWeed.length > 0 && canPutWeed.canOperate && getBadRemainingTimes(PUT_WEED_OPERATION_ID) > 0) {
       const remainingWeed = Math.min(
         getRemainingTimes(PUT_WEED_OPERATION_ID, BAD_DAILY_LIMIT),
-        getBadRemainingTimes()
+        getBadRemainingTimes(PUT_WEED_OPERATION_ID)
       );
       const targets = analysis.canPutWeed.slice(0, remainingWeed);
       const result = await putWeedsDetailed(gid, targets);

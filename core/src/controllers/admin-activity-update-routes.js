@@ -4,6 +4,19 @@ const {
   runActivityUpdateScan,
   startActivityUpdateMonitor,
 } = require('../services/activity-update-monitor');
+const {
+  findSourceAsset,
+  resolveActivityCardImages,
+  resolveActivityCdnImages,
+} = require('../services/activity-cdn-resolver');
+
+function findUnknownActivities(activities, knownIds) {
+  const known = new Set((knownIds || []).map(Number));
+  return (activities || []).filter(item => {
+    const id = Number(item?.id);
+    return Number.isFinite(id) && id > 0 && !known.has(id);
+  });
+}
 
 function registerAdminActivityUpdateRoutes({ app, provider, requireAdminToken }) {
   const knownActivityIds = Object.entries(activity)
@@ -31,15 +44,18 @@ function registerAdminActivityUpdateRoutes({ app, provider, requireAdminToken })
         available: false,
         error: '没有已连接账号，暂时无法调用 ActivityService.List',
         activities: [],
+        activityWindows: [],
         groups: [],
         unknownActivityIds: [],
       };
     }
 
-    const activities = await provider.getActivityDiscoveryList(account.id);
+    const discovery = await provider.getActivityDiscoverySnapshot(account.id);
+    const activities = discovery.activities || [];
+    const activityWindows = discovery.activityWindows || [];
     const known = new Set((knownIds || []).map(Number));
-    const newestKnownId = known.size ? Math.max(...known) : 0;
-    const unknown = activities.filter(item => Number(item.id) > newestKnownId && !known.has(Number(item.id)));
+    const unknown = findUnknownActivities(activities, knownIds);
+    const unknownWindows = findUnknownActivities(activityWindows, knownIds);
     const groups = [];
     for (const item of unknown.slice(0, 20)) {
       try {
@@ -75,15 +91,44 @@ function registerAdminActivityUpdateRoutes({ app, provider, requireAdminToken })
       }
     }
     groups.push(...probeRoots);
+    const directoryGroups = [];
+    const resolvedGroupIds = new Set(groups.map(item => Number(item?.id)));
+    for (const item of activityWindows.slice(0, 60)) {
+      const id = Number(item?.id);
+      if (!id || resolvedGroupIds.has(id)) continue;
+      try {
+        const snapshot = await provider.getActivityGroupSnapshot(account.id, id, '');
+        if (snapshot?.id) {
+          directoryGroups.push(snapshot);
+          resolvedGroupIds.add(id);
+        }
+      } catch {
+        // 历史活动可能已无法通过 GetGroup 读取，保留无图卡片回退样式。
+      }
+    }
     const unknownIds = [...new Set([
       ...unknown.map(item => Number(item.id)),
+      ...unknownWindows.map(item => Number(item.id)),
       ...probeRoots.map(item => Number(item.id)),
     ])];
+    let officialCardImages = new Map();
+    try {
+      await resolveActivityCdnImages({ activities, groups, directoryGroups });
+      officialCardImages = await resolveActivityCardImages(activityWindows);
+    } catch (error) {
+      console.warn(`[活动更新] CDN 图片解析失败: ${error.message}`);
+    }
+    const enrichedActivityWindows = activityWindows.map(item => ({
+      ...item,
+      imageUrl: officialCardImages.get(Number(item.id))
+        || '',
+    }));
     return {
       available: true,
       accountName: account.name || account.nick || '在线账号',
       scannedAt: Date.now(),
       activities,
+      activityWindows: enrichedActivityWindows,
       groups,
       probes: {
         attempted: probeIds.slice(0, 50).length,
@@ -99,8 +144,29 @@ function registerAdminActivityUpdateRoutes({ app, provider, requireAdminToken })
     localScanEnabled: String(process.env.ACTIVITY_LOCAL_SCAN_ENABLED || '').toLowerCase() === 'true',
   });
 
+  app.get('/api/activity/source-asset/:bundle/:filename', (req, res) => {
+    const sourceFile = findSourceAsset(req.params.bundle, req.params.filename);
+    if (!sourceFile) return res.sendStatus(404);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.sendFile(sourceFile);
+  });
+
   app.get('/api/activity/update/status', requireAdminToken, (req, res) => {
     res.json({ ok: true, ...getActivityUpdateState() });
+  });
+
+  app.get('/api/activity/directory', (req, res) => {
+    const state = getActivityUpdateState();
+    const online = state.report?.online;
+    res.json({
+      ok: true,
+      scannedAt: online?.scannedAt || state.report?.scannedAt || 0,
+      activities: online?.activities || [],
+      activityWindows: online?.activityWindows || [],
+      groups: online?.groups || [],
+      unknownActivityIds: online?.unknownActivityIds || [],
+    });
   });
 
   app.post('/api/activity/update/scan', requireAdminToken, async (req, res) => {
@@ -113,4 +179,4 @@ function registerAdminActivityUpdateRoutes({ app, provider, requireAdminToken })
   });
 }
 
-module.exports = { registerAdminActivityUpdateRoutes };
+module.exports = { findUnknownActivities, registerAdminActivityUpdateRoutes };

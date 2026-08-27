@@ -118,9 +118,8 @@ function scanActivityUpdates(options = {}) {
   }
   if (!caches.length) warnings.push('未找到 QQ 农场 gamecaches/cacheList.json，活动图片可能尚未下载');
 
-  const newestKnownActivityId = knownActivityIds.size ? Math.max(...knownActivityIds) : 0;
   const unknownActivityIds = knownActivityIds.size
-    ? detectedActivityIds.filter(id => !knownActivityIds.has(id) && id > newestKnownActivityId)
+    ? detectedActivityIds.filter(id => !knownActivityIds.has(id))
     : detectedActivityIds;
 
   return {

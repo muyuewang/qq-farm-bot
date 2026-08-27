@@ -32,6 +32,8 @@ const { dashboardItems } = storeToRefs(bagStore)
 const logContainer = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
 const lastBagFetchAt = ref(0)
+const illustratedLevels = ref({ crop: 0, mutant: 0 })
+let illustratedLevelRequestId = 0
 const clearingLogs = ref(false)
 const refreshingLogs = ref(false)
 const pendingLogCount = ref(0)
@@ -170,8 +172,6 @@ const timeToLevel = computed(() => {
 
 const fertilizerNormal = computed(() => dashboardItems.value.find((item: any) => Number(item.id) === 1011))
 const fertilizerOrganic = computed(() => dashboardItems.value.find((item: any) => Number(item.id) === 1012))
-const collectionNormal = computed(() => dashboardItems.value.find((item: any) => Number(item.id) === 3001))
-const collectionRare = computed(() => dashboardItems.value.find((item: any) => Number(item.id) === 3002))
 
 const nextFarmCheck = ref('--:--:--')
 const nextHelpCheck = ref('--:--:--')
@@ -186,6 +186,8 @@ const helpCountdownTotal = ref(1)
 const stealCountdownTotal = ref(1)
 
 function resetDashboardState() {
+  illustratedLevelRequestId += 1
+  illustratedLevels.value = { crop: 0, mutant: 0 }
   lastBagFetchAt.value = 0
   localUptime.value = 0
   localNextFarmRemainSec = 0
@@ -432,6 +434,31 @@ async function refreshBag(force = false) {
   await bagStore.fetchBag(currentAccountId.value)
 }
 
+async function refreshIllustratedLevels() {
+  if (!currentAccountId.value || !status.value?.connection?.connected)
+    return
+
+  const accountId = currentAccountId.value
+  const requestId = ++illustratedLevelRequestId
+  const headers = { 'x-account-id': accountId }
+  try {
+    const [crop, mutant] = await Promise.all([
+      api.get('/api/illustrated', { params: { illustrated_type: 1 }, headers }),
+      api.get('/api/illustrated', { params: { illustrated_type: 2 }, headers }),
+    ])
+    if (requestId !== illustratedLevelRequestId || accountId !== currentAccountId.value)
+      return
+    illustratedLevels.value = {
+      crop: Number(crop.data?.data?.level) || 0,
+      mutant: Number(mutant.data?.data?.level) || 0,
+    }
+  }
+  catch {
+    if (requestId === illustratedLevelRequestId)
+      illustratedLevels.value = { crop: 0, mutant: 0 }
+  }
+}
+
 async function refresh(forceReloadLogs = false) {
   if (!currentAccountId.value)
     return
@@ -476,12 +503,15 @@ watch(currentAccountId, async (newId, oldId) => {
   }
   syncRealtimeAccount()
   await refresh(true)
+  await refreshIllustratedLevels()
   scrollToBottom()
 })
 
 watch(() => status.value?.connection?.connected, (connected) => {
-  if (connected)
+  if (connected) {
     refreshBag(true)
+    refreshIllustratedLevels()
+  }
 })
 
 watch(() => JSON.stringify(status.value?.operations || {}), (next, prev) => {
@@ -551,6 +581,7 @@ onMounted(async () => {
   statusStore.setRealtimeLogsEnabled(true)
   syncRealtimeAccount()
   await refresh()
+  await refreshIllustratedLevels()
   scrollToBottom()
 })
 
@@ -601,7 +632,7 @@ useIntervalFn(updateCountdowns, 1000)
         <div class="grid grid-cols-4 gap-3">
           <div class="min-w-0">
             <div class="flex items-center gap-1.5 text-xs text-gray-500">
-              <div class="i-fas-coins text-yellow-500" />
+              <img src="/game-config/resource-icons/gold.png" alt="金币" class="h-5 w-5 shrink-0 object-contain">
               金币
             </div>
             <div class="text-2xl text-yellow-600 font-bold dark:text-yellow-500">
@@ -617,7 +648,7 @@ useIntervalFn(updateCountdowns, 1000)
           </div>
           <div class="min-w-0 text-center">
             <div class="flex items-center justify-center gap-1.5 text-xs text-gray-500">
-              <div class="i-fas-ticket-alt text-emerald-400" />
+              <img src="/game-config/resource-icons/coupon.png" alt="点券" class="h-5 w-5 shrink-0 object-contain">
               点券
             </div>
             <div class="text-2xl text-emerald-500 font-bold dark:text-emerald-400">
@@ -633,7 +664,7 @@ useIntervalFn(updateCountdowns, 1000)
           </div>
           <div class="min-w-0 text-center">
             <div class="flex items-center justify-center gap-1.5 text-xs text-gray-500">
-              <div class="i-carbon-diamond-outline text-cyan-500" />
+              <img src="/game-config/resource-icons/diamond.png" alt="钻石" class="h-5 w-5 shrink-0 object-contain">
               钻石
             </div>
             <div class="text-2xl text-cyan-600 font-bold dark:text-cyan-400">
@@ -642,7 +673,7 @@ useIntervalFn(updateCountdowns, 1000)
           </div>
           <div class="min-w-0 text-right">
             <div class="flex items-center justify-end gap-1.5 text-xs text-gray-500">
-              <div class="i-carbon-circle text-amber-500" />
+              <img src="/game-config/resource-icons/gold-bean.png" alt="金豆豆" class="h-5 w-5 shrink-0 object-contain">
               金豆
             </div>
             <div class="text-2xl text-amber-500 font-bold dark:text-amber-400">
@@ -665,14 +696,10 @@ useIntervalFn(updateCountdowns, 1000)
       </div>
 
       <div class="ui-card metric-card min-h-[168px] flex flex-col justify-between rounded-lg p-5">
-        <div class="mb-2 flex items-center gap-1.5 text-sm text-gray-500">
-          <div class="i-fas-flask text-emerald-400" />
-          化肥容器
-        </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
             <div class="flex items-center gap-1 text-xs text-gray-400">
-              <div class="i-fas-flask text-emerald-400" />
+              <img src="/game-config/resource-icons/fertilizer-normal.png" alt="普通化肥" class="h-5 w-5 shrink-0 object-contain">
               普通
             </div>
             <div class="font-bold">
@@ -681,7 +708,7 @@ useIntervalFn(updateCountdowns, 1000)
           </div>
           <div>
             <div class="flex items-center gap-1 text-xs text-gray-400">
-              <div class="i-fas-vial text-emerald-400" />
+              <img src="/game-config/resource-icons/fertilizer-organic.png" alt="有机化肥" class="h-5 w-5 shrink-0 object-contain">
               有机
             </div>
             <div class="font-bold">
@@ -690,27 +717,23 @@ useIntervalFn(updateCountdowns, 1000)
           </div>
         </div>
         <div class="my-3 border-t border-gray-100/80 dark:border-gray-700/80" />
-        <div class="mb-1 flex items-center gap-1.5 text-sm text-gray-500">
-          <div class="i-fas-star text-emerald-400" />
-          收藏点
-        </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
             <div class="flex items-center gap-1 text-xs text-gray-400">
-              <div class="i-fas-bookmark text-emerald-400" />
-              普通
+              <img src="/game-config/resource-icons/illustrated-crop.png" alt="作物图鉴" class="h-6 w-6 shrink-0 object-contain">
+              作物图鉴
             </div>
             <div class="font-bold">
-              {{ collectionNormal?.count || 0 }}
+              Lv.{{ illustratedLevels.crop }}
             </div>
           </div>
           <div>
             <div class="flex items-center gap-1 text-xs text-gray-400">
-              <div class="i-fas-gem text-emerald-400" />
-              典藏
+              <img src="/game-config/resource-icons/illustrated-mutant.png" alt="超变图鉴" class="h-6 w-6 shrink-0 object-contain">
+              超变图鉴
             </div>
             <div class="font-bold">
-              {{ collectionRare?.count || 0 }}
+              Lv.{{ illustratedLevels.mutant }}
             </div>
           </div>
         </div>

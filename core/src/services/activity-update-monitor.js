@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const { getDataFile } = require('../config/runtime-paths');
 const { scanActivityUpdates } = require('./activity-update-scanner');
 
-const DEFAULT_INTERVAL_MS = 30 * 60 * 1000;
+const DEFAULT_INTERVAL_MS = 3 * 60 * 60 * 1000;
 const MIN_INTERVAL_MS = 60 * 1000;
 const STATE_FILE = getDataFile('activity-update-report.json');
 
@@ -48,8 +48,26 @@ function writeSavedReport(value) {
 }
 
 function analyzeReport(scanned, previous, online = null) {
+  // 服务刚启动时账号通常尚未连接。此时保留上次成功的在线目录，避免一次
+  // “暂不可用”扫描把已经持久化的活动、分组和历史时间窗全部清空。
+  const previousOnline = previous?.online;
+  const hasPreviousOnlineSnapshot = previousOnline?.available
+    || previousOnline?.stale && (
+      previousOnline.activities?.length
+      || previousOnline.activityWindows?.length
+      || previousOnline.groups?.length
+    );
+  const effectiveOnline = online?.available === false && hasPreviousOnlineSnapshot
+    ? {
+        ...previousOnline,
+        available: false,
+        error: online.error || '在线扫描暂不可用',
+        stale: true,
+        lastSuccessfulScannedAt: previousOnline.lastSuccessfulScannedAt || previousOnline.scannedAt || 0,
+      }
+    : online;
   // 正式候选必须得到在线接口确认。本机源码/缓存仅作为辅助证据展示。
-  const candidateIds = [...new Set(online?.unknownActivityIds || [])]
+  const candidateIds = [...new Set(effectiveOnline?.unknownActivityIds || [])]
     .sort((a, b) => b - a);
   const groups = new Map();
   for (const id of candidateIds) {
@@ -61,11 +79,11 @@ function analyzeReport(scanned, previous, online = null) {
   const previousVersion = previous?.source?.version || '';
   return {
     ...scanned,
-    status: !scanned.source && !online?.available
+    status: !scanned.source && !effectiveOnline?.available
       ? 'unavailable'
       : candidateIds.length ? 'update-found' : 'up-to-date',
     unknownActivityIds: candidateIds,
-    online,
+    online: effectiveOnline,
     localEvidence: {
       enabled: scanned.localScanEnabled === true,
       unknownActivityIds: scanned.unknownActivityIds || [],
@@ -82,7 +100,7 @@ function analyzeReport(scanned, previous, online = null) {
       safeToAutoApply: false,
       summary: candidateIds.length
         ? `发现 ${candidateIds.length} 个候选活动 ID，已自动读取在线活动列表和只读活动分组`
-        : online?.available
+        : effectiveOnline?.available
           ? '在线活动列表未发现尚未登记的新活动'
           : '在线分析等待已连接账号',
     },

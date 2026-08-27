@@ -20,7 +20,6 @@ const statusStore = useStatusStore()
 const appStore = useAppStore()
 const userStore = useUserStore()
 const shopStore = useShopStore()
-const toast = useToastStore()
 const route = useRoute()
 const router = useRouter()
 const { currentAccount, currentAccountId } = storeToRefs(accountStore)
@@ -84,31 +83,6 @@ async function refreshStatusFallback() {
   }
 }
 
-async function refreshActivityUpdateReminder() {
-  if (!userStore.isAdmin) {
-    hasUnadaptedActivities.value = false
-    return
-  }
-  try {
-    const { data } = await api.get('/api/activity/update/status')
-    const ids = Array.isArray(data?.report?.unknownActivityIds)
-      ? data.report.unknownActivityIds.map(Number).filter((id: number) => id > 0).sort((a: number, b: number) => a - b)
-      : []
-    unadaptedActivityIds.value = ids
-    hasUnadaptedActivities.value = ids.length > 0
-    const signature = ids.join(',')
-    if (signature && signature !== notifiedActivitySignature.value) {
-      notifiedActivitySignature.value = signature
-      const groups = Array.isArray(data?.report?.online?.groups) ? data.report.online.groups : []
-      const titles = [...new Set(groups.map((item: any) => String(item?.title || '').trim()).filter(Boolean))]
-      toast.warning(`发现未适配活动：${titles.join('、') || `${ids.length} 个活动组`}`, 8000)
-    }
-  }
-  catch {
-    // 提醒查询失败不影响侧边栏及其他后台功能。
-  }
-}
-
 onMounted(() => {
   appStore.fetchLoginPageConfig()
   accountStore.fetchAccounts()
@@ -129,7 +103,6 @@ onBeforeUnmount(() => {
 })
 
 useIntervalFn(checkConnection, 30000)
-useIntervalFn(refreshActivityUpdateReminder, 60000)
 useIntervalFn(() => {
   refreshStatusFallback()
   accountStore.fetchAccounts()
@@ -575,11 +548,6 @@ async function copyToken() {
           class="h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]"
           title="神秘商人已出现"
         />
-        <span
-          v-if="item.path === '/activity' && hasUnadaptedActivities"
-          class="h-2 w-2 shrink-0 rounded-full bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]"
-          :title="`发现 ${unadaptedActivityIds.length} 个未适配活动`"
-        />
       </router-link>
     </nav>
 
@@ -656,10 +624,10 @@ async function copyToken() {
         <div class="flex items-center gap-2">
           <span>Web v{{ version }}</span>
           <a
-            href="https://github.com/XyhTender/qq-farm-automation-bot"
+            href="https://github.com/muyuewang/qq-farm-bot"
             target="_blank"
             rel="noopener noreferrer"
-            title="开源地址"
+            title="開源地址"
             class="inline-flex items-center transition-colors hover:opacity-70"
           >
             <div class="i-carbon-logo-github text-base" />

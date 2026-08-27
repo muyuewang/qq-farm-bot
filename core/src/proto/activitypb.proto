@@ -234,8 +234,16 @@ message ActivityNode {
     WeatherResearchInfo weather_research = 118;
 }
 
+message ActivityWindow {
+    int64 id = 1;
+    string name = 2;
+    int64 begin_time = 3;
+    int64 end_time = 4;
+}
+
 message ListReply {
     repeated ActivityNode groups = 1;
+    repeated ActivityWindow activity_windows = 2;
 }
 
 message GetGroupReply {

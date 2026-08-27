@@ -1452,6 +1452,11 @@ async function handleApiCall(msg) {
                 result = await getActivityDiscoveryList();
                 break;
             }
+            case 'getActivityDiscoverySnapshot': {
+                const { getActivityDiscoverySnapshot } = require('../services/activity');
+                result = await getActivityDiscoverySnapshot();
+                break;
+            }
             case 'getActivityGroupSnapshot': {
                 const { getActivityGroupSnapshot } = require('../services/activity');
                 result = await getActivityGroupSnapshot(args[0], args[1]);

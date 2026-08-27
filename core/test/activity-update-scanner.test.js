@@ -18,13 +18,13 @@ test('活动更新扫描按 wasm 修改时间选择最新完整源码并报告�
     fs.writeFileSync(path.join(directory, 'tsdk', 'tsdk.wasm'), 'wasm');
   }
   fs.writeFileSync(path.join(older, 'game.js'), '2026072700');
-  fs.writeFileSync(path.join(latest, 'game.js'), '2026072700 2026081800 2026081800 2054922799');
+  fs.writeFileSync(path.join(latest, 'game.js'), '2026070300 2026072700 2026081800 2026081800 2054922799');
   const future = new Date(Date.now() + 1000);
   fs.utimesSync(path.join(latest, 'tsdk', 'tsdk.wasm'), future, future);
 
   const report = scanActivityUpdates({ miniappRoot, fsRoot, knownActivityIds: [2026072700] });
   assert.equal(report.source.version, '1112386029_3_latest');
-  assert.deepEqual(report.unknownActivityIds, [2026081800]);
+  assert.deepEqual(report.unknownActivityIds, [2026081800, 2026070300]);
   assert.equal(report.status, 'update-found');
   assert.ok(report.warnings.some(message => message.includes('gamecaches')));
 });

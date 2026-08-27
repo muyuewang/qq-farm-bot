@@ -266,7 +266,8 @@ function getLandTextureUrl(land: any) {
 
 function shouldRotateLandTexture(land: any) {
   const level = Number(land?.level) || 1
-  return level === 5
+  // 单格紫土地贴图需要翻转；2x2 紫土地资源本身已经是农场视角的正确朝向。
+  return level === 5 && Number(land?.plantSize) <= 1
 }
 
 function loadCanvasImage(src: string) {

@@ -9,8 +9,12 @@ const operationLimits = new Map();
 let lastResetDate = '';
 let canGetHelpExp = true;
 let helpAutoDisabledByLimit = false;
-let localBadOperationCount = 0;
+const localBadOperationCounts = new Map();
 
+// Official PutWeeds replies update the shared bad-operation counter 10003.
+// PutInsects replies update both their own counter 10004 and shared counter 10003.
+const BAD_SHARED_LIMIT_ID = 10003;
+const PUT_BUG_LIMIT_ID = 10004;
 const PUT_BUG_OPERATION_ID = 10005;
 const PUT_WEED_OPERATION_ID = 10006;
 const GOLDEN_BUG_OPERATION_ID = 10015;
@@ -54,7 +58,7 @@ function checkDailyReset() {
       log('系统', '跨日重置，清空操作限制缓存');
     }
     operationLimits.clear();
-    localBadOperationCount = 0;
+    localBadOperationCounts.clear();
     canGetHelpExp = true;
 
     if (helpAutoDisabledByLimit) {
@@ -157,23 +161,48 @@ function getOperationDayTimes(operationId) {
   return limit ? Math.max(0, toNum(limit.dayTimes)) : 0;
 }
 
-function getBadOperationUsedCount() {
-  const serverUsed =
-    getOperationDayTimes(PUT_BUG_OPERATION_ID) +
-    getOperationDayTimes(PUT_WEED_OPERATION_ID);
-  return Math.max(serverUsed, localBadOperationCount);
+function getBadOperationUsedCount(operationId) {
+  return Math.max(
+    getOperationDayTimes(operationId),
+    Math.max(0, toNum(localBadOperationCounts.get(operationId)))
+  );
 }
 
-function getBadRemainingTimes() {
-  return Math.max(0, BAD_DAILY_LIMIT - getBadOperationUsedCount());
+function getBadRemainingTimes(operationId = 0) {
+  const sharedLimit = operationLimits.get(BAD_SHARED_LIMIT_ID);
+  const sharedDailyLimit = sharedLimit?.dayTimesLimit > 0 ? sharedLimit.dayTimesLimit : BAD_DAILY_LIMIT;
+  const sharedRemaining = Math.max(
+    0,
+    sharedDailyLimit - getBadOperationUsedCount(BAD_SHARED_LIMIT_ID)
+  );
+  if (operationId !== PUT_BUG_OPERATION_ID) return sharedRemaining;
+
+  const bugLimit = operationLimits.get(PUT_BUG_LIMIT_ID);
+  if (!bugLimit?.dayTimesLimit) return sharedRemaining;
+  return Math.min(
+    sharedRemaining,
+    Math.max(0, bugLimit.dayTimesLimit - getBadOperationUsedCount(PUT_BUG_LIMIT_ID))
+  );
 }
 
 function canOperateBad() {
   return getBadRemainingTimes() > 0;
 }
 
-function recordBadOperationSuccess(count) {
-  localBadOperationCount += Math.max(0, Number(count) || 0);
+function recordBadOperationSuccess(operationId, count) {
+  const delta = Math.max(0, Number(count) || 0);
+  const sharedLocal = Math.max(0, toNum(localBadOperationCounts.get(BAD_SHARED_LIMIT_ID)));
+  localBadOperationCounts.set(
+    BAD_SHARED_LIMIT_ID,
+    Math.max(getOperationDayTimes(BAD_SHARED_LIMIT_ID), sharedLocal + delta)
+  );
+  if (operationId === PUT_BUG_OPERATION_ID) {
+    const bugLocal = Math.max(0, toNum(localBadOperationCounts.get(PUT_BUG_LIMIT_ID)));
+    localBadOperationCounts.set(
+      PUT_BUG_LIMIT_ID,
+      Math.max(getOperationDayTimes(PUT_BUG_LIMIT_ID), bugLocal + delta)
+    );
+  }
 }
 
 /**
@@ -418,25 +447,25 @@ async function putPlantItemsDetailed(gid, landIds, RequestType, ReplyType, rpcMe
 
 async function putInsects(gid, landIds) {
   const ok = await putPlantItems(gid, landIds, types.PutInsectsRequest, types.PutInsectsReply, 'PutInsects');
-  recordBadOperationSuccess(ok);
+  recordBadOperationSuccess(PUT_BUG_OPERATION_ID, ok);
   return ok;
 }
 
 async function putWeeds(gid, landIds) {
   const ok = await putPlantItems(gid, landIds, types.PutWeedsRequest, types.PutWeedsReply, 'PutWeeds');
-  recordBadOperationSuccess(ok);
+  recordBadOperationSuccess(PUT_WEED_OPERATION_ID, ok);
   return ok;
 }
 
 async function putInsectsDetailed(gid, landIds) {
   const result = await putPlantItemsDetailed(gid, landIds, types.PutInsectsRequest, types.PutInsectsReply, 'PutInsects');
-  recordBadOperationSuccess(result.ok);
+  recordBadOperationSuccess(PUT_BUG_OPERATION_ID, result.ok);
   return result;
 }
 
 async function putWeedsDetailed(gid, landIds) {
   const result = await putPlantItemsDetailed(gid, landIds, types.PutWeedsRequest, types.PutWeedsReply, 'PutWeeds');
-  recordBadOperationSuccess(result.ok);
+  recordBadOperationSuccess(PUT_WEED_OPERATION_ID, result.ok);
   return result;
 }
 
@@ -445,6 +474,8 @@ module.exports = {
   OP_NAMES,
   PUT_BUG_OPERATION_ID,
   PUT_WEED_OPERATION_ID,
+  BAD_SHARED_LIMIT_ID,
+  PUT_BUG_LIMIT_ID,
   GOLDEN_BUG_OPERATION_ID,
   BAD_DAILY_LIMIT,
   checkDailyReset,
