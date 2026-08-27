@@ -705,6 +705,105 @@ async function unlockRainPoemResearch() {
   };
 }
 
+async function scanWeatherFriends() {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
+  const { getFriendsList } = require('./friend-land-analyzer');
+  const friends = await getFriendsList();
+  const results = [];
+  for (const friend of friends) {
+    const gid = toNum(friend?.gid);
+    if (!gid) continue;
+    let entered = false;
+    try {
+      const visit = await enterFriendFarm(gid);
+      entered = true;
+      const weather = normalizeWeatherStatus(visit?.weather);
+      results.push({
+        gid, name: String(friend?.name || ''),
+        isThunderstorm: !!weather.rainstorm,
+        weatherType: weather.type || 0,
+        weatherStatus: weather.status || 0,
+      });
+    } catch {
+      results.push({ gid, name: String(friend?.name || ''), error: '检查失败' });
+    } finally {
+      if (entered) {
+        try { await leaveFriendFarm(gid); } catch {}
+      }
+    }
+  }
+  return { ok: true, friends: results, activity: await getRainPoemActivity() };
+}
+
+function encodeBottleUseRequest(itemId, count, uid, targetGid, landIds) {
+  const writer = protobuf.Writer.create();
+  writer.uint32(10).fork().uint32(8).int64(itemId)
+    .uint32(16).int64(count).uint32(48).int64(toNum(uid)).ldelim();
+  if (targetGid) {
+    writer.uint32(18).fork().uint32(8).int64(toNum(targetGid));
+    if (landIds && landIds.length > 0) {
+      for (const lid of landIds) {
+        writer.uint32(16).int64(toNum(lid));
+      }
+    }
+    writer.uint32(24).int64(0).ldelim();
+  }
+  return writer.finish();
+}
+
+async function useWeatherFrogBottle(friendGid) {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  const targetGid = toNum(friendGid);
+  if (!targetGid) throw new Error('好友 GID 无效');
+  const selfGid = toNum(getUserState()?.gid);
+  if (targetGid === selfGid) throw new Error('青蛙使坏瓶只能在好友农场使用');
+  if (before.items.frogPrankBottles < 1) throw new Error('背包中没有可用的青蛙使坏瓶');
+  const bag = await getBag();
+  const bottle = getBagItems(bag).find(item => toNum(item?.id) === RAIN_POEM_FROG_PRANK_ITEM_ID && toNum(item?.count) > 0);
+  if (!bottle) throw new Error('背包中没有可用的青蛙使坏瓶');
+  const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
+  let entered = false;
+  try {
+    await enterFriendFarm(targetGid);
+    entered = true;
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_FROG_PRANK_ITEM_ID, 1, bottle.uid, targetGid));
+  } finally {
+    if (entered) {
+      try { await leaveFriendFarm(targetGid); } catch {}
+    }
+  }
+  return { ok: true, friendGid: targetGid, activity: await getRainPoemActivity() };
+}
+
+async function useWeatherCloudBottle(friendGid, landId) {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  const targetGid = toNum(friendGid);
+  if (!targetGid) throw new Error('好友 GID 无效');
+  const selfGid = toNum(getUserState()?.gid);
+  if (targetGid === selfGid) throw new Error('乌云使坏瓶只能在好友农场使用');
+  if (before.items.cloudPrankBottles < 1) throw new Error('背包中没有可用的乌云使坏瓶');
+  const bag = await getBag();
+  const bottle = getBagItems(bag).find(item => toNum(item?.id) === RAIN_POEM_CLOUD_PRANK_ITEM_ID && toNum(item?.count) > 0);
+  if (!bottle) throw new Error('背包中没有可用的乌云使坏瓶');
+  const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
+  let entered = false;
+  try {
+    await enterFriendFarm(targetGid);
+    entered = true;
+    const landIds = landId ? [toNum(landId)] : [];
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, landIds));
+  } finally {
+    if (entered) {
+      try { await leaveFriendFarm(targetGid); } catch {}
+    }
+  }
+  return { ok: true, friendGid: targetGid, activity: await getRainPoemActivity() };
+}
+
 function isQixiDewLandCandidate(land) {
   return !!land?.plantId
     && ['growing', 'harvestable'].includes(land.status)
@@ -2861,6 +2960,9 @@ module.exports = {
   getOwnWeatherStatus,
   encodeRainPoemSummonUseRequest,
   isLightningMutantPlant,
+  scanWeatherFriends,
+  useWeatherFrogBottle,
+  useWeatherCloudBottle,
   getSeasonPassport,
   claimSeasonPassportRewards,
   getSolarTermsInfo,

@@ -1,10 +1,25 @@
 <script setup lang="ts">
-import type { RainPoemActivityData } from '@/stores/activity'
-import { computed } from 'vue'
+import type { RainPoemActivityData, WeatherFriend } from '@/stores/activity'
+import { computed, ref } from 'vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
-const props = defineProps<{ activity?: RainPoemActivityData | null, loading?: boolean }>()
-defineEmits<{ refresh: [] }>()
+const props = defineProps<{
+  activity?: RainPoemActivityData | null
+  loading?: boolean
+  weatherFriends?: WeatherFriend[]
+  scanPending?: boolean
+  frogPending?: boolean
+  cloudPending?: boolean
+}>()
+const emit = defineEmits<{
+  refresh: []
+  scanFriends: []
+  useFrog: [friendGid: number]
+  useCloud: [friendGid: number, landId: number]
+}>()
+
+const selectedFriend = ref<WeatherFriend | null>(null)
+const selectedLandId = ref<string>('')
 
 const completedResearchCount = computed(() => props.activity?.research.stages.filter(stage => stage.completed).length || 0)
 const totalResearchCount = computed(() => props.activity?.research.stages.length || 0)
@@ -12,6 +27,20 @@ const collectionLimit = computed(() => props.activity?.collection.dailyUseLimit 
 const collectionRemaining = computed(() => props.activity?.collection.remainingUseCount || 0)
 const collectionUsed = computed(() => Math.max(0, collectionLimit.value - collectionRemaining.value))
 const collectionProgress = computed(() => collectionLimit.value ? Math.min(100, collectionUsed.value / collectionLimit.value * 100) : 0)
+
+const thunderstormFriends = computed(() =>
+  (props.weatherFriends || []).filter(f => f.rainstorm && !f.expired && !f.collected),
+)
+
+const lightningAttackItems = computed(() => {
+  if (!props.activity?.lightningSense) return 0
+  return Math.round(props.activity.lightningSense.totalAttackPercent || 0)
+})
+
+const lightningDefendItems = computed(() => {
+  if (!props.activity?.lightningSense) return 0
+  return Math.round(props.activity.lightningSense.totalDefendPercent || 0)
+})
 
 function taskProgress(task: RainPoemActivityData['tasks'][number]) {
   if (!task.target)
@@ -29,6 +58,29 @@ function formatDateTime(seconds?: number) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(seconds * 1000))
+}
+
+function weatherStatusClass(friend: WeatherFriend) {
+  if (friend.expired) return 'text-gray-400'
+  if (friend.collected) return 'text-amber-600'
+  if (friend.rainstorm) return 'text-cyan-600'
+  return 'text-gray-500'
+}
+
+function weatherStatusLabel(friend: WeatherFriend) {
+  if (friend.expired) return '已失效'
+  if (friend.collected) return '已采集'
+  if (friend.rainstorm) return '雷雨'
+  return '晴天'
+}
+
+function handleUseFrog(friendGid: number) {
+  emit('useFrog', friendGid)
+}
+
+function handleUseCloud() {
+  if (!selectedFriend.value || !selectedLandId.value) return
+  emit('useCloud', selectedFriend.value.gid, Number(selectedLandId.value))
 }
 </script>
 
@@ -102,6 +154,147 @@ function formatDateTime(seconds?: number) {
         </div>
       </div>
     </header>
+
+    <article v-if="activity?.lightningSense" class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800 sm:p-5">
+      <h3 class="text-gray-900 font-semibold dark:text-white">
+        雷电感知
+      </h3>
+      <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-lg bg-cyan-50 p-3 text-center dark:bg-cyan-950/20">
+          <div class="text-xs text-cyan-600 dark:text-cyan-400">攻击加成</div>
+          <div class="mt-1 text-lg font-bold text-cyan-700 dark:text-cyan-300">{{ lightningAttackItems }}%</div>
+        </div>
+        <div class="rounded-lg bg-amber-50 p-3 text-center dark:bg-amber-950/20">
+          <div class="text-xs text-amber-600 dark:text-amber-400">防御加成</div>
+          <div class="mt-1 text-lg font-bold text-amber-700 dark:text-amber-300">{{ lightningDefendItems }}%</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
+          <div class="text-xs text-gray-500">基础攻击</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity.lightningSense.attackBonusPercent || 0 }}%</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
+          <div class="text-xs text-gray-500">基础防御</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity.lightningSense.defendBonusPercent || 0 }}%</div>
+        </div>
+      </div>
+    </article>
+
+    <article class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800 sm:p-5">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h3 class="text-gray-900 font-semibold dark:text-white">
+            好友天气
+          </h3>
+          <p class="mt-0.5 text-xs text-gray-500">
+            扫描好友农场天气，采集雷雨或使用使坏瓶
+          </p>
+        </div>
+        <BaseButton size="sm" :loading="scanPending" @click="$emit('scanFriends')">
+          <span v-if="!scanPending" class="i-carbon-search text-base mr-1" />
+          扫描好友
+        </BaseButton>
+      </div>
+
+      <div v-if="weatherFriends && weatherFriends.length" class="mt-4 space-y-3">
+        <div class="max-h-60 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+          <div
+            v-for="friend in weatherFriends"
+            :key="friend.gid"
+            class="flex items-center justify-between border-b border-gray-100 px-4 py-2.5 last:border-b-0 dark:border-gray-700/50"
+            :class="selectedFriend?.gid === friend.gid ? 'bg-cyan-50 dark:bg-cyan-950/20' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30'"
+            @click="selectedFriend = friend"
+          >
+            <div class="flex items-center gap-3">
+              <img v-if="friend.avatar" :src="friend.avatar" class="h-8 w-8 rounded-full object-cover" alt="">
+              <div v-else class="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700" />
+              <div>
+                <div class="text-sm font-medium text-gray-900 dark:text-white">{{ friend.name }}</div>
+                <div class="text-xs" :class="weatherStatusClass(friend)">{{ weatherStatusLabel(friend) }}</div>
+              </div>
+            </div>
+            <div v-if="friend.rainstorm && !friend.expired && !friend.collected" class="flex gap-1.5">
+              <BaseButton size="sm" variant="success" :loading="frogPending" @click.stop="handleUseFrog(friend.gid)">
+                青蛙使坏
+              </BaseButton>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-cyan-50 p-4 dark:bg-cyan-950/20">
+          <h4 class="text-sm font-medium text-cyan-800 dark:text-cyan-200">
+            采集雷雨
+          </h4>
+          <p class="mt-1 text-xs text-cyan-600 dark:text-cyan-400">
+            {{ selectedFriend.name }} 的农场正在雷雨中，可以使用采集瓶
+          </p>
+        </div>
+
+        <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-purple-50 p-4 dark:bg-purple-950/20">
+          <h4 class="text-sm font-medium text-purple-800 dark:text-purple-200">
+            乌云使坏
+          </h4>
+          <p class="mt-1 text-xs text-purple-600 dark:text-purple-400">
+            向 {{ selectedFriend.name }} 的农场投放乌云
+          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              v-model="selectedLandId"
+              type="number"
+              min="0"
+              placeholder="地块 ID"
+              class="h-8 w-24 rounded-md border border-purple-300 px-2 text-sm dark:border-purple-700 dark:bg-gray-800"
+            >
+            <BaseButton
+              size="sm"
+              :loading="cloudPending"
+              :disabled="!selectedLandId || cloudPending"
+              @click="handleUseCloud"
+            >
+              乌云使坏
+            </BaseButton>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="!scanPending" class="mt-4 rounded-lg border border-gray-200 border-dashed p-6 text-center text-sm text-gray-500 dark:border-gray-700">
+        点击"扫描好友"查看好友农场天气状态
+      </div>
+      <div v-else class="mt-4 rounded-lg border border-gray-200 border-dashed p-6 text-center text-sm text-gray-500 dark:border-gray-700">
+        <div class="i-svg-spinners-ring-resize mx-auto mb-2 text-xl animate-spin" />
+        正在扫描好友天气...
+      </div>
+    </article>
+
+    <article class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800 sm:p-5">
+      <div class="flex items-center justify-between gap-3">
+        <div>
+          <h3 class="text-gray-900 font-semibold dark:text-white">
+            使坏瓶
+          </h3>
+          <p class="mt-0.5 text-xs text-gray-500">
+            向好友农场投放使坏道具
+          </p>
+        </div>
+      </div>
+      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div class="rounded-lg bg-amber-50 p-3 text-center dark:bg-amber-950/20">
+          <div class="text-xs text-amber-600 dark:text-amber-400">青蛙使坏瓶</div>
+          <div class="mt-1 text-lg font-bold text-amber-700 dark:text-amber-300">{{ activity?.items.frogPrankBottles || 0 }}</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
+          <div class="text-xs text-gray-500">乌云使坏瓶</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity?.items.cloudPrankBottles || 0 }}</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
+          <div class="text-xs text-gray-500">可采集好友</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ thunderstormFriends.length }}</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
+          <div class="text-xs text-gray-500">已扫描好友</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ weatherFriends?.length || 0 }}</div>
+        </div>
+      </div>
+    </article>
 
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
       <article class="rounded-lg bg-white p-4 shadow-sm dark:bg-gray-800 sm:p-5">

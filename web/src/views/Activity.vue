@@ -15,6 +15,7 @@ import { useAccountStore } from '@/stores/account'
 import { useActivityStore } from '@/stores/activity'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
+import { friendlyActivityError } from '@/utils/activity-errors'
 
 const L: ActivityLabels = {
   title: '活动中心',
@@ -90,6 +91,10 @@ const {
   qixiDewLoading,
   rainPoemActivity,
   rainPoemLoading,
+  weatherFriends,
+  scanPending,
+  frogPending,
+  cloudPending,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
@@ -191,6 +196,36 @@ async function giftQixi(friendGid: number, count: number) {
     return
   const result = await activityStore.sendQixiSachet(String(currentAccountId.value), friendGid, count)
   result?.ok ? toast.success(`已赠送 ${result.sentCount || count} 个鹊羽香囊`) : toast.error(result?.error || '香囊赠送失败')
+}
+
+async function scanWeatherFriends() {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.scanWeatherFriends(String(currentAccountId.value))
+  if (result?.ok)
+    toast.success(`扫描完成，发现 ${result.friends?.length || 0} 位好友`)
+  else
+    toast.error(friendlyActivityError(result?.error || '扫描好友失败'))
+}
+
+async function useWeatherFrogBottle(friendGid: number) {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.useWeatherFrogBottle(String(currentAccountId.value), friendGid)
+  if (result?.ok)
+    toast.success('青蛙使坏成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '青蛙使坏失败'))
+}
+
+async function useWeatherCloudBottle(friendGid: number, landId: number) {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.useWeatherCloudBottle(String(currentAccountId.value), friendGid, landId)
+  if (result?.ok)
+    toast.success('乌云使坏成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '乌云使坏失败'))
 }
 
 async function claimRecords() {
@@ -392,7 +427,14 @@ onUnmounted(() => {
         v-if="rainPoemActivityActive && currentAccountId"
         :activity="rainPoemActivity"
         :loading="rainPoemLoading"
+        :weather-friends="weatherFriends"
+        :scan-pending="scanPending"
+        :frog-pending="frogPending"
+        :cloud-pending="cloudPending"
         @refresh="refreshAll"
+        @scan-friends="scanWeatherFriends"
+        @use-frog="useWeatherFrogBottle"
+        @use-cloud="useWeatherCloudBottle"
       />
       <div v-else-if="rainPoemActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
         {{ L.needAccount }}

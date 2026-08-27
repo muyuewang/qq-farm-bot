@@ -1532,6 +1532,21 @@ async function handleApiCall(msg) {
                 result = await unlockRainPoemResearch();
                 break;
             }
+            case 'scanWeatherFriends': {
+                const { scanWeatherFriends } = require('../services/activity');
+                result = await scanWeatherFriends();
+                break;
+            }
+            case 'useWeatherFrogBottle': {
+                const { useWeatherFrogBottle } = require('../services/activity');
+                result = await useWeatherFrogBottle(args[0]);
+                break;
+            }
+            case 'useWeatherCloudBottle': {
+                const { useWeatherCloudBottle } = require('../services/activity');
+                result = await useWeatherCloudBottle(args[0], args[1]);
+                break;
+            }
             case 'exchangeHeluShopItem': {
                 const { exchangeHeluShopItem } = require('../services/activity');
                 result = await exchangeHeluShopItem(args[0], args[1]);

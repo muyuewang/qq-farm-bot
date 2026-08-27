@@ -76,6 +76,33 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  app.post('/api/activity/rain-poem/friends/scan', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '扫描好友天气失败: 账号未运行')) return;
+      res.json(await provider.scanWeatherFriends(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/frog/use', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '使用青蛙使坏瓶失败: 账号未运行')) return;
+      res.json(await provider.useWeatherFrogBottle(accountId, req.body?.friendGid));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/rain-poem/cloud/use', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '使用乌云使坏瓶失败: 账号未运行')) return;
+      res.json(await provider.useWeatherCloudBottle(accountId, req.body?.friendGid, req.body?.landId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.get("/api/activity/star", async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

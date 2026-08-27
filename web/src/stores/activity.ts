@@ -179,6 +179,19 @@ export interface RainPoemActivityData {
   weather?: { type: number, status: number, startTime?: number, endTime?: number, rainstorm: boolean, error?: string }
   tasks: Array<{ id: number, itemId: number, desc: string, target: number, progress: number, reward: QixiItem }>
   research: { currentStage: number, stages: Array<{ id: number, status: number, available: boolean, completed: boolean, claimed: boolean, cost: QixiItem, reward: QixiItem }> }
+  lightningSense?: { attackBonusPercent: number, defendBonusPercent: number, totalAttackPercent: number, totalDefendPercent: number }
+}
+
+export interface WeatherFriend {
+  gid: number
+  name: string
+  avatar?: string
+  weatherType: number
+  weatherStatus: number
+  rainstorm: boolean
+  collected: boolean
+  expired: boolean
+  statusLabel: string
 }
 
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'
@@ -291,6 +304,10 @@ export const useActivityStore = defineStore('activity', () => {
   const qixiActivity = ref<QixiActivityData | null>(null)
   const rainPoemActivity = ref<RainPoemActivityData | null>(null)
   const rainPoemLoading = ref(false)
+  const weatherFriends = ref<WeatherFriend[]>([])
+  const scanPending = ref(false)
+  const frogPending = ref(false)
+  const cloudPending = ref(false)
   const qixiFriends = ref<QixiFriend[]>([])
   const qixiLoading = ref(false)
   const qixiBuildLoading = ref(false)
@@ -314,6 +331,10 @@ export const useActivityStore = defineStore('activity', () => {
     heluActivity.value = null
     qixiActivity.value = null
     rainPoemActivity.value = null
+    weatherFriends.value = []
+    scanPending.value = false
+    frogPending.value = false
+    cloudPending.value = false
     qixiFriends.value = []
     heluLoading.value = false
     drawLoading.value = false
@@ -347,6 +368,39 @@ export const useActivityStore = defineStore('activity', () => {
       return data
     }
     finally { rainPoemLoading.value = false }
+  }
+
+  async function scanWeatherFriends(accountId: string) {
+    scanPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/friends/scan', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId)))
+        weatherFriends.value = data.friends || []
+      return data
+    }
+    finally { scanPending.value = false }
+  }
+
+  async function useWeatherFrogBottle(accountId: string, friendGid: number) {
+    frogPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/frog/use', { friendGid }, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { frogPending.value = false }
+  }
+
+  async function useWeatherCloudBottle(accountId: string, friendGid: number, landId: number) {
+    cloudPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/cloud/use', { friendGid, landId }, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { cloudPending.value = false }
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -559,6 +613,10 @@ export const useActivityStore = defineStore('activity', () => {
     qixiActivity,
     rainPoemActivity,
     rainPoemLoading,
+    weatherFriends,
+    scanPending,
+    frogPending,
+    cloudPending,
     qixiFriends,
     qixiLoading,
     qixiBuildLoading,
@@ -577,6 +635,9 @@ export const useActivityStore = defineStore('activity', () => {
     fetchHeluActivity,
     fetchQixiActivity,
     fetchRainPoemActivity,
+    scanWeatherFriends,
+    useWeatherFrogBottle,
+    useWeatherCloudBottle,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,
