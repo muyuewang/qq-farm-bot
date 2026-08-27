@@ -32,6 +32,7 @@ interface AutomationSettings {
     rain_poem_bottle_buy: boolean
     rain_poem_weather_collect: boolean
     rain_poem_summon_use: boolean
+    rain_poem_prank_use: boolean
     rain_poem_research_unlock: boolean
     golden_bug_clear: boolean
     fertilizer_gift: boolean
@@ -268,6 +269,9 @@ watch(() => props.currentAccountId, loadQixiFriends)
           </div>
           <div v-if="showRainPoemActivity" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.rain_poem_summon_use" label="自动使用雷雨召唤瓶" />
+          </div>
+          <div v-if="showRainPoemActivity" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.rain_poem_prank_use" label="自动使用青蛙与乌云使坏瓶" />
           </div>
           <div v-if="showRainPoemActivity" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.rain_poem_research_unlock" label="自动解锁气象研究" />

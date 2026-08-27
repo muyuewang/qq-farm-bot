@@ -7,7 +7,7 @@ service WeatherService {
 }
 
 message WeatherStatus {
-    int32 weather_id = 1;
+    int32 type = 1;                // 雷雨阶段：1=30 分钟阶段，2=2 小时阶段
     int32 status = 2;
     int64 start_time = 3;
     int64 end_time = 4;

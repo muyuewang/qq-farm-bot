@@ -224,6 +224,7 @@ const DEFAULT_AUTOMATION = {
     rain_poem_bottle_buy: false,
     rain_poem_weather_collect: false,
     rain_poem_summon_use: false,
+    rain_poem_prank_use: false,
     rain_poem_research_unlock: false,
     fertilizer_gift: false,
     fertilizer_buy_organic: false,
@@ -262,6 +263,7 @@ const TIMED_ACTIVITY_AUTOMATION_GROUPS = [
             'rain_poem_bottle_buy',
             'rain_poem_weather_collect',
             'rain_poem_summon_use',
+            'rain_poem_prank_use',
             'rain_poem_research_unlock'
         ]
     }

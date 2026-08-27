@@ -1407,11 +1407,6 @@ function getIsometricBubbleClass(targetLand: any) {
   filter: saturate(1.05) drop-shadow(0 3px 4px rgba(71, 53, 35, 0.16));
 }
 
-.land-ground-single.land-ground-rotated,
-.land-ground-merged.land-ground-rotated {
-  transform: translate(-50%, -50%) rotate(180deg);
-}
-
 .land-card.col-span-2 .land-ground-layer,
 .land-card.land-isometric-size-2 .land-ground-layer {
   left: 7%;
@@ -1431,6 +1426,11 @@ function getIsometricBubbleClass(targetLand: any) {
   transform: translate(-50%, -50%);
   opacity: 0.82;
   filter: saturate(1.05) drop-shadow(0 3px 4px rgba(71, 53, 35, 0.14));
+}
+
+.land-ground-single.land-ground-rotated,
+.land-ground-merged.land-ground-rotated {
+  transform: translate(-50%, -50%) rotate(180deg);
 }
 
 .land-card > :not(.land-ground-layer) {

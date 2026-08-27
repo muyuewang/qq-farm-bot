@@ -35,7 +35,8 @@ function formatDateTime(seconds?: number) {
 <template>
   <section class="space-y-4">
     <header class="storm-header relative overflow-hidden rounded-lg p-4 text-white shadow-sm sm:p-5">
-      <img src="/activity/rain-poem/lightning-sense.png?v=2" alt="" class="pointer-events-none absolute h-56 w-56 opacity-15 -right-8 -top-14 sm:right-4">
+      <img src="/activity/rain-poem/day-rain-bg.jpg" alt="" class="pointer-events-none absolute inset-0 h-full w-full object-cover object-center">
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-[#081824]/90 via-[#102b3c]/72 to-[#173445]/45" />
       <div class="relative flex items-start justify-between gap-3">
         <div class="min-w-0">
           <div class="flex flex-wrap items-center gap-2 text-xs text-cyan-100/80">
@@ -231,7 +232,6 @@ function formatDateTime(seconds?: number) {
 <style scoped>
 .storm-header {
   background-color: #173445;
-  background-image: linear-gradient(115deg, rgba(8, 24, 34, 0.72), transparent 65%);
 }
 
 .status-tile {

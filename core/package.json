@@ -1,6 +1,6 @@
 {
   "name": "qq-farm-bot",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "",
   "license": "ISC",
   "author": "",
@@ -16,6 +16,7 @@
     "build:mac": "pkg . --no-bytecode --targets node18-macos-x64,node18-macos-arm64 --out-path dist",
     "inspect:activity-har": "node scripts/inspect-activity-har.js",
     "inspect:protocol": "node scripts/inspect-protocol-capture.js",
+    "inspect:cdn": "node scripts/find-cdn-resource.js",
     "extract:plant-phases": "node scripts/extract-plant-phase-images.js",
     "inspect:tsdk": "node scripts/inspect-tsdk-update.js",
     "capture:start": "node capture-server.js",

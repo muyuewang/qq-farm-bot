@@ -298,12 +298,13 @@ async function runStarActivityAutoClaims() {
     const buyRainPoemBottleEnabled = automation.rain_poem_bottle_buy === true;
     const collectRainPoemWeatherEnabled = automation.rain_poem_weather_collect === true;
     const useRainPoemSummonEnabled = automation.rain_poem_summon_use === true;
+    const useRainPoemPrankEnabled = automation.rain_poem_prank_use === true;
     const unlockRainPoemResearchEnabled = automation.rain_poem_research_unlock === true;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
     if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
         && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled
-        && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled
+        && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled && !useRainPoemPrankEnabled
         && !unlockRainPoemResearchEnabled) return;
 
     starActivityClaimRunning = true;
@@ -478,7 +479,7 @@ async function runStarActivityAutoClaims() {
             }
         }
 
-        if (buyRainPoemBottleEnabled || collectRainPoemWeatherEnabled || useRainPoemSummonEnabled || unlockRainPoemResearchEnabled) {
+        if (buyRainPoemBottleEnabled || collectRainPoemWeatherEnabled || useRainPoemSummonEnabled || useRainPoemPrankEnabled || unlockRainPoemResearchEnabled) {
             const {
                 getRainPoemActivity,
                 buyRainPoemCollectionBottle,
@@ -488,6 +489,17 @@ async function runStarActivityAutoClaims() {
             } = require('../services/activity');
             let rainPoem = await getRainPoemActivity();
             if (rainPoem?.active === false) return;
+            const lightningHarvestComplete = rainPoem?.lightningHarvest?.complete === true;
+
+            // 雷电变异作物每日目标未完成时，按服务端天气结束时间精准续接。
+            // 5 分钟活动轮询仍作为断线、重启或定时器丢失后的兜底。
+            workerScheduler.clear('rain_poem_weather_renew');
+            if (useRainPoemSummonEnabled && !lightningHarvestComplete && rainPoem?.weather?.rainstorm && Number(rainPoem?.weather?.endTime || 0) > 0) {
+                const renewDelayMs = Math.max(1000, (Number(rainPoem.weather.endTime) - Math.floor(Date.now() / 1000) + 2) * 1000);
+                workerScheduler.setTimeoutTask('rain_poem_weather_renew', renewDelayMs, () => {
+                    runStarActivityAutoClaims().catch(() => null);
+                });
+            }
 
             if (buyRainPoemBottleEnabled && rainPoem?.shop?.available && !rainPoem?.shop?.purchasedToday) {
                 try {
@@ -522,6 +534,7 @@ async function runStarActivityAutoClaims() {
             }
 
             if (useRainPoemSummonEnabled
+                && !lightningHarvestComplete
                 && !rainPoem?.weather?.rainstorm
                 && Number(rainPoem?.items?.summonBottles || 0) > 0
                 && Number(rainPoem?.summon?.usedToday || 0) < Number(rainPoem?.summon?.dailyUseLimit || 50)) {
@@ -538,6 +551,19 @@ async function runStarActivityAutoClaims() {
                     });
                 } catch (err) {
                     log('活动', `自动使用雷雨召唤瓶失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动召唤', result: 'error' });
+                }
+            }
+
+            if (useRainPoemPrankEnabled
+                && (Number(rainPoem?.items?.frogPrankBottles || 0) > 0
+                    || Number(rainPoem?.items?.cloudPrankBottles || 0) > 0)) {
+                try {
+                    const { runRainPoemPrankPlacement } = require('../services/rain-poem-prank-service');
+                    // 投放服务只在实际成功使用至少一个瓶子时记录完成日志。
+                    // 活动状态与背包二次读取之间若发生库存竞态，保持静默。
+                    await runRainPoemPrankPlacement();
+                } catch (err) {
+                    log('活动', `自动使用使坏瓶失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动使坏', result: 'error' });
                 }
             }
 
@@ -581,6 +607,8 @@ async function runStarActivityAutoClaims() {
 function stopStarActivityClaimTimer() {
     workerScheduler.clear('star_activity_claim_initial');
     workerScheduler.clear('star_activity_claim_interval');
+    workerScheduler.clear('rain_poem_weather_renew');
+    workerScheduler.clear('rain_poem_after_harvest');
     starActivityClaimRunning = false;
 }
 
@@ -880,6 +908,8 @@ function applyRuntimeConfig(config, syncStatusAfter = false) {
             ) || (
                 !prevAuto?.rain_poem_summon_use && newAuto?.rain_poem_summon_use
             ) || (
+                !prevAuto?.rain_poem_prank_use && newAuto?.rain_poem_prank_use
+            ) || (
                 !prevAuto?.rain_poem_research_unlock && newAuto?.rain_poem_research_unlock
             );
             if (starClaimBecameEnabled) {
@@ -1063,6 +1093,11 @@ async function startBot(config) {
         // 收获后自动出售
         if (onFarmHarvested) networkEvents.off('farmHarvested', onFarmHarvested);
         onFarmHarvested = async () => {
+            if (getAutomation().rain_poem_summon_use === true) {
+                workerScheduler.setTimeoutTask('rain_poem_after_harvest', 2000, () => {
+                    runStarActivityAutoClaims().catch(() => null);
+                });
+            }
             if (harvestSellRunning) return;
             if (!getAutomation().sell) return;
             harvestSellRunning = true;
@@ -1256,7 +1291,7 @@ async function handleApiCall(msg) {
                     const { getOwnWeatherStatus } = require('../services/activity');
                     result.weather = await getOwnWeatherStatus();
                 } catch (weatherError) {
-                    result.weather = { weatherId: 0, status: 0, rainstorm: false, error: weatherError.message };
+                    result.weather = { type: 0, status: 0, rainstorm: false, error: weatherError.message };
                 }
                 break;
             case 'getFriends':

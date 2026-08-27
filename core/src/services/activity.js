@@ -35,10 +35,11 @@ const RAIN_POEM_RESEARCH_ACTIVITY_ID = 2026070304;
 const RAIN_POEM_RESEARCH_UNLOCK_CMD = 40;
 const RAIN_POEM_BOTTLE_ITEM_ID = 5001;
 const RAIN_POEM_SUMMON_ITEM_ID = 5002;
+const RAIN_POEM_FROG_PRANK_ITEM_ID = 5005;
+const RAIN_POEM_CLOUD_PRANK_ITEM_ID = 5006;
 const RAIN_POEM_BADGE_ITEM_ID = 1027;
 const RAIN_POEM_START_TIME = 1787709600;
 const RAIN_POEM_END_TIME = 1788883199;
-const RAINSTORM_WEATHER_ID = 1;
 const LIGHTNING_MUTANT_TYPE = 12;
 const RAIN_POEM_SUMMON_DAILY_LIMIT = 50;
 const RAIN_POEM_ITEM_NAMES = new Map([
@@ -493,6 +494,14 @@ function normalizeRainPoemActivity(reply, nowSeconds = Math.floor(Date.now() / 1
   const draw = drawNode?.draw_info || drawNode?.activity?.draw_info || {};
   const research = (researchNode?.weather_research || researchNode?.activity?.weather_research)?.progress || {};
   const weatherTasks = taskNode?.weather_tasks || taskNode?.activity?.weather_tasks || {};
+  const tasks = (weatherTasks?.tasks || []).map(task => ({
+    id: toNum(task?.id), itemId: toNum(task?.item_id), desc: String(task?.desc || ''),
+    target: toNum(task?.target), progress: toNum(task?.progress),
+    reward: normalizeRainPoemItem(task?.reward, RAIN_POEM_BADGE_ITEM_ID),
+  }));
+  const lightningHarvestTask = tasks.find(task => /雷电|闪电/.test(task.desc) && /变异/.test(task.desc) && /收集|收获/.test(task.desc));
+  const lightningHarvestTarget = Math.max(0, toNum(lightningHarvestTask?.target));
+  const lightningHarvestProgress = Math.max(0, toNum(lightningHarvestTask?.progress));
   return {
     uid: RAIN_POEM_ACTIVITY_UID,
     title: String(root?.activity?.title || '雨落成诗'),
@@ -521,11 +530,14 @@ function normalizeRainPoemActivity(reply, nowSeconds = Math.floor(Date.now() / 1
       dailyUseLimit: RAIN_POEM_SUMMON_DAILY_LIMIT,
       durationSeconds: 2 * 60 * 60,
     },
-    tasks: (weatherTasks?.tasks || []).map(task => ({
-      id: toNum(task?.id), itemId: toNum(task?.item_id), desc: String(task?.desc || ''),
-      target: toNum(task?.target), progress: toNum(task?.progress),
-      reward: normalizeRainPoemItem(task?.reward, RAIN_POEM_BADGE_ITEM_ID),
-    })),
+    tasks,
+    lightningHarvest: {
+      progress: lightningHarvestProgress,
+      target: lightningHarvestTarget,
+      remaining: Math.max(0, lightningHarvestTarget - lightningHarvestProgress),
+      complete: lightningHarvestTarget > 0 && lightningHarvestProgress >= lightningHarvestTarget,
+      confirmed: !!lightningHarvestTask,
+    },
     research: {
       currentStage: toNum(research?.current_stage),
       stages: (research?.stages || []).map(stage => ({
@@ -546,14 +558,16 @@ function normalizeRainPoemItem(item, fallbackId = 0) {
 }
 
 function normalizeWeatherStatus(weather, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const weatherId = toNum(weather?.weather_id);
+  // 字段 1 是雷雨阶段而非天气 ID。兼容修复前按 weather_id 解码的对象，
+  // 避免测试夹具或运行中的旧对象在热更新期间被误判。
+  const type = toNum(weather?.type ?? weather?.weather_id);
   const status = toNum(weather?.status);
   const startTime = toNum(weather?.start_time);
   const endTime = toNum(weather?.end_time);
   return {
-    weatherId, status, startTime, endTime,
-    // 自然雷雨为 status=1，召唤瓶生成的雷雨为 status=2。
-    rainstorm: weatherId === RAINSTORM_WEATHER_ID && status > 0
+    type, status, startTime, endTime,
+    // type=1（30 分钟）和 type=2（2 小时）是同一次雷雨的两个有效阶段。
+    rainstorm: (type === 1 || type === 2) && status > 0
       && (!startTime || nowSeconds >= startTime) && (!endTime || nowSeconds <= endTime),
   };
 }
@@ -570,15 +584,17 @@ async function getOwnWeatherStatus() {
 
 async function getRainPoemActivity() {
   const activity = normalizeRainPoemActivity(await getActivityGroup(RAIN_POEM_ACTIVITY_ID, RAIN_POEM_ACTIVITY_UID));
-  const [collectionBottles, summonBottles, badges] = await Promise.all([
-    getBagItemCount(RAIN_POEM_BOTTLE_ITEM_ID), getBagItemCount(RAIN_POEM_SUMMON_ITEM_ID), getBagItemCount(RAIN_POEM_BADGE_ITEM_ID),
+  const [collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, badges] = await Promise.all([
+    getBagItemCount(RAIN_POEM_BOTTLE_ITEM_ID), getBagItemCount(RAIN_POEM_SUMMON_ITEM_ID),
+    getBagItemCount(RAIN_POEM_FROG_PRANK_ITEM_ID), getBagItemCount(RAIN_POEM_CLOUD_PRANK_ITEM_ID),
+    getBagItemCount(RAIN_POEM_BADGE_ITEM_ID),
   ]);
-  activity.items = { collectionBottles, summonBottles, badges };
+  activity.items = { collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, badges };
   mergeRainPoemTaskUsage(activity, getRainPoemSummonUsedToday());
   try {
     activity.weather = await getOwnWeatherStatus();
   } catch (err) {
-    activity.weather = { weatherId: 0, status: 0, rainstorm: false, error: err.message };
+    activity.weather = { type: 0, status: 0, rainstorm: false, error: err.message };
   }
   return activity;
 }

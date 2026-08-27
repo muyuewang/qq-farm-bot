@@ -96,7 +96,9 @@ const SHOW_QIXI_ACTIVITY = false
 const SHOW_STAR_ACTIVITY = false
 const nowMs = ref(Date.now())
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
-const showRainPoemActivity = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
+const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
+const selectedActivity = ref<'rain-poem' | null>(null)
+const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
 const activeSection = ref<ActivitySectionKey>('journey')
 const showActivityAnalysis = ref(false)
 const ACTIVITY_REFRESH_INTERVAL_MS = 30_000
@@ -108,6 +110,47 @@ const sections = computed<ActivitySection[]>(() => [
   { key: 'notes', label: '节令小札', icon: 'i-carbon-notebook', count: activity.value?.solarTerms?.claimableCount || 0 },
 ])
 
+function activityWindowStatus(window: { startMs: number, endMs: number }): 'upcoming' | 'active' | 'ended' {
+  if (nowMs.value < window.startMs)
+    return 'upcoming'
+  if (nowMs.value > window.endMs)
+    return 'ended'
+  return 'active'
+}
+
+const activityCards = computed(() => [
+  {
+    key: 'rain-poem' as const,
+    title: '雨落成诗',
+    description: '查看天气、每日进度与气象研究',
+    image: '/activity/rain-poem/day-rain-bg.jpg',
+    icon: 'i-carbon-rain-heavy',
+    window: RAIN_POEM_ACTIVITY_WINDOW,
+    updatedMs: RAIN_POEM_ACTIVITY_WINDOW.updatedMs,
+    status: activityWindowStatus(RAIN_POEM_ACTIVITY_WINDOW),
+  },
+].sort((left, right) => right.updatedMs - left.updatedMs || right.window.startMs - left.window.startMs))
+const filteredActivityCards = computed(() => activityStatusFilter.value === 'all'
+  ? activityCards.value
+  : activityCards.value.filter(card => card.status === activityStatusFilter.value))
+const activityStatusFilters = [
+  { key: 'all' as const, label: '全部' },
+  { key: 'active' as const, label: '进行中' },
+  { key: 'upcoming' as const, label: '未开始' },
+  { key: 'ended' as const, label: '已结束' },
+]
+
+function formatActivityDateTime(timestampMs: number) {
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(timestampMs))
+}
+
 async function refreshAll() {
   if (currentAccountId.value && !rainPoemLoading.value && !heluLoading.value && !qixiLoading.value) {
     const requests = []
@@ -115,7 +158,7 @@ async function refreshAll() {
       requests.push(activityStore.fetchHeluActivity(String(currentAccountId.value)))
     if (SHOW_QIXI_ACTIVITY)
       requests.push(activityStore.fetchQixiActivity(String(currentAccountId.value)))
-    if (showRainPoemActivity.value)
+    if (rainPoemActivityActive.value)
       requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
     await Promise.all(requests)
   }
@@ -192,11 +235,13 @@ watch(currentAccountId, () => {
   activityStore.clearActivityData()
   refreshAll()
 })
-watch(showRainPoemActivity, (visible) => {
-  if (visible)
+watch(rainPoemActivityActive, (active) => {
+  if (active)
     refreshAll()
-  else
+  else {
+    selectedActivity.value = null
     activityStore.clearActivityData()
+  }
 })
 onMounted(() => {
   nowTimer = window.setInterval(() => {
@@ -271,16 +316,89 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <RainPoemActivityPanel
-      v-if="showRainPoemActivity && currentAccountId"
-      :activity="rainPoemActivity"
-      :loading="rainPoemLoading"
-      @refresh="refreshAll"
-    />
-    <div v-else-if="showRainPoemActivity && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
-      {{ L.needAccount }}
+    <section v-if="!selectedActivity" class="space-y-4">
+      <header class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-baseline gap-2">
+            <h1 class="text-lg text-gray-900 font-semibold dark:text-white">
+              活动中心
+            </h1>
+            <span class="text-xs text-gray-400">{{ activityCards.length }} 个活动</span>
+          </div>
+          <div class="inline-flex rounded-lg bg-gray-100 p-0.5 dark:bg-gray-800" role="group" aria-label="活动状态筛选">
+            <button
+              v-for="filter in activityStatusFilters"
+              :key="filter.key"
+              class="rounded-md px-2.5 py-1 text-xs transition"
+              :class="activityStatusFilter === filter.key ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'"
+              :aria-pressed="activityStatusFilter === filter.key"
+              @click="activityStatusFilter = filter.key"
+            >
+              {{ filter.label }}
+            </button>
+          </div>
+        </div>
+        <BaseButton v-if="userStore.isAdmin" variant="secondary" @click="showActivityAnalysis = true">
+          <span class="i-carbon-analytics mr-1.5" />
+          活动分析
+        </BaseButton>
+      </header>
+
+      <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <button
+          v-for="card in filteredActivityCards"
+          :key="card.key"
+          class="group relative min-h-52 overflow-hidden rounded-lg text-left text-white shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500 focus-visible:ring-offset-2"
+          :class="card.status === 'ended' ? 'cursor-not-allowed grayscale opacity-60' : card.status === 'upcoming' ? 'cursor-not-allowed opacity-75' : 'hover:-translate-y-0.5 hover:shadow-lg'"
+          :disabled="card.status !== 'active'"
+          @click="selectedActivity = card.key"
+        >
+          <img :src="card.image" alt="" class="absolute inset-0 h-full w-full object-cover transition duration-500" :class="card.status === 'active' && 'group-hover:scale-105'">
+          <div class="absolute inset-0 bg-gradient-to-t from-[#071621]/95 via-[#102b3c]/48 to-[#173445]/15" />
+          <div class="relative flex min-h-52 flex-col justify-between p-5">
+            <div class="flex items-start justify-between gap-3">
+              <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium backdrop-blur-sm" :class="card.status === 'active' ? 'bg-cyan-100/90 text-cyan-950' : 'bg-gray-100/85 text-gray-700'">
+                <span :class="card.status === 'active' ? 'i-carbon-events' : card.status === 'upcoming' ? 'i-carbon-time' : 'i-carbon-checkmark'" />
+                {{ card.status === 'active' ? '进行中' : card.status === 'upcoming' ? '未开始' : '已结束' }}
+              </span>
+              <span v-if="card.status === 'active'" class="i-carbon-arrow-up-right text-xl text-white/80 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            </div>
+            <div>
+              <h2 class="text-2xl font-semibold">
+                {{ card.title }}
+              </h2>
+              <p class="mt-1 text-sm text-cyan-50/80">
+                {{ formatActivityDateTime(card.window.startMs) }} — {{ formatActivityDateTime(card.window.endMs) }}
+              </p>
+              <div class="mt-4 flex items-center gap-2 text-xs text-white/65">
+                <span :class="card.icon" class="text-base text-cyan-200" />
+                {{ card.description }}
+              </div>
+            </div>
+          </div>
+        </button>
+      </div>
+      <div v-if="!filteredActivityCards.length" class="rounded-lg border border-gray-200 border-dashed p-8 text-center text-sm text-gray-500 dark:border-gray-700">
+        当前筛选条件下暂无活动
+      </div>
+    </section>
+
+    <div v-else-if="selectedActivity === 'rain-poem'" class="space-y-3">
+      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
+        <span class="i-carbon-arrow-left" />
+        返回活动列表
+      </button>
+      <RainPoemActivityPanel
+        v-if="rainPoemActivityActive && currentAccountId"
+        :activity="rainPoemActivity"
+        :loading="rainPoemLoading"
+        @refresh="refreshAll"
+      />
+      <div v-else-if="rainPoemActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+        {{ L.needAccount }}
+      </div>
     </div>
-    <div v-else-if="!SHOW_STAR_ACTIVITY" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+    <div v-else-if="!SHOW_STAR_ACTIVITY && selectedActivity" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
       <div class="i-carbon-events mx-auto mb-3 text-4xl text-gray-300" />
       <p>当前暂无进行中的活动。</p>
       <BaseButton v-if="userStore.isAdmin" class="mt-4" variant="secondary" @click="showActivityAnalysis = true">

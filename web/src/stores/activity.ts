@@ -172,11 +172,11 @@ export interface RainPoemActivityData {
   startTime: number
   endTime: number
   active: boolean
-  items: { collectionBottles: number, summonBottles: number, badges: number }
+  items: { collectionBottles: number, summonBottles: number, frogPrankBottles: number, cloudPrankBottles: number, badges: number }
   shop: { purchasedToday: boolean, available: boolean, dailyLimit: number, cost: QixiItem, item: QixiItem }
   collection: { remainingUseCount: number, dailyUseLimit: number, reward: QixiItem }
   summon: { itemId: number, dailyUseLimit: number, durationSeconds: number, usedToday: number }
-  weather?: { weatherId: number, status: number, startTime?: number, endTime?: number, rainstorm: boolean, error?: string }
+  weather?: { type: number, status: number, startTime?: number, endTime?: number, rainstorm: boolean, error?: string }
   tasks: Array<{ id: number, itemId: number, desc: string, target: number, progress: number, reward: QixiItem }>
   research: { currentStage: number, stages: Array<{ id: number, status: number, available: boolean, completed: boolean, claimed: boolean, cost: QixiItem, reward: QixiItem }> }
 }

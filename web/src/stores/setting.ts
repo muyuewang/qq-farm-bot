@@ -22,6 +22,7 @@ export interface AutomationConfig {
   rain_poem_bottle_buy?: boolean
   rain_poem_weather_collect?: boolean
   rain_poem_summon_use?: boolean
+  rain_poem_prank_use?: boolean
   rain_poem_research_unlock?: boolean
   sell?: boolean
   fertilizer_gift?: boolean

@@ -68,7 +68,25 @@ const tabs = [
 ] as const
 
 const modalVisible = ref(false)
+const defaultPlanSettingId = ref('')
 const defaultPlanApplyingId = ref('')
+const defaultPlanConfirmation = ref<{
+  action: 'set' | 'apply'
+  account: any
+} | null>(null)
+const defaultPlanConfirmationVisible = computed(() => !!defaultPlanConfirmation.value)
+const defaultPlanConfirmationTitle = computed(() =>
+  defaultPlanConfirmation.value?.action === 'set' ? '设置默认方案' : '应用默认方案',
+)
+const defaultPlanConfirmationMessage = computed(() => {
+  const pending = defaultPlanConfirmation.value
+  if (!pending)
+    return ''
+  const accountName = pending.account?.name || pending.account?.id
+  return pending.action === 'set'
+    ? `确定将 ${accountName} 的当前配置设置为默认方案吗？这会覆盖此前保存的默认方案。`
+    : `确定将默认方案应用到 ${accountName} 吗？这会覆盖该账号当前的相关配置。`
+})
 const modalConfig = ref({
   title: '',
   message: '',
@@ -274,7 +292,7 @@ async function saveSystemSettings() {
 }
 
 async function applyDefaultPlan(account: any) {
-  if (!account?.id || defaultPlanApplyingId.value)
+  if (!account?.id || defaultPlanSettingId.value || defaultPlanApplyingId.value)
     return
   const accountId = String(account.id)
   defaultPlanApplyingId.value = accountId
@@ -298,6 +316,48 @@ async function applyDefaultPlan(account: any) {
   finally {
     defaultPlanApplyingId.value = ''
   }
+}
+
+async function setDefaultPlan(account: any) {
+  if (!account?.id || defaultPlanSettingId.value || defaultPlanApplyingId.value)
+    return
+  const accountId = String(account.id)
+  defaultPlanSettingId.value = accountId
+  try {
+    const { data } = await api.post('/api/settings/default-plan/import', {}, {
+      headers: { 'x-account-id': accountId },
+    })
+    if (!data?.ok)
+      throw new Error(data?.error || '设置失败')
+    showAlert(`已将 ${account.name || account.id} 的配置设置为默认方案`)
+  }
+  catch (error: any) {
+    showAlert(error.response?.data?.error || error.message || '设置默认方案失败', 'danger')
+  }
+  finally {
+    defaultPlanSettingId.value = ''
+  }
+}
+
+function requestDefaultPlanConfirmation(action: 'set' | 'apply', account: any) {
+  if (!account?.id || defaultPlanSettingId.value || defaultPlanApplyingId.value)
+    return
+  defaultPlanConfirmation.value = { action, account }
+}
+
+function closeDefaultPlanConfirmation() {
+  defaultPlanConfirmation.value = null
+}
+
+function confirmDefaultPlanOperation() {
+  const pending = defaultPlanConfirmation.value
+  if (!pending)
+    return
+  closeDefaultPlanConfirmation()
+  if (pending.action === 'set')
+    void setDefaultPlan(pending.account)
+  else
+    void applyDefaultPlan(pending.account)
 }
 
 watch(currentAccountId, async () => {
@@ -372,6 +432,7 @@ onMounted(async () => {
           :show-clear-stopped-confirm="showClearStoppedConfirm"
           :clear-stopped-loading="clearStoppedLoading"
           :refresh-wx-codes-loading="refreshWxCodesLoading"
+          :default-plan-setting-id="defaultPlanSettingId"
           :default-plan-applying-id="defaultPlanApplyingId"
           @add="openAddModal"
           @clear-stopped="openClearStoppedConfirm"
@@ -379,7 +440,8 @@ onMounted(async () => {
           @select="selectAccount"
           @toggle="toggleAccount"
           @settings="openAccountSettings"
-          @apply-default-plan="applyDefaultPlan"
+          @set-default-plan="requestDefaultPlanConfirmation('set', $event)"
+          @apply-default-plan="requestDefaultPlanConfirmation('apply', $event)"
           @edit="openEditModal"
           @delete="handleDelete"
           @saved="handleSaved"
@@ -510,6 +572,17 @@ onMounted(async () => {
         </div>
       </div>
     </div>
+
+    <ConfirmModal
+      :show="defaultPlanConfirmationVisible"
+      :title="defaultPlanConfirmationTitle"
+      :message="defaultPlanConfirmationMessage"
+      type="danger"
+      confirm-text="确认执行"
+      @confirm="confirmDefaultPlanOperation"
+      @close="closeDefaultPlanConfirmation"
+      @cancel="closeDefaultPlanConfirmation"
+    />
 
     <ConfirmModal
       :show="modalVisible"
