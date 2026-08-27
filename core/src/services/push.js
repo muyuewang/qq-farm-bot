@@ -1,10 +1,47 @@
 const nodemailer = require('nodemailer');
+const crypto = require('node:crypto');
 
 let pushoo = null;
 try {
   pushoo = require('pushoo').default;
 } catch {
   pushoo = null;
+}
+
+const DINGTALK_WEBHOOK_PREFIX = 'https://oapi.dingtalk.com/robot/send?access_token=';
+
+function createDingTalkSign(secret, timestamp) {
+  const secretText = assertRequiredText('钉钉加签密钥', secret);
+  const ts = String(timestamp || Date.now());
+  const stringToSign = `${ts}\n${secretText}`;
+  return crypto
+    .createHmac('sha256', secretText)
+    .update(stringToSign, 'utf8')
+    .digest('base64');
+}
+
+function buildDingTalkWebhook(endpoint, token, secret, timestamp) {
+  const credential = assertRequiredText('钉钉 token', token);
+  let url = `${DINGTALK_WEBHOOK_PREFIX}${encodeURIComponent(credential)}`;
+  if (secret) {
+    const sign = createDingTalkSign(secret, timestamp || Date.now());
+    const signTimestamp = String(timestamp || Date.now());
+    url += `&timestamp=${encodeURIComponent(signTimestamp)}&sign=${encodeURIComponent(sign)}`;
+  }
+  return url;
+}
+
+async function sendDingTalkMessage(payload = {}) {
+  const { endpoint, token, secret, title, content } = payload;
+  const url = buildDingTalkWebhook(endpoint, token, secret);
+  const body = { msgtype: 'markdown', markdown: { title: title || '通知', text: content || '' } };
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  return parsePushResult(result);
 }
 
 function assertRequiredText(name, value) {
@@ -72,16 +109,23 @@ function parsePushResult(result) {
  * @returns {{ ok, code, msg, raw }}
  */
 async function sendPushooMessage(payload = {}) {
+  const channel = assertRequiredText('推送渠道', payload.channel).toLowerCase();
+  const endpoint = String(payload.endpoint || '').trim();
+  const rawToken = String(payload.token || '').trim();
+  const secret = String(payload.secret || '').trim();
+  const title = assertRequiredText('推送标题', payload.title);
+  const content = assertRequiredText('推送内容', payload.content);
+
+  // 钉钉渠道直接使用内置签名逻辑
+  if (channel === 'dingtalk') {
+    return sendDingTalkMessage({ endpoint, token: rawToken, secret, title, content });
+  }
+
   if (!pushoo) {
     throw new Error('缺少 pushoo 依赖，请在 core 目录执行 npm install');
   }
 
-  const channel = assertRequiredText('推送渠道', payload.channel).toLowerCase();
-  const endpoint = String(payload.endpoint || '').trim();
-  const rawToken = String(payload.token || '').trim();
   const token = channel === 'webhook' ? rawToken : assertRequiredText('推送 token', rawToken);
-  const title = assertRequiredText('推送标题', payload.title);
-  const content = assertRequiredText('推送内容', payload.content);
 
   const request = { title, content };
   if (token) request.token = token;

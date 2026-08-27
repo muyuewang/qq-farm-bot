@@ -253,7 +253,8 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
 }
 
 /** Promise 版发送 */
-function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 20000) {
+function sendMsgAsync(serviceName, methodName, bodyBytes, options = 20000) {
+    const timeout = typeof options === 'number' ? options : (options.timeoutMs || 20000);
     return new Promise((resolve, reject) => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             reject(new Error(`连接未打开: ${methodName}`));
@@ -303,6 +304,7 @@ function handleMessage(data) {
     try {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         const msg = types.GateMessage.decode(buf);
+        lastInboundAt = Date.now();
         const meta = msg.meta;
         if (!meta) return;
 
@@ -654,41 +656,32 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
 
 // ============ 心跳 ============
 let lastHeartbeatResponse = Date.now();
+let lastInboundAt = Date.now();
 let heartbeatMissCount = 0;
 const HEARTBEAT_TIMEOUT = 30000;
+const HEARTBEAT_STALE_AFTER_MS = 30000;
 const MAX_HEARTBEAT_MISS = 3;
+
+function shouldTerminateForHeartbeat(missCount, inboundSilenceMs) {
+    return Number(missCount) >= MAX_HEARTBEAT_MISS
+        && Number(inboundSilenceMs) > HEARTBEAT_STALE_AFTER_MS;
+}
 
 function startHeartbeat() {
     networkScheduler.clear('heartbeat_interval');
     lastHeartbeatResponse = Date.now();
+    lastInboundAt = Date.now();
     heartbeatMissCount = 0;
 
     networkScheduler.setIntervalTask('heartbeat_interval', CONFIG.heartbeatInterval, () => {
         if (!userState.gid) return;
 
-        const timeSinceLastResponse = Date.now() - lastHeartbeatResponse;
-        if (timeSinceLastResponse > HEARTBEAT_TIMEOUT) {
-            heartbeatMissCount++;
-            logWarn('心跳', `连接可能已断开 (${Math.round(timeSinceLastResponse/1000)}s 无响应, miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISS}, pending=${pendingCallbacks.size})`);
-            if (heartbeatMissCount >= MAX_HEARTBEAT_MISS) {
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    log('心跳', '连接已关闭，立即重连...');
-                } else {
-                    log('心跳', '心跳超时，关闭连接并重连...');
-                    try { ws.close(); } catch { }
-                }
-                networkEvents.emit('disconnect', { code: 'heartbeat_timeout' });
-                rejectAllPendingRequests('连接超时，已清理');
-                reconnect(null);
-                return;
-            }
-        }
-
         const body = types.HeartbeatRequest.encode(types.HeartbeatRequest.create({
             gid: toLong(userState.gid),
             client_version: CONFIG.clientVersion,
+            field_3: toLong(0),
         })).finish();
-        sendMsgAsync('gamepb.userpb.UserService', 'Heartbeat', body).then(({ body: replyBody }) => {
+        sendMsgAsync('gamepb.userpb.UserService', 'Heartbeat', body, { timeoutMs: 20000, priority: 'high' }).then(({ body: replyBody }) => {
             lastHeartbeatResponse = Date.now();
             heartbeatMissCount = 0;
             try {
@@ -700,7 +693,23 @@ function startHeartbeat() {
                     syncServerTime(serverTimeMs);
                 }
             } catch { }
-        }).catch(() => { });
+        }).catch(() => {
+            heartbeatMissCount += 1;
+            const now = Date.now();
+            const inboundSilenceMs = Math.max(0, now - lastInboundAt);
+            const heartbeatSilenceMs = Math.max(0, now - lastHeartbeatResponse);
+            logWarn('心跳', `心跳未响应(miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISS}, heartbeat=${Math.round(heartbeatSilenceMs / 1000)}s, inbound=${Math.round(inboundSilenceMs / 1000)}s, pending=${pendingCallbacks.size})`);
+            if (!shouldTerminateForHeartbeat(heartbeatMissCount, inboundSilenceMs)) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                log('心跳', '连接已关闭，立即重连...');
+            } else {
+                log('心跳', '心跳超时，关闭连接并重连...');
+                try { ws.close(); } catch { }
+            }
+            networkEvents.emit('disconnect', { code: 'heartbeat_timeout', reason: `${Math.round(inboundSilenceMs / 1000)}s 无入站数据，连续 ${heartbeatMissCount} 次心跳无响应` });
+            rejectAllPendingRequests('连接超时，已清理');
+            reconnect(null);
+        });
     });
 }
 
