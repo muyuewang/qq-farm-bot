@@ -7,6 +7,7 @@ import AccountFeatureSettings from '@/components/settings/AccountFeatureSettings
 import AccountSettingsTab from '@/components/settings/AccountSettingsTab.vue'
 import OfflineReminderCard from '@/components/settings/OfflineReminderCard.vue'
 import PasswordChangeCard from '@/components/settings/PasswordChangeCard.vue'
+import BaseButton from '@/components/ui/BaseButton.vue'
 import { useAccountSettings } from '@/composables/settings/useAccountSettings'
 import { useAutomationSettings } from '@/composables/settings/useAutomationSettings'
 import { useStrategySettings } from '@/composables/settings/useStrategySettings'
