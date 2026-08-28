@@ -308,6 +308,10 @@ export const useActivityStore = defineStore('activity', () => {
   const scanPending = ref(false)
   const frogPending = ref(false)
   const cloudPending = ref(false)
+  const buyPending = ref(false)
+  const collectPending = ref(false)
+  const summonPending = ref(false)
+  const researchPending = ref(false)
   const qixiFriends = ref<QixiFriend[]>([])
   const qixiLoading = ref(false)
   const qixiBuildLoading = ref(false)
@@ -401,6 +405,50 @@ export const useActivityStore = defineStore('activity', () => {
       return data
     }
     finally { cloudPending.value = false }
+  }
+
+  async function buyRainPoemBottle(accountId: string) {
+    buyPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/bottle/buy', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { buyPending.value = false }
+  }
+
+  async function collectRainPoemWeather(accountId: string) {
+    collectPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/collect', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { collectPending.value = false }
+  }
+
+  async function useSummonBottle(accountId: string) {
+    summonPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/summon/use', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { summonPending.value = false }
+  }
+
+  async function unlockWeatherResearch(accountId: string) {
+    researchPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/rain-poem/research/unlock', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        rainPoemActivity.value = data.activity
+      return data
+    }
+    finally { researchPending.value = false }
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -617,6 +665,10 @@ export const useActivityStore = defineStore('activity', () => {
     scanPending,
     frogPending,
     cloudPending,
+    buyPending,
+    collectPending,
+    summonPending,
+    researchPending,
     qixiFriends,
     qixiLoading,
     qixiBuildLoading,
@@ -638,6 +690,10 @@ export const useActivityStore = defineStore('activity', () => {
     scanWeatherFriends,
     useWeatherFrogBottle,
     useWeatherCloudBottle,
+    buyRainPoemBottle,
+    collectRainPoemWeather,
+    useSummonBottle,
+    unlockWeatherResearch,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,

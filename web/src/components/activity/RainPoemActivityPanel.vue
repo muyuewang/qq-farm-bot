@@ -10,12 +10,20 @@ const props = defineProps<{
   scanPending?: boolean
   frogPending?: boolean
   cloudPending?: boolean
+  buyPending?: boolean
+  collectPending?: boolean
+  summonPending?: boolean
+  researchPending?: boolean
 }>()
 const emit = defineEmits<{
   refresh: []
   scanFriends: []
   useFrog: [friendGid: number]
   useCloud: [friendGid: number, landId: number]
+  buyBottle: []
+  collectWeather: []
+  useSummon: []
+  unlockResearch: []
 }>()
 
 const selectedFriend = ref<WeatherFriend | null>(null)
@@ -27,10 +35,6 @@ const collectionLimit = computed(() => props.activity?.collection.dailyUseLimit 
 const collectionRemaining = computed(() => props.activity?.collection.remainingUseCount || 0)
 const collectionUsed = computed(() => Math.max(0, collectionLimit.value - collectionRemaining.value))
 const collectionProgress = computed(() => collectionLimit.value ? Math.min(100, collectionUsed.value / collectionLimit.value * 100) : 0)
-
-const thunderstormFriends = computed(() =>
-  (props.weatherFriends || []).filter(f => f.rainstorm && !f.expired && !f.collected),
-)
 
 const lightningAttackItems = computed(() => {
   if (!props.activity?.lightningSense) return 0
@@ -81,6 +85,22 @@ function handleUseFrog(friendGid: number) {
 function handleUseCloud() {
   if (!selectedFriend.value || !selectedLandId.value) return
   emit('useCloud', selectedFriend.value.gid, Number(selectedLandId.value))
+}
+
+function handleBuyBottle() {
+  emit('buyBottle')
+}
+
+function handleCollectWeather() {
+  emit('collectWeather')
+}
+
+function handleUseSummon() {
+  emit('useSummon')
+}
+
+function handleUnlockResearch() {
+  emit('unlockResearch')
 }
 </script>
 
@@ -227,6 +247,9 @@ function handleUseCloud() {
           <p class="mt-1 text-xs text-cyan-600 dark:text-cyan-400">
             {{ selectedFriend.name }} 的农场正在雷雨中，可以使用采集瓶
           </p>
+          <BaseButton size="sm" class="mt-2" variant="success" :loading="collectPending" :disabled="collectPending" @click="handleCollectWeather">
+            使用采集瓶
+          </BaseButton>
         </div>
 
         <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-purple-50 p-4 dark:bg-purple-950/20">
@@ -285,15 +308,18 @@ function handleUseCloud() {
           <div class="text-xs text-gray-500">乌云使坏瓶</div>
           <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity?.items.cloudPrankBottles || 0 }}</div>
         </div>
-        <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
-          <div class="text-xs text-gray-500">可采集好友</div>
-          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ thunderstormFriends.length }}</div>
+        <div class="rounded-lg bg-cyan-50 p-3 text-center dark:bg-cyan-950/20">
+          <div class="text-xs text-cyan-600 dark:text-cyan-400">雷雨召唤瓶</div>
+          <div class="mt-1 text-lg font-bold text-cyan-700 dark:text-cyan-300">{{ activity?.items.summonBottles || 0 }}</div>
         </div>
         <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
-          <div class="text-xs text-gray-500">已扫描好友</div>
-          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ weatherFriends?.length || 0 }}</div>
+          <div class="text-xs text-gray-500">天气采集瓶</div>
+          <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity?.items.collectionBottles || 0 }}</div>
         </div>
       </div>
+      <BaseButton v-if="(activity?.items.summonBottles || 0) > 0" size="sm" class="mt-3" variant="success" :loading="summonPending" :disabled="summonPending" @click="handleUseSummon">
+        使用召唤瓶（在我的农场召唤雷雨）
+      </BaseButton>
     </article>
 
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(18rem,0.75fr)]">
@@ -340,6 +366,9 @@ function handleUseCloud() {
           <span class="text-gray-500">持有数量</span>
           <strong class="text-gray-900 dark:text-white">{{ activity?.items.collectionBottles || 0 }}</strong>
         </div>
+        <BaseButton v-if="activity?.shop.available && !activity?.shop.purchasedToday" size="sm" class="mt-3 w-full" :loading="buyPending" :disabled="buyPending" @click="handleBuyBottle">
+          购买采集瓶
+        </BaseButton>
       </article>
     </div>
 
@@ -413,6 +442,9 @@ function handleUseCloud() {
             <span class="text-gray-500">消耗 {{ stage.cost.itemName }} ×{{ stage.cost.itemCount }}</span>
             <span class="font-medium" :class="stage.completed ? 'text-emerald-600' : stage.available ? 'text-cyan-600' : 'text-gray-400'">{{ stage.completed ? '已解锁' : stage.available ? '当前可解锁' : '需解锁前置节点' }}</span>
           </div>
+          <BaseButton v-if="stage.available && !stage.completed" size="sm" class="mt-2 w-full" :loading="researchPending" :disabled="researchPending" @click="handleUnlockResearch">
+            解锁
+          </BaseButton>
         </div>
         <div v-if="!activity?.research.stages?.length" class="border border-gray-200 rounded-lg border-dashed p-6 text-center text-sm text-gray-500 dark:border-gray-700">
           暂无研究状态

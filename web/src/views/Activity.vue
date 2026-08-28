@@ -95,6 +95,10 @@ const {
   scanPending,
   frogPending,
   cloudPending,
+  buyPending,
+  collectPending,
+  summonPending,
+  researchPending,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
@@ -406,6 +410,46 @@ async function useWeatherCloudBottle(friendGid: number, landId: number) {
     toast.error(friendlyActivityError(result?.error || '乌云使坏失败'))
 }
 
+async function buyRainPoemBottle() {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.buyRainPoemBottle(String(currentAccountId.value))
+  if (result?.ok)
+    toast.success('购买采集瓶成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '购买采集瓶失败'))
+}
+
+async function collectRainPoemWeather() {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.collectRainPoemWeather(String(currentAccountId.value))
+  if (result?.ok)
+    toast.success('采集雷雨成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '采集雷雨失败'))
+}
+
+async function useSummonBottle() {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.useSummonBottle(String(currentAccountId.value))
+  if (result?.ok)
+    toast.success('召唤雷雨成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '召唤雷雨失败'))
+}
+
+async function unlockWeatherResearch() {
+  if (!currentAccountId.value)
+    return
+  const result = await activityStore.unlockWeatherResearch(String(currentAccountId.value))
+  if (result?.ok)
+    toast.success('解锁研究成功')
+  else
+    toast.error(friendlyActivityError(result?.error || '解锁研究失败'))
+}
+
 async function claimRecords() {
   if (!currentAccountId.value)
     return
@@ -618,10 +662,18 @@ onUnmounted(() => {
         :scan-pending="scanPending"
         :frog-pending="frogPending"
         :cloud-pending="cloudPending"
+        :buy-pending="buyPending"
+        :collect-pending="collectPending"
+        :summon-pending="summonPending"
+        :research-pending="researchPending"
         @refresh="refreshAll"
         @scan-friends="scanWeatherFriends"
         @use-frog="useWeatherFrogBottle"
         @use-cloud="useWeatherCloudBottle"
+        @buy-bottle="buyRainPoemBottle"
+        @collect-weather="collectRainPoemWeather"
+        @use-summon="useSummonBottle"
+        @unlock-research="unlockWeatherResearch"
       />
       <div v-else-if="rainPoemActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
         {{ L.needAccount }}
