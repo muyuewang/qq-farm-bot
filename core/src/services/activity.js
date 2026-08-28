@@ -744,13 +744,17 @@ async function scanWeatherFriends() {
       entered = true;
       const weather = normalizeWeatherStatus(visit?.weather);
       results.push({
-        gid, name: String(friend?.name || ''),
-        isThunderstorm: !!weather.rainstorm,
+        gid,
+        name: String(friend?.name || ''),
+        avatar: friend?.avatarUrl || friend?.avatar_url || '',
+        rainstorm: !!weather.rainstorm,
         weatherType: weather.type || 0,
         weatherStatus: weather.status || 0,
+        collected: false,
+        expired: false,
       });
     } catch {
-      results.push({ gid, name: String(friend?.name || ''), error: '检查失败' });
+      results.push({ gid, name: String(friend?.name || ''), avatar: friend?.avatarUrl || friend?.avatar_url || '', error: '检查失败' });
     } finally {
       if (entered) {
         try { await leaveFriendFarm(gid); } catch {}
