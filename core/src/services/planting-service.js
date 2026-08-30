@@ -278,23 +278,11 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
     return { reservedLandIds: [], plantedMasterIds: [], plantedCount: 0, occupiedCount: 0 };
   }
   const userState = getUserState();
-  const userLevel = Number(userState && userState.level) || 0;
   const sortedSize2Seeds = bagSeeds
     .filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 2)
     .sort(compareBagSeedGameOrder)
     .map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
-  const lockedByLevelSeeds = sortedSize2Seeds.filter(seed => isSeedLockedByLevel(seed, userLevel));
-  const size2Seeds = sortedSize2Seeds.filter(seed => !isSeedLockedByLevel(seed, userLevel));
-
-  if (lockedByLevelSeeds.length > 0) {
-    log('种植', `已跳过当前等级未解锁的 2x2 背包种子: ${lockedByLevelSeeds.map(seed => seed.name || seed.seedId).join('，')}`, {
-      module: 'farm',
-      event: '种植2x2作物',
-      result: 'skip_locked',
-      seedIds: lockedByLevelSeeds.map(seed => seed.seedId),
-      userLevel,
-    });
-  }
+  const size2Seeds = sortedSize2Seeds;
 
   const totalSeedCount = size2Seeds.reduce((sum, seed) => sum + seed.count, 0);
   if (totalSeedCount <= 0) {
