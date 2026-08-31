@@ -21,6 +21,7 @@ const props = defineProps<{
   strategyPreviewLabel: string | null
   fertilizerLandTypeOptions: any[]
   fertilizerOptions: any[]
+  availableSeeds?: Array<{ seedId: number, name: string, requiredLevel?: number }>
 }>()
 
 const emit = defineEmits<{
@@ -370,6 +371,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
                   :planting-strategy-options="plantingStrategyOptions"
                   :bag-fallback-strategy-options="bagFallbackStrategyOptions"
                   :strategy-preview-label="strategyPreviewLabel"
+                  :available-seeds="availableSeeds"
                 />
               </section>
             </div>

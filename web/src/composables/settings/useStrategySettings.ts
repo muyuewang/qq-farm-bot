@@ -198,6 +198,7 @@ export function useStrategySettings({
     plantingStrategyOptions,
     bagFallbackStrategyOptions,
     strategyPreviewLabel,
+    availableSeeds: seeds,
     syncLocalStrategySettings,
     loadStrategyData,
     saveStrategySettings,
