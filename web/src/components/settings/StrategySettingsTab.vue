@@ -14,6 +14,8 @@ interface SeedItem {
   seedId: number
   name: string
   requiredLevel?: number
+  locked?: boolean
+  soldOut?: boolean
 }
 
 interface StrategySettings {
@@ -79,9 +81,13 @@ const prioritySeeds = computed(() =>
     .filter(Boolean) as SeedItem[],
 )
 
+const purchasableSeeds = computed(() =>
+  props.availableSeeds.filter(s => !s.locked && !s.soldOut),
+)
+
 const candidateSeeds = computed(() => {
   const chosen = new Set(settings.value.plantSeedPriority)
-  return props.availableSeeds.filter(s => !chosen.has(s.seedId))
+  return purchasableSeeds.value.filter(s => !chosen.has(s.seedId))
 })
 
 function addSeed(seedId: number) {
