@@ -305,6 +305,7 @@ function createDataProvider(deps) {
                 autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(id),
                 bagSeedPriority: store.getBagSeedPriority(id),
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(id),
+                plantSeedPriority: store.getPlantSeedPriority(id),
                 configRevision: rev
             };
         },

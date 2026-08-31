@@ -61,6 +61,7 @@ function createRuntimeState(deps) {
             bagSeedPriority: store.getBagSeedPriority(accountId),
             bagSeedKnownIds: store.getConfigSnapshot(accountId).bagSeedKnownIds,
             bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(accountId),
+            plantSeedPriority: store.getPlantSeedPriority(accountId),
             autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(accountId),
             capitalMode: store.getCapitalMode(accountId),
             __revision: configRevision

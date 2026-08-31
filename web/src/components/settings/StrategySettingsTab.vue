@@ -14,6 +14,7 @@ interface StrategySettings {
   prioritize2x2Crops: boolean
   bagSeedPriority: number[]
   bagSeedFallbackStrategy: string
+  plantSeedPriority: number[]
   stealDelaySeconds: number
   intervals: {
     farmMin: number
@@ -61,6 +62,12 @@ function selectBagFallbackStrategy(value: string | number) {
 
 function isBagFallbackStrategySelected(value: string | number) {
   return settings.value.bagSeedFallbackStrategy === value
+}
+
+function onPlantSeedPriorityChange(e: Event) {
+  const input = (e.target as HTMLInputElement).value
+  const ids = input.split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n) && n > 0)
+  settings.value.plantSeedPriority = ids
 }
 </script>
 
@@ -134,6 +141,22 @@ function isBagFallbackStrategySelected(value: string | number) {
             </span>
           </button>
         </div>
+      </div>
+
+      <div v-if="settings.plantingStrategy === 'seed_priority'" class="flex flex-col gap-2">
+        <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
+          优先种植种子 ID 列表（按顺序优先）
+        </label>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          输入种子 ID，用逗号分隔。商店购买时会按此顺序优先选择。
+        </p>
+        <input
+          :value="settings.plantSeedPriority.join(',')"
+          type="text"
+          class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800"
+          placeholder="例: 102001,102002,102003"
+          @change="onPlantSeedPriorityChange"
+        >
       </div>
 
       <StrategyTimingPanel v-model:settings="settings" :section="timingSection" />

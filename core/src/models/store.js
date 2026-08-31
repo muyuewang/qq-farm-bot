@@ -346,6 +346,7 @@ const DEFAULT_ACCOUNT_CONFIG = {
     bagSeedPriority: [],
     bagSeedKnownIds: [],
     bagSeedFallbackStrategy: 'level',
+    plantSeedPriority: [],
     autoAcceptFriendMinLevel: 0,
     goldenBugKeepCount: 0,
     goldenBugRoundLimit: 24,
@@ -587,6 +588,7 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         bagSeedPriority: normalizeBagSeedPriority(config.bagSeedPriority),
         bagSeedKnownIds: normalizeBagSeedPriority(config.bagSeedKnownIds),
         bagSeedFallbackStrategy: normalizeBagSeedFallbackStrategy(config.bagSeedFallbackStrategy),
+        plantSeedPriority: normalizeBagSeedPriority(config.plantSeedPriority),
         capitalMode: normalizeCapitalMode(config.capitalMode)
     };
 }
@@ -774,6 +776,11 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
     // 背包种子回退策略
     if (input.bagSeedFallbackStrategy !== undefined && input.bagSeedFallbackStrategy !== null) {
         cfg.bagSeedFallbackStrategy = normalizeBagSeedFallbackStrategy(input.bagSeedFallbackStrategy);
+    }
+
+    // 种植优先种子列表
+    if (input.plantSeedPriority !== undefined && input.plantSeedPriority !== null) {
+        cfg.plantSeedPriority = normalizeBagSeedPriority(input.plantSeedPriority);
     }
 
     return cfg;
@@ -1136,6 +1143,7 @@ function getConfigSnapshot(accountId) {
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(cfg.goldenBugRoundLimit) || 24)),
         bagSeedPriority: [...cfg.bagSeedPriority || []],
         bagSeedKnownIds: [...cfg.bagSeedKnownIds || []],
+        plantSeedPriority: [...cfg.plantSeedPriority || []],
         ui
     };
 }
@@ -1244,6 +1252,9 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     if (patch.bagSeedFallbackStrategy !== undefined && patch.bagSeedFallbackStrategy !== null) {
         cfg.bagSeedFallbackStrategy = normalizeBagSeedFallbackStrategy(patch.bagSeedFallbackStrategy);
     }
+    if (patch.plantSeedPriority !== undefined && patch.plantSeedPriority !== null) {
+        cfg.plantSeedPriority = normalizeBagSeedPriority(patch.plantSeedPriority);
+    }
     if (patch.capitalMode && typeof patch.capitalMode === 'object') {
         cfg.capitalMode = normalizeCapitalMode(patch.capitalMode, cfg.capitalMode);
     }
@@ -1312,6 +1323,10 @@ function getFriendBadRetryDate(accountId) {
 
 function getBagSeedPriority(accountId) {
     return [...getAccountConfigSnapshot(accountId).bagSeedPriority || []];
+}
+
+function getPlantSeedPriority(accountId) {
+    return [...getAccountConfigSnapshot(accountId).plantSeedPriority || []];
 }
 
 function getBagSeedFallbackStrategy(accountId) {
@@ -1911,6 +1926,7 @@ module.exports = {
     getBagSeedPriority,
     syncBagSeedPriority,
     getBagSeedFallbackStrategy,
+    getPlantSeedPriority,
     getIntervals,
     getFriendQuietHours,
     getKnownFriendGids,

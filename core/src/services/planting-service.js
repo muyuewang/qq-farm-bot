@@ -8,6 +8,7 @@ const {
   syncBagSeedPriority,
   getBagSeedFallbackStrategy,
   getPrioritize2x2Crops,
+  getPlantSeedPriority,
 } = require('../models/store');
 const { getPlantRankings } = require('./analytics');
 const { getBagSeeds } = require('./warehouse');
@@ -34,7 +35,8 @@ const PLANTING_STRATEGY_LABELS = {
   max_fert_exp: '最大普通肥经验/时',
   max_profit: '最大净利润/时',
   max_fert_profit: '最大普通肥净利润/时',
-  bag_priority: '背包种子优先'
+  bag_priority: '背包种子优先',
+  seed_priority: '优先种植种子',
 };
 
 function getPlantingStrategyLabel(strategy) {
@@ -660,6 +662,24 @@ async function findBestSeed(overrideStrategy, accountId = getCurrentAccountId())
   }
 
   const strategy = overrideStrategy || getPlantingStrategy(accountId);
+
+  // 优先种植种子策略：按用户指定的种子 ID 顺序匹配商店
+  if (strategy === 'seed_priority') {
+    const priorityList = getPlantSeedPriority(accountId);
+    if (priorityList.length > 0) {
+      const candidateMap = new Map(candidates.map(c => [c.seedId, c]));
+      for (const seedId of priorityList) {
+        const match = candidateMap.get(seedId);
+        if (match) {
+          log('商店', `策略 seed_priority 命中优先种子 ${match.goods.item_id || seedId}`);
+          return match;
+        }
+      }
+      logWarn('商店', '策略 seed_priority 未在商店找到任何优先种子，回退最高等级');
+    }
+    return candidates.sort((a, b) => b.requiredLevel - a.requiredLevel)[0];
+  }
+
   const rankingStrategies = {
     max_exp: 'exp',
     max_fert_exp: 'fert',
@@ -743,6 +763,25 @@ async function findBestSeedFromLocal(overrideStrategy, accountId = getCurrentAcc
   }
 
   const strategy = overrideStrategy || getPlantingStrategy(accountId);
+
+  // 优先种植种子策略：按用户指定的种子 ID 顺序匹配背包
+  if (strategy === 'seed_priority') {
+    const priorityList = getPlantSeedPriority(accountId);
+    if (priorityList.length > 0) {
+      for (const seedId of priorityList) {
+        const match = availableSeeds.find(s => s.seedId === seedId && s.requiredLevel <= userState.level);
+        if (match) {
+          log('商店', `策略 seed_priority 从背包命中优先种子 ${seedId}`);
+          return match;
+        }
+      }
+      logWarn('商店', '策略 seed_priority 未在背包找到任何优先种子，回退等级策略');
+    }
+    // 回退：按等级降序
+    const fallback = availableSeeds.filter(s => s.requiredLevel <= userState.level);
+    fallback.sort((a, b) => b.requiredLevel - a.requiredLevel);
+    return fallback[0] || null;
+  }
 
   const rankingStrategies = {
     max_exp: 'exp',
