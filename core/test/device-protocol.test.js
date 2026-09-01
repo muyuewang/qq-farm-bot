@@ -8,7 +8,7 @@ const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qq-farm-device-protocol-'
 process.env.FARM_DATA_DIR = dataDir;
 
 const store = require('../src/models/store');
-const { buildLoginDeviceInfo, buildWebSocketHeaders } = require('../src/utils/network');
+const { buildLoginDeviceInfo, buildWebSocketHeaders, resolveDeviceFingerprint } = require('../src/utils/network');
 
 test.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
 
@@ -49,7 +49,7 @@ test('custom device values are included in the protobuf login device info', () =
 test('a disabled custom protocol does not alter the default login fingerprint', () => {
     const info = buildLoginDeviceInfo({ enabled: false, deviceModel: 'iPhone 17 Pro' });
     assert.equal(info.device_id, 'iPhone X<iPhone18,3>');
-    assert.equal(info.sys_hardware, undefined);
+    assert.equal(info.sys_hardware, 'Apple iPhone18,3');
 });
 
 test('an empty custom user agent is preserved and omitted from the QQ handshake', () => {
@@ -58,6 +58,7 @@ test('an empty custom user agent is preserved and omitted from the QQ handshake'
         userAgent: '',
         deviceBrand: 'Apple',
         deviceModel: 'iPhone 17',
+        deviceId: 'stable-alice-device',
     }, 'alice');
 
     const protocol = store.getUserDeviceProtocol('alice');
@@ -65,5 +66,21 @@ test('an empty custom user agent is preserved and omitted from the QQ handshake'
     assert.equal(protocol.userAgent, '');
     assert.equal(headers['User-Agent'], undefined);
     assert.equal(headers.Origin, 'https://gate-obt.nqf.qq.com');
-    assert.equal(headers.Referer, 'https://appservice.qq.com/1112386029/1.13.2.10/page-frame.html');
+    assert.equal(headers.Referer, 'https://appservice.qq.com/1112386029/1.13.0.5/page-frame.html');
+});
+
+test('custom device protocol rejects incomplete or contradictory fingerprints', () => {
+    assert.throws(() => resolveDeviceFingerprint({
+        enabled: true,
+        userAgent: 'Mozilla/5.0 (Linux; Android 14)',
+        deviceBrand: 'Apple',
+        deviceModel: 'iPhone 17',
+        deviceId: 'device-1',
+    }), /矛盾/);
+    assert.throws(() => resolveDeviceFingerprint({
+        enabled: true,
+        userAgent: 'Mozilla/5.0 (iPhone)',
+        deviceBrand: 'Apple',
+        deviceModel: 'iPhone 17',
+    }), /不完整/);
 });

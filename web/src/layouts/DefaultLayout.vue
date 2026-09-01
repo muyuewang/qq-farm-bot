@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import MysteryMerchantBanner from '@/components/shop/MysteryMerchantBanner.vue'
 import Sidebar from '@/components/Sidebar.vue'
 import TopAccountMenu from '@/components/TopAccountMenu.vue'
@@ -8,7 +8,6 @@ import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 const { loginPageConfig, sidebarOpen } = storeToRefs(appStore)
-const headerLogoFailed = ref(false)
 
 onMounted(() => {
   appStore.fetchLoginPageConfig()
@@ -18,9 +17,6 @@ onUnmounted(() => {
   // 清理逻辑
 })
 
-watch(() => loginPageConfig.value.logoUrl, () => {
-  headerLogoFailed.value = false
-})
 </script>
 
 <template>
@@ -43,15 +39,12 @@ watch(() => loginPageConfig.value.logoUrl, () => {
           >
             <div class="i-carbon-menu text-xl" />
           </button>
-          <div class="h-8 w-8 flex flex-none items-center justify-center overflow-hidden rounded-lg" :style="{ background: 'var(--theme-gradient)' }">
+          <div class="h-8 w-8 flex flex-none items-center justify-center overflow-hidden rounded-full ring-1 ring-gray-200 dark:ring-gray-700">
             <img
-              v-if="loginPageConfig.logoUrl && !headerLogoFailed"
-              :src="loginPageConfig.logoUrl"
+              src="/icon.png"
               :alt="`${loginPageConfig.title || 'QQ农场智能助手'}图标`"
               class="h-full w-full object-cover"
-              @error="headerLogoFailed = true"
             >
-            <div v-else class="i-carbon-sprout text-base text-white" />
           </div>
           <div class="truncate text-base text-gray-900 font-semibold md:text-lg dark:text-gray-100">
             {{ loginPageConfig.title || 'QQ农场智能助手' }}

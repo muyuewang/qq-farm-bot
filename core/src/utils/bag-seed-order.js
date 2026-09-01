@@ -1,4 +1,8 @@
 function compareBagSeedGameOrder(left, right) {
+  const plantingPriorityDiff = Number(right && right.plantingPriority || 0)
+    - Number(left && left.plantingPriority || 0);
+  if (plantingPriorityDiff !== 0) return plantingPriorityDiff;
+
   const rareDiff = Number(Number(right && right.rarity) >= 2)
     - Number(Number(left && left.rarity) >= 2);
   if (rareDiff !== 0) return rareDiff;

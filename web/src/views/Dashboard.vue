@@ -742,7 +742,7 @@ useIntervalFn(updateCountdowns, 1000)
 
     <div class="flex flex-1 flex-col items-stretch gap-5 md:min-h-0 md:flex-row">
       <div class="flex flex-1 flex-col gap-5 md:min-h-0 md:w-3/4">
-        <div class="ui-card-elevated flex flex-1 flex-col rounded-lg p-5 md:min-h-0 md:overflow-hidden">
+        <div class="ui-card-elevated flex flex-1 flex-col rounded-lg p-3 sm:p-5 md:min-h-0 md:overflow-hidden">
           <div class="mb-4 flex flex-col gap-3">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h3 class="flex items-center gap-2 text-lg font-medium">
@@ -808,7 +808,7 @@ useIntervalFn(updateCountdowns, 1000)
             </div>
           </div>
 
-          <div ref="logContainer" class="ui-subtle-panel relative max-h-[50vh] min-h-0 flex-1 overflow-y-auto rounded-lg p-2 text-sm md:max-h-none" @scroll="onLogScroll">
+          <div ref="logContainer" class="ui-subtle-panel relative max-h-[50vh] min-h-0 flex-1 overflow-x-hidden overflow-y-auto rounded-lg p-1.5 text-sm sm:p-2 md:max-h-none" @scroll="onLogScroll">
             <div v-if="!visibleLogs.length" class="py-8 text-center text-gray-400">
               <div class="i-carbon-document-blank mx-auto mb-3 text-3xl text-gray-300" />
               <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -821,7 +821,7 @@ useIntervalFn(updateCountdowns, 1000)
             <div
               v-for="log in visibleLogs"
               :key="log.id"
-              class="grid grid-cols-[auto_1fr] mb-0.5 gap-x-2 border rounded-md px-2.5 py-1.5 transition-colors"
+              class="mb-0.5 grid grid-cols-1 gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 transition-colors sm:grid-cols-[auto_1fr] sm:gap-y-0"
               :class="getLogRowClass(log)"
             >
               <span class="select-none whitespace-nowrap pt-0.5 text-xs text-gray-400 font-mono">{{ formatLogTimeRange(log) }}</span>

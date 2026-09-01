@@ -51,16 +51,10 @@ const router = createRouter({
         component: route.component,
       })),
     },
-    {
-      path: '/login',
-      name: 'login',
-      component: () => import('@/views/Login.vue'),
-    },
-    {
-      path: '/renewal',
-      name: 'renewal',
-      component: () => import('@/views/Renewal.vue'),
-    },
+    { path: '/admin', redirect: '/settings?tab=system' },
+    { path: '/login', redirect: '/' },
+    { path: '/renewal', redirect: '/' },
+    { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
@@ -70,8 +64,6 @@ router.beforeEach(async () => {
   return true
 })
 
-router.afterEach(() => {
-  NProgress.done()
-})
+router.afterEach(() => NProgress.done())
 
 export default router

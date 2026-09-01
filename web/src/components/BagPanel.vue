@@ -34,6 +34,10 @@ type CategoryValue = typeof CATEGORY_OPTIONS[number]['value']
 const selectedCategory = ref<CategoryValue>('fruit')
 
 function getItemCategory(item: any): CategoryValue {
+  if (item?.category === 'seed')
+    return 'seed'
+  if (item?.category === 'fruit')
+    return 'fruit'
   const itemType = Number(item?.itemType || 0)
   if (itemType === 17 || itemType === 6)
     return 'fruit'

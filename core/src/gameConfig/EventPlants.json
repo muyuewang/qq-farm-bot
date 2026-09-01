@@ -1,4 +1,5 @@
 [
+  { "id": 1020883, "seed_id": 20883, "fruit_id": 40883, "asset_name": "Crop_883", "name": "小红花", "size": 1, "seasons": 1, "grow_phases": "种子:5760;发芽:5760;小叶子:5760;大叶子:5760;花蕾:5760;盛开:0;", "exp": 960, "fruit_count": 32, "planting_priority": 1000 },
   { "id": 1029003, "seed_id": 29003, "fruit_id": 49003, "asset_name": "Crop_9003", "name": "星语铃花", "size": 2, "grow_phases": "种子:8640;发芽:8640;小叶子:8640;大叶子:8640;开花:8640;成熟:0;", "all_state_spine": "spine/v2/xiyouzhongzi/xingyulinghua/1029003" },
   { "id": 1021353, "seed_id": 21353, "fruit_id": 41353, "asset_name": "Crop_1353", "name": "粉樱花" },
   { "id": 1020264, "seed_id": 20264, "fruit_id": 40264, "asset_name": "Crop_264", "name": "红色郁金香" },

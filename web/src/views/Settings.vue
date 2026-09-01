@@ -2,11 +2,13 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
+import AdminSystemPanel from '@/components/admin/AdminSystemPanel.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import AccountFeatureSettings from '@/components/settings/AccountFeatureSettings.vue'
 import AccountSettingsTab from '@/components/settings/AccountSettingsTab.vue'
+import AutoCodeRefreshCard from '@/components/settings/AutoCodeRefreshCard.vue'
+import DeviceProtocolCard from '@/components/settings/DeviceProtocolCard.vue'
 import OfflineReminderCard from '@/components/settings/OfflineReminderCard.vue'
-import PasswordChangeCard from '@/components/settings/PasswordChangeCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { useAccountSettings } from '@/composables/settings/useAccountSettings'
 import { useAutomationSettings } from '@/composables/settings/useAutomationSettings'
@@ -18,14 +20,15 @@ import { useSettingStore } from '@/stores/setting'
 const settingStore = useSettingStore()
 const route = useRoute()
 
-type SettingsTabKey = 'account' | 'account-config' | 'notification'
+type SettingsTabKey = 'account' | 'account-config' | 'notification' | 'system'
 
-const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification']
+const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification', 'system']
 const LEGACY_SETTINGS_TABS: Record<string, SettingsTabKey> = {
   'strategy': 'account-config',
   'automation': 'account-config',
   'default-plan': 'account-config',
   'user': 'notification',
+  'capture': 'system',
 }
 
 function getInitialSettingsTab(): SettingsTabKey {
@@ -60,6 +63,7 @@ const tabs = [
   { key: 'account', label: '账号管理', icon: 'i-carbon-user-settings' },
   { key: 'account-config', label: '账号设置', icon: 'i-carbon-settings-adjust' },
   { key: 'notification', label: '通知设置', icon: 'i-carbon-notification' },
+  { key: 'system', label: '系统配置', icon: 'i-carbon-settings-services' },
 ] as const
 
 const modalVisible = ref(false)
@@ -100,20 +104,36 @@ function showAlert(message: string, type: 'primary' | 'danger' = 'primary') {
 }
 
 const {
+  systemConfigSaving,
+  captureConfigSaving,
+  captureConfigTesting,
+  localSystemConfig,
+  defaultSystemConfig,
+  localCaptureConfig,
+  platformOptions,
+  osOptions,
   loadCaptureConfig,
+  handleTestCaptureConfig,
   loadSystemConfig,
+  handleResetSystemConfig,
 } = useAdminSystemConfig({ showAlert })
 
 const {
   offlineSaving,
   offlineTesting,
-  passwordForm,
-  passwordSaving,
-  handleChangePassword,
+  deviceProtocolLoading,
+  deviceProtocolSaving,
+  deviceProtocolPresetOptions,
+  selectedDevicePreset,
+  deviceProtocolForm,
   localOffline,
   channelOptions,
   currentChannelDocUrl,
   openChannelDocs,
+  fillRandomDeviceMac,
+  fillRandomDeviceId,
+  fillRandomImei,
+  applyDevicePreset,
   fetchDeviceProtocol,
   syncLocalOfflineSettings,
   handleSaveOffline,
@@ -155,9 +175,11 @@ const {
 const {
   localAutomationSettings,
   localAutoCodeRefresh,
+  autoCodeRefreshing,
   fertilizerLandTypeOptions,
   fertilizerOptions,
   syncLocalAutomationSettings,
+  runAutoCodeRefreshNow,
 } = useAutomationSettings({
   currentAccountId,
   showAlert,
@@ -169,7 +191,6 @@ const {
   plantingStrategyOptions,
   bagFallbackStrategyOptions,
   strategyPreviewLabel,
-  availableSeeds,
   loadStrategyData,
   resetStrategyState,
 } = useStrategySettings({
@@ -179,6 +200,9 @@ const {
 })
 
 const accountSettingsSaving = ref(false)
+const autoCodeRefreshSaving = ref(false)
+const systemSettingsSaving = ref(false)
+const anySystemSaving = computed(() => systemSettingsSaving.value || systemConfigSaving.value || captureConfigSaving.value || deviceProtocolSaving.value)
 
 function buildCurrentAccountConfig() {
   return {
@@ -208,9 +232,59 @@ async function saveCurrentAccountSettings(_module?: string, quiet = false) {
   }
 }
 
+async function saveAutoCodeRefreshSettings() {
+  if (!currentAccountId.value || autoCodeRefreshSaving.value)
+    return
+  autoCodeRefreshSaving.value = true
+  try {
+    const result = await settingStore.saveAutoCodeRefresh(String(currentAccountId.value), localAutoCodeRefresh.value)
+    if (!result.ok)
+      throw new Error(result.error || '保存失败')
+    showAlert('微信定时刷新重登设置已保存')
+  }
+  catch (error: any) {
+    showAlert(error.response?.data?.error || error.message || '刷新设置保存失败', 'danger')
+  }
+  finally {
+    autoCodeRefreshSaving.value = false
+  }
+}
+
 function openAccountSettings(account: any) {
   selectAccount(account)
   activeTab.value = 'account-config'
+}
+
+async function saveSystemSettings() {
+  if (anySystemSaving.value)
+    return
+  systemSettingsSaving.value = true
+  try {
+    const devicePayload = {
+      enabled: !!deviceProtocolForm.value.enabled,
+      userAgent: String(deviceProtocolForm.value.userAgent || '').trim(),
+      deviceBrand: String(deviceProtocolForm.value.deviceBrand || '').trim(),
+      deviceModel: String(deviceProtocolForm.value.deviceModel || '').trim(),
+      deviceMac: String(deviceProtocolForm.value.deviceMac || '').trim(),
+      deviceId: String(deviceProtocolForm.value.deviceId || '').trim(),
+      imei: String(deviceProtocolForm.value.imei || '').trim(),
+    }
+    const [systemResult, captureResult, deviceResult] = await Promise.all([
+      api.post('/api/admin/system-config', { ...localSystemConfig.value, confirmed: true }),
+      api.post('/api/admin/capture-config', { ...localCaptureConfig.value, confirmed: true }),
+      api.post('/api/user/device-protocol', devicePayload),
+    ])
+    if (!systemResult.data?.ok || !captureResult.data?.ok || !deviceResult.data?.ok)
+      throw new Error('部分系统配置保存失败')
+    await Promise.all([loadSystemConfig(), loadCaptureConfig(), fetchDeviceProtocol()])
+    showAlert('系统配置已统一保存并生效')
+  }
+  catch (error: any) {
+    showAlert(error.response?.data?.error || error.message || '系统配置保存失败', 'danger')
+  }
+  finally {
+    systemSettingsSaving.value = false
+  }
 }
 
 async function applyDefaultPlan(account: any) {
@@ -387,7 +461,6 @@ onMounted(async () => {
           :strategy-preview-label="strategyPreviewLabel"
           :fertilizer-land-type-options="fertilizerLandTypeOptions"
           :fertilizer-options="fertilizerOptions"
-          :available-seeds="availableSeeds"
           @save="saveCurrentAccountSettings"
         />
 
@@ -415,11 +488,76 @@ onMounted(async () => {
             @open-docs="openChannelDocs"
             @test="handleTestOffline"
           />
+        </div>
 
-          <PasswordChangeCard
-            v-model:form="passwordForm"
-            :saving="passwordSaving"
-            @save="handleChangePassword"
+        <div v-else-if="activeTab === 'system'" class="space-y-5">
+          <div class="sticky top-0 z-10 flex items-center justify-between border border-gray-200 rounded-xl bg-white/95 p-4 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-800/95">
+            <div>
+              <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
+                系统配置
+              </h3>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                统一管理连接参数、设备协议和抓包服务。
+              </p>
+            </div>
+            <BaseButton size="sm" :loading="anySystemSaving" @click="saveSystemSettings">
+              保存系统配置
+            </BaseButton>
+          </div>
+
+          <AdminSystemPanel
+            v-model:local-system-config="localSystemConfig"
+            v-model:local-capture-config="localCaptureConfig"
+            section="system"
+            :show-heading="false"
+            :show-save="false"
+            :default-system-config="defaultSystemConfig"
+            :platform-options="platformOptions"
+            :os-options="osOptions"
+            :system-config-saving="systemConfigSaving"
+            :capture-config-saving="captureConfigSaving"
+            :capture-config-testing="captureConfigTesting"
+            @reset-system="handleResetSystemConfig"
+            @test-capture="handleTestCaptureConfig"
+          />
+
+          <DeviceProtocolCard
+            v-model:form="deviceProtocolForm"
+            v-model:selected-preset="selectedDevicePreset"
+            :loading="deviceProtocolLoading"
+            :saving="deviceProtocolSaving"
+            :preset-options="deviceProtocolPresetOptions"
+            :show-save="false"
+            @apply-preset="applyDevicePreset"
+            @random-mac="fillRandomDeviceMac"
+            @random-device-id="fillRandomDeviceId"
+            @random-imei="fillRandomImei"
+          />
+
+          <AutoCodeRefreshCard
+            v-model:config="localAutoCodeRefresh"
+            :current-account-name="currentAccountName"
+            :current-account-id="currentAccountId"
+            :loading="settingsLoading"
+            :saving="autoCodeRefreshSaving"
+            :refreshing="autoCodeRefreshing"
+            @save="saveAutoCodeRefreshSettings"
+            @refresh="runAutoCodeRefreshNow"
+          />
+
+          <AdminSystemPanel
+            v-model:local-system-config="localSystemConfig"
+            v-model:local-capture-config="localCaptureConfig"
+            section="capture"
+            :show-heading="false"
+            :show-save="false"
+            :default-system-config="defaultSystemConfig"
+            :platform-options="platformOptions"
+            :os-options="osOptions"
+            :system-config-saving="systemConfigSaving"
+            :capture-config-saving="captureConfigSaving"
+            :capture-config-testing="captureConfigTesting"
+            @test-capture="handleTestCaptureConfig"
           />
         </div>
       </div>

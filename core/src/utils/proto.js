@@ -48,6 +48,7 @@ async function loadProto() {
         getResourcePath('proto', 'mysteryshoppb.proto'),
         getResourcePath('proto', 'acepb.proto'),
         getResourcePath('proto', 'careerpb.proto'),
+        getResourcePath('proto', 'paypb.proto'),
     ], { keepCase: true });
 
     // 网关
@@ -243,6 +244,7 @@ async function loadProto() {
     types.InteractRecordsRequest = root.lookupType('gamepb.interactpb.InteractRecordsRequest');
     types.InteractRecordsReply = root.lookupType('gamepb.interactpb.InteractRecordsReply');
     types.ItemNotify = root.lookupType('gamepb.itempb.ItemNotify');
+    types.RechargeInfoNotify = root.lookupType('gamepb.paypb.RechargeInfoNotify');
     types.GoodsUnlockNotify = root.lookupType('gamepb.shoppb.GoodsUnlockNotify');
     types.TaskInfoNotify = root.lookupType('gamepb.taskpb.TaskInfoNotify');
 

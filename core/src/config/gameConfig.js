@@ -24,6 +24,9 @@ let plantPhaseManifestPath = '';
 let plantPhaseManifestMtimeMs = -1;
 const skinDetailImageMap = new Map();// itemId → skinDetailImageUrl
 const staticItemInfoMap = new Map([
+    [1040, { id: 1040, name: '爱心值' }],
+    [2158, { id: 2158, name: '小红花做好事头像框' }],
+    [101604, { id: 101604, name: '公益小红花结算礼包' }],
     [1027, { id: 1027, name: '雷电徽章' }],
     [4002, { id: 4002, name: '闪电感应' }],
     [4003, { id: 4003, name: '闪电感应' }],
@@ -111,6 +114,7 @@ function loadConfigs() {
                     seasons: Number(entry.seasons) || 1,
                     grow_phases: entry.grow_phases || '',
                     exp: Number(entry.exp) || 0,
+                    planting_priority: Math.max(0, Number(entry.planting_priority) || 0),
                 };
                 plantMap.set(plant.id, plant);
                 seedToPlant.set(plant.seed_id, plant);

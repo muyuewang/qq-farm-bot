@@ -4,10 +4,10 @@ package gamepb.friendpb;
 
 // ============ 好友农场摘要信息 ============
 message Plant {
-    int64 dry_time_sec = 1;      // 缺水倒计时秒
-    int64 weed_time_sec = 2;     // 长草倒计时秒
-    int64 insect_time_sec = 3;   // 生虫倒计时秒
-    int64 ripe_time_sec = 4;     // 成熟倒计时秒
+    int64 dry_time_sec = 1;      // 缺水时间（真实回包为 Unix 秒时间戳）
+    int64 weed_time_sec = 2;     // 长草时间（真实回包为 Unix 秒时间戳）
+    int64 insect_time_sec = 3;   // 生虫时间（真实回包为 Unix 秒时间戳）
+    int64 ripe_time_sec = 4;     // 最近成熟时间（若返回，按 Unix 秒时间戳处理）
     int64 ripe_fruit_id = 5;     // 成熟果实ID
     int64 steal_plant_num = 6;   // 可偷数量
     int64 dry_num = 7;           // 缺水地块数

@@ -113,6 +113,42 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  app.post('/api/activity/charity-flower/send-love', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '送出爱心失败: 账号未运行')) return;
+      res.json(await provider.sendCharityFlowerLove(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/charity-flower/send-money', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '送出公益金失败: 账号未运行')) return;
+      res.json(await provider.sendCharityFlowerMoney(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/charity-flower/claim-reward', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取档位奖励失败: 账号未运行')) return;
+      res.json(await provider.claimCharityFlowerReward(accountId, req.body?.tier));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/charity-flower/share', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取分享奖励失败: 账号未运行')) return;
+      res.json(await provider.claimCharityFlowerShare(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.get("/api/activity/star", async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

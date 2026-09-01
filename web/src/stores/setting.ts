@@ -24,6 +24,10 @@ export interface AutomationConfig {
   rain_poem_summon_use?: boolean
   rain_poem_prank_use?: boolean
   rain_poem_research_unlock?: boolean
+  charity_flower_share_claim?: boolean
+  charity_flower_donate?: boolean
+  charity_flower_reward_claim?: boolean
+  charity_flower_public_fund_claim?: boolean
   sell?: boolean
   fertilizer_gift?: boolean
   fertilizer_buy_organic?: boolean
@@ -249,7 +253,6 @@ export const useSettingStore = defineStore('setting', () => {
         settings.value.bagSeedPriority = d.bagSeedPriority ?? []
         settings.value.bagSeedKnownIds = d.bagSeedKnownIds ?? []
         settings.value.bagSeedFallbackStrategy = d.bagSeedFallbackStrategy ?? 'level'
-        settings.value.plantSeedPriority = d.plantSeedPriority ?? []
       }
     }
     finally {
@@ -269,7 +272,6 @@ export const useSettingStore = defineStore('setting', () => {
         bagSeedPriority: newSettings.bagSeedPriority ?? [],
         bagSeedKnownIds: newSettings.bagSeedKnownIds ?? [],
         bagSeedFallbackStrategy: newSettings.bagSeedFallbackStrategy ?? 'level',
-        plantSeedPriority: newSettings.plantSeedPriority ?? [],
         autoAcceptFriendMinLevel: newSettings.autoAcceptFriendMinLevel ?? 0,
         autoCodeRefresh: newSettings.autoCodeRefresh,
         intervals: newSettings.intervals,

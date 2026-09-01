@@ -6,11 +6,16 @@ const {
   applyConfigSnapshot,
   getFriendBlacklist,
   removeFriendFromCache,
+  updateFriendDogInfoCache,
 } = require('../models/store');
-const { sendMsgAsync } = require('../utils/network');
+const { sendMsgAsync, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
 const { toLong, toNum, log, logWarn, randomDelay } = require('../utils/utils');
 const { getInteractRecords } = require('./interact');
+const {
+  acquireFriendVisitSession,
+  releaseFriendVisitSession,
+} = require('./friend-visit-session');
 
 // ===== Constants =====
 const QQ_FRIEND_LIST_BATCH_SIZE = 35;
@@ -28,6 +33,7 @@ const DOG_NAMES = {
 // ===== State =====
 let hasInitializedFromVisitors = false;
 const invalidKnownFriendGidCooldownUntil = new Map();
+const visitTokensByGid = new Map();
 
 // ===== Dog Name =====
 function getDogName(dogId) {
@@ -698,14 +704,23 @@ async function delFriend(gid) {
 
 /** Enter a friend's farm. Visit reason = 2 (general visit). */
 async function enterFriendFarm(gid) {
+  const visitToken = await acquireFriendVisitSession(gid);
+  const visitKey = toNum(gid);
+  const tokens = visitTokensByGid.get(visitKey) || [];
+  tokens.push(visitToken);
+  visitTokensByGid.set(visitKey, tokens);
   const payload = types.VisitEnterRequest.encode(
     types.VisitEnterRequest.create({ host_gid: toLong(gid), reason: 2 })
   ).finish();
-  const { body } = await sendMsgAsync(
-    'gamepb.visitpb.VisitService',
-    'Enter',
-    payload
-  );
+  let body;
+  try {
+    ({ body } = await sendMsgAsync('gamepb.visitpb.VisitService', 'Enter', payload));
+  } catch (error) {
+    releaseFriendVisitSession(visitToken);
+    const pending = visitTokensByGid.get(visitKey) || [];
+    visitTokensByGid.set(visitKey, pending.filter(token => token !== visitToken));
+    throw error;
+  }
   const reply = types.VisitEnterReply.decode(body);
 
   // Extract dog info (try both parsed field and raw bytes)
@@ -714,6 +729,17 @@ async function enterFriendFarm(gid) {
   if (dogInfo) {
     reply.__briefDogInfo = dogInfo;
   }
+  const accountId = process.env.FARM_ACCOUNT_ID || '';
+  updateFriendDogInfoCache(accountId, gid, {
+    dogId: toNum(dogInfo && dogInfo.dogId),
+    dogName: getDogName(dogInfo && dogInfo.dogId),
+  });
+  networkEvents.emit('friendLandsObserved', {
+    gid: toNum(gid),
+    name: reply.basic && reply.basic.name || '',
+    lands: reply.lands || [],
+    source: 'visit_enter',
+  });
 
   return reply;
 }
@@ -727,6 +753,13 @@ async function leaveFriendFarm(gid) {
     await sendMsgAsync('gamepb.visitpb.VisitService', 'Leave', payload);
   } catch (_) {
     // Ignore leave errors
+  } finally {
+    const visitKey = toNum(gid);
+    const pending = visitTokensByGid.get(visitKey) || [];
+    const token = pending.shift();
+    if (pending.length > 0) visitTokensByGid.set(visitKey, pending);
+    else visitTokensByGid.delete(visitKey);
+    releaseFriendVisitSession(token);
   }
 }
 

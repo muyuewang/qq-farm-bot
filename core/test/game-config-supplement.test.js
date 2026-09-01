@@ -65,6 +65,23 @@ test('star bell flower is configured as a 2x2 crop', () => {
   assert.equal(getPlantBySeedId(29003)?.size, 2);
 });
 
+test('charity red flower uses the official single-grid plant configuration', () => {
+  const plant = getPlantBySeedId(20883);
+  assert.equal(plant?.id, 1020883);
+  assert.equal(plant?.fruit?.id, 40883);
+  assert.equal(plant?.size, 1);
+  assert.equal(plant?.planting_priority, 1000);
+  assert.match(plant?.grow_phases || '', /盛开:0/);
+});
+
+test('charity flower activity items use official names', () => {
+  assert.equal(getItemById(1040)?.name, '爱心值');
+  assert.equal(getItemById(2158)?.name, '小红花做好事头像框');
+  assert.equal(getItemById(101604)?.name, '公益小红花结算礼包');
+  assertImageExists(20883, 'red flower seed image');
+  assertImageExists(40883, 'red flower fruit image');
+});
+
 test('seed levels come from seed item configuration', () => {
   const seedLevels = new Map(getAllSeeds().map(seed => [seed.seedId, seed.requiredLevel]));
   assert.equal(seedLevels.get(20003), 2, 'carrot seed level');

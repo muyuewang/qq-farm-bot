@@ -194,61 +194,14 @@ export interface WeatherFriend {
   statusLabel: string
 }
 
-export interface CharityFlowerItem {
-  id?: number
-  name?: string
-  count?: number
-}
-
-export interface CharityFlowerPersonalReward {
-  needScore: number
-  reached: boolean
-  claimed: boolean
-  rewards: CharityFlowerItem[]
-}
-
 export interface CharityFlowerActivityData {
-  uid?: string
-  title?: string
-  activityId?: number
-  startTime?: number
-  endTime?: number
-  active?: boolean
-  love?: {
-    itemId?: number
-    count?: number
-    personalScore?: number
-    canDonate?: boolean
-  }
-  global?: {
-    score?: number
-    target?: number
-    amountYuan?: number
-    targetYuan?: number
-    reached?: boolean
-  }
-  share?: {
-    status?: number
-    claimable?: boolean
-    claimed?: boolean
-    rewards?: CharityFlowerItem[]
-  }
-  personalRewards?: CharityFlowerPersonalReward[]
-  finalReward?: {
-    threshold?: number
-    settlementTime?: number
-    settled?: boolean
-    eligible?: boolean
-    rewards?: CharityFlowerItem[]
-  }
-  publicFund?: {
-    status?: number
-    claimable?: boolean
-    claimed?: boolean
-    complianceAgreed?: boolean
-    rewards?: CharityFlowerItem[]
-    successCount?: number
-  }
+  uid: string; title: string; activityId: number; startTime: number; endTime: number; active: boolean
+  love: { itemId: number, count: number, personalScore: number, canDonate: boolean }
+  global: { score: number, target: number, amountYuan: number, targetYuan: number, reached: boolean }
+  share: { status: number, claimable: boolean, claimed: boolean, rewards: QixiItem[] }
+  personalRewards: Array<{ needScore: number, reached: boolean, claimed: boolean, rewards: QixiItem[] }>
+  finalReward: { threshold: number, settlementTime: number, settled: boolean, eligible: boolean, rewards: QixiItem[] }
+  publicFund: { status: number, claimable: boolean, claimed: boolean, complianceAgreed: boolean, rewards: QixiItem[], successCount: number }
 }
 
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'
@@ -369,6 +322,8 @@ export const useActivityStore = defineStore('activity', () => {
   const collectPending = ref(false)
   const summonPending = ref(false)
   const researchPending = ref(false)
+  const charityFlowerActivity = ref<CharityFlowerActivityData | null>(null)
+  const charityFlowerLoading = ref(false)
   const qixiFriends = ref<QixiFriend[]>([])
   const qixiLoading = ref(false)
   const qixiBuildLoading = ref(false)
@@ -386,21 +341,13 @@ export const useActivityStore = defineStore('activity', () => {
 
   const heluError = ref('')
 
-  // ─── 公益小红花 ───
-  const charityFlowerActivity = ref<CharityFlowerActivityData>({})
-  const charityFlowerLoading = ref(false)
-
   let heluRequestId = 0
 
   function clearActivityData() {
     heluActivity.value = null
     qixiActivity.value = null
     rainPoemActivity.value = null
-    charityFlowerActivity.value = {}
-    weatherFriends.value = []
-    scanPending.value = false
-    frogPending.value = false
-    cloudPending.value = false
+    charityFlowerActivity.value = null
     qixiFriends.value = []
     heluLoading.value = false
     drawLoading.value = false
@@ -410,7 +357,6 @@ export const useActivityStore = defineStore('activity', () => {
     starRecordClaimLoading.value = false
     qingmeiClaimLoading.value = false
     qingmeiSellLoading.value = false
-    charityFlowerLoading.value = false
     heluError.value = ''
   }
 
@@ -440,9 +386,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function scanWeatherFriends(accountId: string) {
     scanPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/friends/scan', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId)))
-        weatherFriends.value = data.friends || []
+      const { data } = await api.post('/api/activity/rain-poem/scan-friends', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId))) weatherFriends.value = data.friends || []
       return data
     }
     finally { scanPending.value = false }
@@ -451,9 +396,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function useWeatherFrogBottle(accountId: string, friendGid: number) {
     frogPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/frog/use', { friendGid }, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      const { data } = await api.post('/api/activity/rain-poem/use-frog', { friendGid }, { headers: { 'x-account-id': accountId } })
+      if (data.ok) await fetchRainPoemActivity(accountId)
       return data
     }
     finally { frogPending.value = false }
@@ -462,9 +406,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function useWeatherCloudBottle(accountId: string, friendGid: number, landId: number) {
     cloudPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/cloud/use', { friendGid, landId }, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      const { data } = await api.post('/api/activity/rain-poem/use-cloud', { friendGid, landId }, { headers: { 'x-account-id': accountId } })
+      if (data.ok) await fetchRainPoemActivity(accountId)
       return data
     }
     finally { cloudPending.value = false }
@@ -473,9 +416,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function buyRainPoemBottle(accountId: string) {
     buyPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/bottle/buy', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      const { data } = await api.post('/api/activity/rain-poem/buy-bottle', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
       return data
     }
     finally { buyPending.value = false }
@@ -484,9 +426,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function collectRainPoemWeather(accountId: string) {
     collectPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/collect', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      const { data } = await api.post('/api/activity/rain-poem/collect-weather', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId))) weatherFriends.value = data.friends || []
       return data
     }
     finally { collectPending.value = false }
@@ -495,9 +436,8 @@ export const useActivityStore = defineStore('activity', () => {
   async function useSummonBottle(accountId: string) {
     summonPending.value = true
     try {
-      const { data } = await api.post('/api/activity/rain-poem/summon/use', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      const { data } = await api.post('/api/activity/rain-poem/use-summon', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
       return data
     }
     finally { summonPending.value = false }
@@ -507,23 +447,48 @@ export const useActivityStore = defineStore('activity', () => {
     researchPending.value = true
     try {
       const { data } = await api.post('/api/activity/rain-poem/research/unlock', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        rainPoemActivity.value = data.activity
+      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
       return data
     }
     finally { researchPending.value = false }
   }
 
-  // ─── 公益小红花 ───
   async function fetchCharityFlowerActivity(accountId: string) {
     charityFlowerLoading.value = true
     try {
       const { data } = await api.get('/api/activity/charity-flower', { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity || {}
+      if (data.ok && isCurrentAccount(String(accountId))) charityFlowerActivity.value = data.activity || null
       return data
     }
     finally { charityFlowerLoading.value = false }
+  }
+
+  async function sendCharityFlowerLove(accountId: string) {
+    const { data } = await api.post('/api/activity/charity-flower/send-love', {}, { headers: { 'x-account-id': accountId } })
+    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+      charityFlowerActivity.value = data.activity
+    return data
+  }
+
+  async function sendCharityFlowerMoney(accountId: string) {
+    const { data } = await api.post('/api/activity/charity-flower/send-money', {}, { headers: { 'x-account-id': accountId } })
+    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+      charityFlowerActivity.value = data.activity
+    return data
+  }
+
+  async function claimCharityFlowerReward(accountId: string, tier?: number) {
+    const { data } = await api.post('/api/activity/charity-flower/claim-reward', { tier }, { headers: { 'x-account-id': accountId } })
+    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+      charityFlowerActivity.value = data.activity
+    return data
+  }
+
+  async function claimCharityFlowerShare(accountId: string) {
+    const { data } = await api.post('/api/activity/charity-flower/share', {}, { headers: { 'x-account-id': accountId } })
+    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+      charityFlowerActivity.value = data.activity
+    return data
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -736,14 +701,8 @@ export const useActivityStore = defineStore('activity', () => {
     qixiActivity,
     rainPoemActivity,
     rainPoemLoading,
-    weatherFriends,
-    scanPending,
-    frogPending,
-    cloudPending,
-    buyPending,
-    collectPending,
-    summonPending,
-    researchPending,
+    charityFlowerActivity,
+    charityFlowerLoading,
     qixiFriends,
     qixiLoading,
     qixiBuildLoading,
@@ -762,6 +721,14 @@ export const useActivityStore = defineStore('activity', () => {
     fetchHeluActivity,
     fetchQixiActivity,
     fetchRainPoemActivity,
+    weatherFriends,
+    scanPending,
+    frogPending,
+    cloudPending,
+    buyPending,
+    collectPending,
+    summonPending,
+    researchPending,
     scanWeatherFriends,
     useWeatherFrogBottle,
     useWeatherCloudBottle,
@@ -769,6 +736,11 @@ export const useActivityStore = defineStore('activity', () => {
     collectRainPoemWeather,
     useSummonBottle,
     unlockWeatherResearch,
+    fetchCharityFlowerActivity,
+    sendCharityFlowerLove,
+    sendCharityFlowerMoney,
+    claimCharityFlowerReward,
+    claimCharityFlowerShare,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,
@@ -780,8 +752,5 @@ export const useActivityStore = defineStore('activity', () => {
     claimHeluSolar,
     claimQingmeiSeeds,
     brewAndSellQingmeiWine,
-    charityFlowerActivity,
-    charityFlowerLoading,
-    fetchCharityFlowerActivity,
   }
 })

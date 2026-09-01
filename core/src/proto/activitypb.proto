@@ -75,6 +75,12 @@ message TechTreeSubmitNodeRsp {
     repeated int64 unlocked_node_ids = 3;
 }
 
+message CharityFlowerClaimShareReq {}
+message CharityFlowerDonateAllReq {}
+message CharityFlowerClaimRewardReq { int64 need_personal_score = 1; }
+message CharityFlowerClaimXhhReq {}
+message CharityFlowerSetComplianceAgreedReq { bool agreed = 1; }
+
 message OperateRequest {
     int64 id = 1;
     int64 cmd = 2;
@@ -87,6 +93,11 @@ message OperateRequest {
     QingmeiWineBrewParams qingmei_wine_brew = 113;
     QingmeiWineSellParams qingmei_wine_sell = 114;
     QixiGiftParams qixi_gift = 124;
+    CharityFlowerClaimShareReq charity_flower_claim_share = 134;
+    CharityFlowerDonateAllReq charity_flower_donate_all = 135;
+    CharityFlowerClaimRewardReq charity_flower_claim_reward = 136;
+    CharityFlowerClaimXhhReq charity_flower_claim_xhh = 137;
+    CharityFlowerSetComplianceAgreedReq charity_flower_set_compliance_agreed = 138;
     TechTreeSubmitNodeReq tech_tree_submit_node = 140;
 }
 
@@ -232,7 +243,87 @@ message ActivityNode {
     QixiGiftInfo qixi_gift = 113;
     WeatherTaskInfo weather_tasks = 117;
     WeatherResearchInfo weather_research = 118;
+    ActivityBodyCharityFlower charity_flower = 116;
 }
+
+enum CharityFlowerShareStatus {
+    CHARITY_FLOWER_SHARE_STATUS_UNKNOWN = 0;
+    CHARITY_FLOWER_SHARE_NOT_COMPLETED = 1;
+    CHARITY_FLOWER_SHARE_CLAIMABLE = 2;
+    CHARITY_FLOWER_SHARE_CLAIMED = 3;
+}
+
+enum CharityFlowerXhhStatus {
+    CHARITY_FLOWER_XHH_STATUS_UNKNOWN = 0;
+    CHARITY_FLOWER_XHH_NOT_ELIGIBLE = 1;
+    CHARITY_FLOWER_XHH_CLAIMABLE = 2;
+    CHARITY_FLOWER_XHH_CLAIMED = 3;
+}
+
+message CharityFlowerPersonalReward {
+    int64 need_personal_score = 1;
+    repeated corepb.Item reward = 2;
+    bool reached = 3;
+    bool claimed = 4;
+}
+
+message CharityFlowerGlobalReward {
+    int64 need_global_score = 1;
+    repeated corepb.Item reward = 2;
+    bool reached = 3;
+}
+
+message CharityFlowerXhhSuccessOrder {
+    int64 day = 1;
+    string xhh_code = 2;
+    string xhh_trans_code = 3;
+    int32 xhh_num = 4;
+}
+
+message ActivityBodyCharityFlower {
+    int64 love_item_id = 1;
+    int64 love_count = 2;
+    int64 personal_score = 3;
+    int64 global_score = 4;
+    int64 max_global_score = 5;
+    CharityFlowerShareStatus share_status = 6;
+    repeated corepb.Item share_reward = 7;
+    repeated int64 task_ids = 8;
+    repeated CharityFlowerPersonalReward personal_rewards = 9;
+    repeated CharityFlowerGlobalReward global_rewards = 10;
+    int64 final_pack_threshold = 11;
+    repeated corepb.Item final_reward = 12;
+    int64 settlement_time = 13;
+    bool settled = 14;
+    bool final_reward_eligible = 15;
+    bool can_donate = 16;
+    CharityFlowerXhhStatus xhh_status = 17;
+    repeated CharityFlowerXhhSuccessOrder xhh_success_orders = 18;
+    bool compliance_agreed = 19;
+    string business_id = 20;
+    repeated corepb.Item xhh_reward = 21;
+}
+
+message CharityFlowerClaimShareRsp { repeated corepb.Item awards = 1; }
+message CharityFlowerDonateAllRsp {
+    int64 consumed_love_count = 1;
+    int64 score_added = 2;
+    int64 personal_score = 3;
+    int64 global_score = 4;
+    repeated int64 reached_global_scores = 5;
+}
+message CharityFlowerClaimRewardRsp {
+    int64 need_personal_score = 1;
+    repeated corepb.Item awards = 2;
+}
+message CharityFlowerClaimXhhRsp {
+    int32 xhh_num = 1;
+    string xhh_code = 2;
+    repeated corepb.Item awards = 3;
+    string trans_code = 4;
+    string business_id = 5;
+}
+message CharityFlowerSetComplianceAgreedRsp { bool agreed = 1; }
 
 message ActivityWindow {
     int64 id = 1;
@@ -288,5 +379,10 @@ message OperateReply {
     QingmeiClaimResult qingmei_claim = 104;
     StarRecordClaimResult star_record_claim = 120;
     corepb.Item qixi_gift_result = 125;
+    CharityFlowerClaimShareRsp charity_flower_claim_share = 135;
+    CharityFlowerDonateAllRsp charity_flower_donate_all = 136;
+    CharityFlowerClaimRewardRsp charity_flower_claim_reward = 137;
+    CharityFlowerClaimXhhRsp charity_flower_claim_xhh = 138;
+    CharityFlowerSetComplianceAgreedRsp charity_flower_set_compliance_agreed = 139;
     TechTreeSubmitNodeRsp tech_tree_submit_node = 140;
 }

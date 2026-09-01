@@ -2992,7 +2992,7 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
     finalReward: {
       threshold: toNum(body.final_pack_threshold),
       settlementTime: toNum(body.settlement_time),
-      settled: !!body.setettled,
+      settled: !!body.settled,
       eligible: !!body.final_reward_eligible,
       rewards: (body.final_reward || []).map(normalizeCoreItem),
     },

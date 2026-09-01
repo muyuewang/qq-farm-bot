@@ -36,7 +36,7 @@ const PLANTING_STRATEGY_LABELS = {
   max_profit: '最大净利润/时',
   max_fert_profit: '最大普通肥净利润/时',
   bag_priority: '背包种子优先',
-  seed_priority: '优先种植种子',
+  seed_priority: '优先种植指定种子'
 };
 
 function getPlantingStrategyLabel(strategy) {
@@ -280,11 +280,23 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
     return { reservedLandIds: [], plantedMasterIds: [], plantedCount: 0, occupiedCount: 0 };
   }
   const userState = getUserState();
+  const userLevel = Number(userState && userState.level) || 0;
   const sortedSize2Seeds = bagSeeds
     .filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 2)
     .sort(compareBagSeedGameOrder)
     .map(seed => ({ ...seed, count: Number(seed.count) || 0 }));
-  const size2Seeds = sortedSize2Seeds;
+  const lockedByLevelSeeds = sortedSize2Seeds.filter(seed => isSeedLockedByLevel(seed, userLevel));
+  const size2Seeds = sortedSize2Seeds.filter(seed => !isSeedLockedByLevel(seed, userLevel));
+
+  if (lockedByLevelSeeds.length > 0) {
+    log('种植', `已跳过当前等级未解锁的 2x2 背包种子: ${lockedByLevelSeeds.map(seed => seed.name || seed.seedId).join('，')}`, {
+      module: 'farm',
+      event: '种植2x2作物',
+      result: 'skip_locked',
+      seedIds: lockedByLevelSeeds.map(seed => seed.seedId),
+      userLevel,
+    });
+  }
 
   const totalSeedCount = size2Seeds.reduce((sum, seed) => sum + seed.count, 0);
   if (totalSeedCount <= 0) {
@@ -662,24 +674,6 @@ async function findBestSeed(overrideStrategy, accountId = getCurrentAccountId())
   }
 
   const strategy = overrideStrategy || getPlantingStrategy(accountId);
-
-  // 优先种植种子策略：按用户指定的种子 ID 顺序匹配商店
-  if (strategy === 'seed_priority') {
-    const priorityList = getPlantSeedPriority(accountId);
-    if (priorityList.length > 0) {
-      const candidateMap = new Map(candidates.map(c => [c.seedId, c]));
-      for (const seedId of priorityList) {
-        const match = candidateMap.get(seedId);
-        if (match) {
-          log('商店', `策略 seed_priority 命中优先种子 ${match.goods.item_id || seedId}`);
-          return match;
-        }
-      }
-      logWarn('商店', '策略 seed_priority 未在商店找到任何优先种子，回退最高等级');
-    }
-    return candidates.sort((a, b) => b.requiredLevel - a.requiredLevel)[0];
-  }
-
   const rankingStrategies = {
     max_exp: 'exp',
     max_fert_exp: 'fert',
@@ -710,6 +704,16 @@ async function findBestSeed(overrideStrategy, accountId = getCurrentAccountId())
     }
     // 回退：按所需等级降序
     return candidates.sort((a, b) => b.requiredLevel - a.requiredLevel)[0];
+  }
+
+  // seed_priority 策略：优先种植指定种子
+  if (strategy === 'seed_priority') {
+    const prioritySeedId = getPlantSeedPriority(accountId);
+    if (prioritySeedId) {
+      const match = candidates.find(c => c.seedId === prioritySeedId);
+      if (match) return match;
+      logWarn('商店', `优先种子 ${prioritySeedId} 不可购买，回退最高等级`);
+    }
   }
 
   candidates.sort((a, b) => b.requiredLevel - a.requiredLevel);
@@ -764,25 +768,6 @@ async function findBestSeedFromLocal(overrideStrategy, accountId = getCurrentAcc
 
   const strategy = overrideStrategy || getPlantingStrategy(accountId);
 
-  // 优先种植种子策略：按用户指定的种子 ID 顺序匹配背包
-  if (strategy === 'seed_priority') {
-    const priorityList = getPlantSeedPriority(accountId);
-    if (priorityList.length > 0) {
-      for (const seedId of priorityList) {
-        const match = availableSeeds.find(s => s.seedId === seedId && s.requiredLevel <= userState.level);
-        if (match) {
-          log('商店', `策略 seed_priority 从背包命中优先种子 ${seedId}`);
-          return match;
-        }
-      }
-      logWarn('商店', '策略 seed_priority 未在背包找到任何优先种子，回退等级策略');
-    }
-    // 回退：按等级降序
-    const fallback = availableSeeds.filter(s => s.requiredLevel <= userState.level);
-    fallback.sort((a, b) => b.requiredLevel - a.requiredLevel);
-    return fallback[0] || null;
-  }
-
   const rankingStrategies = {
     max_exp: 'exp',
     max_fert_exp: 'fert',
@@ -803,6 +788,16 @@ async function findBestSeedFromLocal(overrideStrategy, accountId = getCurrentAcc
         if (match && match.requiredLevel <= userState.level) return match;
       }
     } catch { /* fall through */ }
+  }
+
+  // seed_priority 策略：优先种植指定种子
+  if (strategy === 'seed_priority') {
+    const prioritySeedId = getPlantSeedPriority(accountId);
+    if (prioritySeedId) {
+      const match = availableSeeds.find(s => s.seedId === prioritySeedId && s.requiredLevel <= userState.level);
+      if (match) return match;
+      logWarn('本地', `优先种子 ${prioritySeedId} 不可用，回退最高等级`);
+    }
   }
 
   // 回退策略：按等级降序，选当前等级以下最高等级种子

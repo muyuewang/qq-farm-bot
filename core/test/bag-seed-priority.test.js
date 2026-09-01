@@ -38,6 +38,17 @@ test('bag seed priority follows game rarity, exp and id order', () => {
   assert.equal(result.changed, true);
 });
 
+test('activity planting priority places red flower seed first', () => {
+  const result = store.syncBagSeedPriority('event-seed-first', [
+    { ...seed(29003, 1), rarity: 3, plantExp: 7680 },
+    { ...seed(20883, 1), rarity: 3, plantExp: 960, plantingPriority: 1000 },
+    { ...seed(20129, 81), rarity: 2, plantExp: 1680 },
+  ], { persist: false });
+
+  assert.deepEqual(result.priority, [20883, 29003, 20129]);
+  assert.equal(result.seeds[0].seedId, 20883);
+});
+
 test('personal bag seed tab matches the official client order', () => {
   const seeds = [
     [29003, '星语铃花', 3, 7680],

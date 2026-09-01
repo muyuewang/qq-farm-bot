@@ -11,6 +11,7 @@ const { doFriendOperation } = require('./friend-visit');
 const { runGoldenBugPlacement } = require('./golden-bug-service');
 const {
   checkFriends,
+  runScheduledStealCheck,
   startFriendCheckLoop,
   stopFriendCheckLoop,
   refreshFriendCheckLoop,
@@ -22,6 +23,7 @@ const {
 
 module.exports = {
   checkFriends,
+  runScheduledStealCheck,
   startFriendCheckLoop,
   stopFriendCheckLoop,
   refreshFriendCheckLoop,

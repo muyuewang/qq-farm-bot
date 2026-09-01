@@ -11,12 +11,11 @@ import CharityFlowerActivityPanel from '@/components/activity/CharityFlowerActiv
 import StarRecordPanel from '@/components/activity/StarRecordPanel.vue'
 import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import { isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW, CHARITY_FLOWER_ACTIVITY_WINDOW } from '@/constants/activity-windows'
+import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 import { useAccountStore } from '@/stores/account'
 import { useActivityStore } from '@/stores/activity'
 import { useToastStore } from '@/stores/toast'
 import { useUserStore } from '@/stores/user'
-import { friendlyActivityError } from '@/utils/activity-errors'
 
 const L: ActivityLabels = {
   title: '活动中心',
@@ -100,6 +99,7 @@ const {
   collectPending,
   summonPending,
   researchPending,
+  charityFlowerActivity,
   charityFlowerLoading,
 } = storeToRefs(activityStore)
 
@@ -110,7 +110,7 @@ let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 const charityFlowerActivityActive = computed(() => isWithinActivityWindowMs(CHARITY_FLOWER_ACTIVITY_WINDOW, nowMs.value))
 const selectedActivity = ref<string | null>(null)
-const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('active')
+const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
 const activeSection = ref<ActivitySectionKey>('journey')
 const activityDirectoryWindows = ref<Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string }>>([])
 interface ActivityDirectoryNode {
@@ -142,16 +142,16 @@ const ACTIVITY_CLIENT_PREVIEWS: Array<{ ids: number[], title: string, preview: A
     ids: [2026090900, 2026090901],
     title: '公益小红花',
     preview: {
-      source: '最新版官方客户端 delayRes 配置与 Prefab',
+      source: '最新版官方客户端生成协议、delayRes 配置与 Prefab',
       entryId: 2026090901,
-      entryUid: 'RedFlowerActivity',
+      entryUid: 'CharityRedFlower',
       modules: [
         { title: '个人与活动进度', description: '客户端已预置个人进度、活动总进度及进度条界面。' },
         { title: '小红花与阶段礼物', description: '已发现小红花展示、阶段条目和礼物界面，共有 5 个静态阶段素材。' },
         { title: '好友互动', description: '已发现赠送、分享、好友助力及授权相关界面。' },
         { title: '装扮线索', description: '客户端包含“穿戴”状态素材，但奖励内容和取得条件尚未下发。' },
       ],
-      pending: ['任务与进度阈值', '奖励名称和数量', '每日次数与消耗', '服务端操作协议'],
+      pending: [],
     },
   },
 ]
@@ -198,27 +198,9 @@ const activityCards = computed(() => {
     startTime: RAIN_POEM_ACTIVITY_WINDOW.startMs / 1000,
     endTime: RAIN_POEM_ACTIVITY_WINDOW.endMs / 1000,
     activityIds: [2026070300],
-  }, {
-    id: 2026090901,
-    title: '公益小红花',
-    startTime: CHARITY_FLOWER_ACTIVITY_WINDOW.startMs / 1000,
-    endTime: CHARITY_FLOWER_ACTIVITY_WINDOW.endMs / 1000,
-    activityIds: [2026090901],
   }]
-  // 始终注入公益小红花（服务器可能未返回该活动）
-  if (!source.some(g => g.activityIds.includes(2026090901))) {
-    source.push({
-      id: 2026090901,
-      title: '公益小红花',
-      startTime: CHARITY_FLOWER_ACTIVITY_WINDOW.startMs / 1000,
-      endTime: CHARITY_FLOWER_ACTIVITY_WINDOW.endMs / 1000,
-      activityIds: [2026090901],
-    })
-  }
   return source.map((group) => {
-    const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const
-      : group.activityIds.includes(2026090901) ? 'charity-flower' as const
-      : null
+    const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const : group.activityIds.includes(2026090900) ? 'charity-flower' as const : null
     const window = { startMs: group.startTime * 1000, endMs: group.endTime * 1000 }
     const hue = Math.abs(group.id * 37) % 360
     return {
@@ -226,18 +208,16 @@ const activityCards = computed(() => {
       activityIds: group.activityIds,
       adaptedKey,
       title: group.title || `活动 ${group.id}`,
-      description: adaptedKey === 'rain-poem'
-        ? '查看天气、每日进度与气象研究'
-        : adaptedKey === 'charity-flower'
-          ? '送出爱心值、公益金，领取档位奖励'
-          : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
-            ? '已读取客户端静态预览，动态规则待服务端开放'
-            : '暂未适配详情',
+      description: adaptedKey
+        ? adaptedKey === 'charity-flower' ? '查看爱心、公益进度与奖励状态' : '查看天气、每日进度与气象研究'
+        : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
+          ? '已读取客户端静态预览，动态规则待服务端开放'
+          : '暂未适配详情',
       image: group.imageUrl || (adaptedKey === 'rain-poem' ? '/activity/rain-poem/day-rain-bg.jpg' : ''),
       window,
       updatedMs: window.startMs,
       status: activityWindowStatus(window),
-      pending: group.activityIds.some(id => ![2026070300, 2026090901].includes(id) && unknownActivityIds.value.has(id)),
+      pending: !adaptedKey && group.activityIds.some(id => unknownActivityIds.value.has(id)),
       backgroundStyle: {
         background: `radial-gradient(circle at 84% 18%, hsl(${(hue + 42) % 360} 82% 68% / 0.38), transparent 34%), radial-gradient(circle at 12% 92%, hsl(${(hue + 310) % 360} 75% 58% / 0.26), transparent 38%), linear-gradient(135deg, hsl(${hue} 52% 38%), hsl(${(hue + 32) % 360} 58% 18%))`,
       },
@@ -308,11 +288,7 @@ function applyActivityDirectoryReport(report: any) {
   activityDirectoryWindows.value = Array.isArray(report?.online?.activityWindows) ? report.online.activityWindows : []
   activityDirectoryActivities.value = Array.isArray(report?.online?.activities) ? report.online.activities : []
   activityDirectoryGroups.value = Array.isArray(report?.online?.groups) ? report.online.groups : []
-  // 过滤掉已适配的活动 ID，避免显示"待适配"标签
-  const adaptedIds = new Set([2026070300, 2026090901])
-  unknownActivityIds.value = new Set(
-    (report?.online?.unknownActivityIds || []).map(Number).filter((id: number) => !adaptedIds.has(id))
-  )
+  unknownActivityIds.value = new Set((report?.online?.unknownActivityIds || []).map(Number))
 }
 
 function flattenActivityDetails(node: ActivityDirectoryNode): ActivityDirectoryNode[] {
@@ -366,18 +342,18 @@ async function rescanActivityDirectory() {
 }
 
 async function refreshAll() {
-  if (!currentAccountId.value) return
-  const id = String(currentAccountId.value)
-  const requests = []
-  if (SHOW_STAR_ACTIVITY && !heluLoading.value)
-    requests.push(activityStore.fetchHeluActivity(id))
-  if (SHOW_QIXI_ACTIVITY && !qixiLoading.value)
-    requests.push(activityStore.fetchQixiActivity(id))
-  if (rainPoemActivityActive.value && !rainPoemLoading.value)
-    requests.push(activityStore.fetchRainPoemActivity(id))
-  if (charityFlowerActivityActive.value && !charityFlowerLoading.value)
-    requests.push(activityStore.fetchCharityFlowerActivity(id))
-  await Promise.all(requests)
+  if (currentAccountId.value && !rainPoemLoading.value && !heluLoading.value && !qixiLoading.value) {
+    const requests = []
+    if (SHOW_STAR_ACTIVITY)
+      requests.push(activityStore.fetchHeluActivity(String(currentAccountId.value)))
+    if (SHOW_QIXI_ACTIVITY)
+      requests.push(activityStore.fetchQixiActivity(String(currentAccountId.value)))
+    if (rainPoemActivityActive.value)
+      requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
+    if (charityFlowerActivityActive.value)
+      requests.push(activityStore.fetchCharityFlowerActivity(String(currentAccountId.value)))
+    await Promise.all(requests)
+  }
 }
 
 function handleVisibilityChange() {
@@ -410,77 +386,47 @@ async function giftQixi(friendGid: number, count: number) {
 }
 
 async function scanWeatherFriends() {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.scanWeatherFriends(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success(`扫描完成，发现 ${result.friends?.length || 0} 位好友`)
-  else
-    toast.error(friendlyActivityError(result?.error || '扫描好友失败'))
+  if (result?.ok) toast.success(`扫描完成，发现 ${(result.friends || []).length} 位好友`)
+  else toast.error(result?.error || '扫描好友天气失败')
 }
 
 async function useWeatherFrogBottle(friendGid: number) {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.useWeatherFrogBottle(String(currentAccountId.value), friendGid)
-  if (result?.ok)
-    toast.success('青蛙使坏成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '青蛙使坏失败'))
+  result?.ok ? toast.success('青蛙使坏成功') : toast.error(result?.error || '青蛙使坏失败')
 }
 
 async function useWeatherCloudBottle(friendGid: number, landId: number) {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.useWeatherCloudBottle(String(currentAccountId.value), friendGid, landId)
-  if (result?.ok)
-    toast.success('乌云使坏成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '乌云使坏失败'))
+  result?.ok ? toast.success('乌云使坏成功') : toast.error(result?.error || '乌云使坏失败')
 }
 
 async function buyRainPoemBottle() {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.buyRainPoemBottle(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('购买采集瓶成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '购买采集瓶失败'))
+  result?.ok ? toast.success('购买天气采集瓶成功') : toast.error(result?.error || '购买失败')
 }
 
 async function collectRainPoemWeather() {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.collectRainPoemWeather(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('采集雷雨成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '采集雷雨失败'))
+  result?.ok ? toast.success(`采集完成，收集到 ${(result.friends || []).length} 个天气`) : toast.error(result?.error || '采集天气失败')
 }
 
 async function useSummonBottle() {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.useSummonBottle(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('召唤雷雨成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '召唤雷雨失败'))
+  result?.ok ? toast.success('雷雨召唤成功') : toast.error(result?.error || '雷雨召唤失败')
 }
 
 async function unlockWeatherResearch() {
-  if (!currentAccountId.value)
-    return
+  if (!currentAccountId.value) return
   const result = await activityStore.unlockWeatherResearch(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('解锁研究成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '解锁研究失败'))
+  result?.ok ? toast.success('气象研究解锁成功') : toast.error(result?.error || '气象研究解锁失败')
 }
-
-// ─── 公益小红花 ───
-// CharityFlowerActivityPanel 通过 store 内部处理所有操作
 
 async function claimRecords() {
   if (!currentAccountId.value)
@@ -531,10 +477,6 @@ watch(rainPoemActivityActive, (active) => {
     selectedActivity.value = null
     activityStore.clearActivityData()
   }
-})
-watch(charityFlowerActivityActive, (active) => {
-  if (active)
-    refreshAll()
 })
 onMounted(() => {
   nowTimer = window.setInterval(() => {
@@ -672,8 +614,7 @@ onUnmounted(() => {
                 {{ formatActivityDateTime(card.window.startMs) }} — {{ formatActivityDateTime(card.window.endMs) }}
               </p>
               <div class="mt-4 flex items-center gap-2 text-xs text-white/65">
-                <span v-if="card.adaptedKey === 'rain-poem'" class="i-carbon-rain-heavy text-base text-cyan-200" />
-                <span v-else-if="card.adaptedKey === 'charity-flower'" class="i-carbon-favorite-heart text-base text-pink-200" />
+                <span v-if="card.adaptedKey" class="i-carbon-rain-heavy text-base text-cyan-200" />
                 <span v-else class="i-carbon-calendar text-base text-cyan-200" />
                 {{ card.description }}
               </div>
@@ -717,18 +658,9 @@ onUnmounted(() => {
       </div>
     </div>
     <div v-else-if="selectedActivityCard?.adaptedKey === 'charity-flower' && selectedActivityCard.status === 'active'" class="space-y-3">
-      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
-        <span class="i-carbon-arrow-left" />
-        返回活动列表
-      </button>
-      <CharityFlowerActivityPanel
-        v-if="charityFlowerActivityActive && currentAccountId"
-        :account-id="currentAccountId"
-        :active-account-id="currentAccountId"
-      />
-      <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
-        {{ L.needAccount }}
-      </div>
+      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null"><span class="i-carbon-arrow-left" />返回活动列表</button>
+      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" @refresh="refreshAll" />
+      <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">

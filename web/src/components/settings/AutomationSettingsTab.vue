@@ -4,7 +4,7 @@ import api from '@/api'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
 import BaseSwitch from '@/components/ui/BaseSwitch.vue'
-import { isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
+import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 
 interface AutomationSettings {
   automation: {
@@ -34,6 +34,10 @@ interface AutomationSettings {
     rain_poem_summon_use: boolean
     rain_poem_prank_use: boolean
     rain_poem_research_unlock: boolean
+    charity_flower_share_claim: boolean
+    charity_flower_donate: boolean
+    charity_flower_reward_claim: boolean
+    charity_flower_public_fund_claim: boolean
     golden_bug_clear: boolean
     fertilizer_gift: boolean
     fertilizer_buy_organic: boolean
@@ -90,6 +94,7 @@ const SHOW_QIXI_ACTIVITY = false
 const nowMs = ref(Date.now())
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const showRainPoemActivity = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
+const showCharityFlowerActivity = computed(() => isWithinActivityWindowMs(CHARITY_FLOWER_ACTIVITY_WINDOW, nowMs.value))
 const qixiFriends = ref<Array<{ gid: number, name: string, level?: number }>>([])
 function qixiPriority() {
   return Array.isArray(settings.value.automation.qixi_friend_priority)
@@ -275,6 +280,18 @@ watch(() => props.currentAccountId, loadQixiFriends)
           </div>
           <div v-if="showRainPoemActivity" class="border border-gray-200 rounded-lg bg-white px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.rain_poem_research_unlock" label="自动解锁气象研究" />
+          </div>
+          <div v-if="showCharityFlowerActivity" class="border border-rose-200 rounded-lg bg-white px-4 py-3 dark:border-rose-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.charity_flower_share_claim" label="自动领取小红花分享奖励" />
+          </div>
+          <div v-if="showCharityFlowerActivity" class="border border-rose-200 rounded-lg bg-white px-4 py-3 dark:border-rose-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.charity_flower_donate" label="自动送出全部爱心" />
+          </div>
+          <div v-if="showCharityFlowerActivity" class="border border-rose-200 rounded-lg bg-white px-4 py-3 dark:border-rose-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.charity_flower_reward_claim" label="自动领取爱心档位奖励" />
+          </div>
+          <div v-if="showCharityFlowerActivity" class="border border-rose-200 rounded-lg bg-white px-4 py-3 dark:border-rose-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.charity_flower_public_fund_claim" label="自动领取并送出 1 元公益金（活动期仅一次）" />
           </div>
         </div>
         <div v-if="SHOW_QIXI_ACTIVITY && settings.automation.qixi_sachet_gift" class="mt-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">

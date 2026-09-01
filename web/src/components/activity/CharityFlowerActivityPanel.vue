@@ -1,135 +1,45 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useActivityStore } from '@/stores/activity'
-
-const props = defineProps<{ accountId: string; activeAccountId?: string | null }>()
-
-const store = useActivityStore()
-const activity = computed(() => store.charityFlowerActivity)
-const loading = computed(() => store.charityFlowerLoading)
-
-function fmtTime(ts?: number) {
-  if (!ts) return '-'
-  return new Date(ts * 1000).toLocaleString()
-}
+defineProps<{ activity: any | null, loading: boolean }>()
+defineEmits<{ refresh: [] }>()
+function pct(value: number, target: number) { return target > 0 ? Math.min(100, Math.max(0, value / target * 100)) : 0 }
+function time(value: number) { return value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '—' }
 </script>
 
 <template>
-  <div class="activity-panel charity-flower-panel">
-    <div class="gradient-header charity-flower-header">
-      <h3>公益小红花</h3>
-      <p v-if="activity.active !== false">
-        活动时间: {{ fmtTime(activity.startTime) }} ~ {{ fmtTime(activity.endTime) }}
-      </p>
-      <p v-else>活动未开始或已结束</p>
+  <section class="space-y-4">
+    <div class="overflow-hidden rounded-xl bg-gradient-to-br from-rose-500 via-pink-500 to-orange-400 p-6 text-white shadow-sm">
+      <div class="flex items-start justify-between gap-4">
+        <div><p class="text-sm text-white/75">QQ 农场公益活动</p><h1 class="mt-1 text-3xl font-semibold">{{ activity?.title || '公益小红花' }}</h1><p class="mt-2 text-sm text-white/80">{{ time(activity?.startTime) }} — {{ time(activity?.endTime) }}</p></div>
+        <button class="rounded-lg bg-white/20 px-3 py-2 text-sm disabled:opacity-50" :disabled="loading" @click="$emit('refresh')">{{ loading ? '刷新中' : '刷新' }}</button>
+      </div>
+      <div class="mt-6 grid grid-cols-3 gap-3 text-center">
+        <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">可送爱心</div><div class="mt-1 text-2xl font-semibold">{{ activity?.love?.count || 0 }}</div></div>
+        <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">个人爱心值</div><div class="mt-1 text-2xl font-semibold">{{ activity?.love?.personalScore || 0 }}</div></div>
+        <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">1 元公益金资格</div><div class="mt-1 text-sm font-medium">{{ activity?.publicFund?.claimed ? '已送出' : activity?.publicFund?.claimable ? '可送出' : '未取得资格' }}</div></div>
+      </div>
     </div>
 
-    <div class="panel-body">
-      <div class="charity-flower-section">
-        <div class="section-header">
-          <span class="section-title">爱心值</span>
-          <span class="section-badge" v-if="activity.love">{{ activity.love.count || 0 }}</span>
-        </div>
-        <p v-if="activity.love?.canDonate" class="hint">爱心可捐赠</p>
-      </div>
-
-      <div class="charity-flower-section" v-if="activity.global">
-        <div class="section-header">
-          <span class="section-title">全服进度</span>
-        </div>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" :style="{ width: Math.min(100, Math.round((activity.global.amountYuan || 0) / Math.max(1, activity.global.targetYuan || 1) * 100)) + '%' }"></div>
-        </div>
-        <p class="progress-text">{{ activity.global.amountYuan || 0 }} 元 / {{ activity.global.targetYuan || 0 }} 元</p>
-      </div>
-
-      <div class="charity-flower-section" v-if="activity.share">
-        <div class="section-header">
-          <span class="section-title">分享奖励</span>
-          <span class="section-badge claimed" v-if="activity.share.claimed">已领取</span>
-          <span class="section-badge claimable" v-else-if="activity.share.claimable">可领取</span>
-          <span class="section-badge" v-else>未达成</span>
-        </div>
-        <div class="rewards-list" v-if="activity.share.rewards?.length">
-          <div class="reward-item" v-for="(r, i) in activity.share.rewards" :key="i">
-            <span>{{ r.name || `物品#${r.id}` }}</span>
-            <span class="reward-count" v-if="r.count">×{{ r.count }}</span>
+    <div v-if="loading && !activity" class="rounded-xl bg-white p-10 text-center text-sm text-gray-500 shadow-sm dark:bg-gray-800">正在读取活动状态…</div>
+    <template v-else-if="activity">
+      <section class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800">
+        <div class="flex justify-between text-sm"><span class="font-medium">全服公益金进度（元）</span><span>{{ Number(activity.global.amountYuan).toLocaleString(undefined, { minimumFractionDigits: 2 }) }} / {{ Number(activity.global.targetYuan).toLocaleString(undefined, { minimumFractionDigits: 2 }) }}</span></div>
+        <div class="mt-3 h-3 overflow-hidden rounded-full bg-rose-100 dark:bg-rose-950"><div class="h-full rounded-full bg-rose-500" :style="{ width: `${pct(activity.global.score, activity.global.target)}%` }" /></div>
+        <p class="mt-3 text-xs text-gray-500">全服结算时间：{{ time(activity.finalReward.settlementTime) }}</p>
+      </section>
+      <section class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800">
+        <h2 class="text-base font-semibold">个人爱心奖励</h2>
+        <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div v-for="tier in activity.personalRewards" :key="tier.needScore" class="rounded-lg border p-3" :class="tier.claimed ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20' : tier.reached ? 'border-rose-300 bg-rose-50 dark:bg-rose-950/20' : 'border-gray-200 dark:border-gray-700'">
+            <div class="text-xs text-gray-500">{{ tier.needScore }} 爱心</div><div class="mt-2 text-sm font-medium">{{ tier.rewards.map((item: any) => `${item.itemName} ×${item.itemCount}`).join('、') }}</div><div class="mt-2 text-xs">{{ tier.claimed ? '已领取' : tier.reached ? '可领取' : '未达成' }}</div>
           </div>
         </div>
-      </div>
-
-      <div class="charity-flower-section" v-if="activity.personalRewards?.length">
-        <div class="section-header">
-          <span class="section-title">爱心档位</span>
-        </div>
-        <div class="tiers-list">
-          <div class="tier-item" v-for="(tier, i) in activity.personalRewards" :key="i" :class="{ reached: tier.reached, claimed: tier.claimed }">
-            <span class="tier-score">爱心 {{ tier.needScore }}</span>
-            <span class="tier-status">
-              <span v-if="tier.claimed" class="badge claimed">已领取</span>
-              <span v-else-if="tier.reached" class="badge claimable">可领取</span>
-              <span v-else class="badge">未达成</span>
-            </span>
-            <div class="rewards-list compact" v-if="tier.rewards?.length">
-              <span class="reward-item" v-for="(r, j) in tier.rewards" :key="j">
-                {{ r.name || `物品#${r.id}` }}<span v-if="r.count"> ×{{ r.count }}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="charity-flower-section" v-if="activity.publicFund">
-        <div class="section-header">
-          <span class="section-title">公益金</span>
-          <span class="section-badge claimed" v-if="activity.publicFund.claimed">已捐赠</span>
-          <span class="section-badge claimable" v-else-if="activity.publicFund.claimable">可捐赠</span>
-          <span class="section-badge" v-else>未达成</span>
-        </div>
-        <p v-if="!activity.publicFund.complianceAgreed" class="hint">需同意腾讯公益平台协议</p>
-      </div>
-
-      <div class="charity-flower-section" v-if="activity.finalReward">
-        <div class="section-header">
-          <span class="section-title">最终奖励</span>
-          <span class="section-badge" v-if="activity.finalReward.threshold">爱心 {{ activity.finalReward.threshold }}</span>
-          <span class="section-badge claimed" v-if="activity.finalReward.settled">已结算</span>
-        </div>
-        <p class="hint" v-if="activity.finalReward.settlementTime">结算时间: {{ fmtTime(activity.finalReward.settlementTime) }}</p>
-      </div>
-
-      <div v-if="loading" class="loading-hint">加载中...</div>
-    </div>
-  </div>
+      </section>
+      <section class="grid gap-3 sm:grid-cols-3">
+        <div class="rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800"><div class="text-xs text-gray-500">每日分享礼包</div><div class="mt-2 text-sm font-medium">{{ activity.share.claimed ? '已领取' : activity.share.claimable ? '可领取' : '未完成分享' }}</div></div>
+        <div class="rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800"><div class="text-xs text-gray-500">公益协议</div><div class="mt-2 text-sm font-medium">{{ activity.publicFund.complianceAgreed ? '已同意' : '未同意' }}</div></div>
+        <div class="rounded-xl bg-white p-4 shadow-sm dark:bg-gray-800"><div class="text-xs text-gray-500">已送公益金次数</div><div class="mt-2 text-sm font-medium">{{ activity.publicFund.successCount }}</div></div>
+      </section>
+    </template>
+    <div v-else class="rounded-xl bg-white p-10 text-center text-sm text-gray-500 shadow-sm dark:bg-gray-800">当前账号暂无活动数据</div>
+  </section>
 </template>
-
-<style scoped>
-.charity-flower-panel { border: 1px solid rgba(255, 105, 180, 0.3); border-radius: 12px; overflow: hidden; background: #fff; }
-.charity-flower-header { background: linear-gradient(135deg, #ff6b9d, #c73866); padding: 16px; }
-.charity-flower-header h3 { margin: 0 0 4px; color: #fff; font-size: 16px; }
-.charity-flower-header p { margin: 0; color: rgba(255, 255, 255, 0.85); font-size: 12px; }
-.panel-body { padding: 12px 16px; }
-.charity-flower-section { margin-bottom: 12px; }
-.section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.section-title { font-weight: 600; font-size: 13px; }
-.section-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #f0f0f0; color: #666; }
-.section-badge.claimable { background: #fff3e0; color: #e65100; }
-.section-badge.claimed { background: #e8f5e9; color: #2e7d32; }
-.hint { margin: 4px 0 0; font-size: 12px; color: #999; }
-.progress-bar-wrap { height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden; }
-.progress-bar { height: 100%; background: linear-gradient(90deg, #ff6b9d, #c73866); transition: width 0.3s; border-radius: 4px; }
-.progress-text { margin: 4px 0 0; font-size: 11px; color: #666; }
-.tiers-list, .rewards-list { display: flex; flex-direction: column; gap: 4px; }
-.tier-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: #fafafa; font-size: 12px; }
-.tier-item.reached { background: #fff8e1; }
-.tier-item.claimed { background: #e8f5e9; }
-.tier-score { min-width: 70px; font-weight: 500; }
-.tier-status .badge { font-size: 10px; padding: 1px 6px; border-radius: 8px; }
-.badge { background: #f0f0f0; color: #666; }
-.badge.claimable { background: #fff3e0; color: #e65100; }
-.badge.claimed { background: #e8f5e9; color: #2e7d32; }
-.rewards-list.compact { flex-direction: row; flex-wrap: wrap; gap: 4px; }
-.reward-item { font-size: 11px; color: #666; }
-.reward-count { color: #999; }
-.loading-hint { text-align: center; padding: 12px; color: #999; font-size: 12px; }
-</style>

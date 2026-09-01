@@ -27,6 +27,7 @@ const {
 } = require('../services/farm');
 const {
     checkFriends,
+    runScheduledStealCheck,
     startFriendCheckLoop,
     stopFriendCheckLoop,
     refreshFriendCheckLoop,
@@ -78,6 +79,7 @@ const {
     statusData
 } = require('../services/status');
 const {
+    initTaskSystem,
     cleanupTaskSystem,
     checkAndClaimTasks,
     getTaskClaimDailyState,
@@ -95,8 +97,11 @@ const {
     stopNetwork,
     getWs,
     getUserState,
+    getGatewayHealth,
     networkEvents
 } = require('../utils/network');
+const { nextBusinessBackoffMs } = require('../utils/gateway-health');
+const { runWithRequestPriority } = require('../utils/request-priority');
 const { loadProto } = require('../utils/proto');
 const { setLogHook, log, toNum } = require('../utils/utils');
 const { resourcePolicy, createResourceMonitor } = require('../runtime/resource-policy');
@@ -243,10 +248,13 @@ function getLocalDateKey() {
 
 // ==================== 每日任务 ====================
 
-async function runDailyRoutines(force = false) {
+async function runDailyRoutines(force = false, options = {}) {
     if (!loginReady || friendSyncPaused) return;
     try {
+        const automation = getAutomation() || {};
         await checkAndClaimEmails(force);
+        if (automation.task && !options.skipTask) await checkAndClaimTasks();
+        if (automation.fertilizer_gift) await openFertilizerGiftPacksSilently();
         await performDailyShare(force);
         await performDailyMonthCardGift(force);
         await buyFreeGifts(force);
@@ -267,7 +275,7 @@ function stopDailyRoutineTimer() {
 function startDailyRoutineTimer() {
     stopDailyRoutineTimer();
     lastDailyRunDate = getLocalDateKey();
-    runDailyRoutines(true).catch(() => null);
+    runDailyRoutines(true, { skipTask: true }).catch(() => null);
 
     // 每 60 秒检查一次日期是否变化
     workerScheduler.setIntervalTask('daily_routine_interval', 60000, () => {
@@ -300,17 +308,17 @@ async function runStarActivityAutoClaims() {
     const useRainPoemSummonEnabled = automation.rain_poem_summon_use === true;
     const useRainPoemPrankEnabled = automation.rain_poem_prank_use === true;
     const unlockRainPoemResearchEnabled = automation.rain_poem_research_unlock === true;
-    const charityFlowerShareClaimEnabled = automation.charity_flower_share_claim === true;
-    const charityFlowerDonateEnabled = automation.charity_flower_donate === true;
-    const charityFlowerRewardClaimEnabled = automation.charity_flower_reward_claim === true;
-    const charityFlowerPublicFundClaimEnabled = automation.charity_flower_public_fund_claim === true;
+    const claimCharityShareEnabled = automation.charity_flower_share_claim === true;
+    const donateCharityLoveEnabled = automation.charity_flower_donate === true;
+    const claimCharityRewardsEnabled = automation.charity_flower_reward_claim === true;
+    const claimCharityPublicFundEnabled = automation.charity_flower_public_fund_claim === true;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
     if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
         && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled
         && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled && !useRainPoemPrankEnabled
-        && !unlockRainPoemResearchEnabled
-        && !charityFlowerShareClaimEnabled && !charityFlowerDonateEnabled && !charityFlowerRewardClaimEnabled && !charityFlowerPublicFundClaimEnabled) return;
+        && !unlockRainPoemResearchEnabled && !claimCharityShareEnabled && !donateCharityLoveEnabled
+        && !claimCharityRewardsEnabled && !claimCharityPublicFundEnabled) return;
 
     starActivityClaimRunning = true;
     try {
@@ -484,6 +492,37 @@ async function runStarActivityAutoClaims() {
             }
         }
 
+        if (claimCharityShareEnabled || donateCharityLoveEnabled || claimCharityRewardsEnabled || claimCharityPublicFundEnabled) {
+            const {
+                getCharityFlowerActivity,
+                claimCharityFlowerShareReward,
+                donateCharityFlowerLove,
+                claimCharityFlowerReward,
+                claimCharityFlowerPublicFund
+            } = require('../services/activity');
+            let charity = await getCharityFlowerActivity();
+            if (charity?.active !== false) {
+                if (claimCharityShareEnabled && charity?.share?.claimable) {
+                    await claimCharityFlowerShareReward();
+                    charity = await getCharityFlowerActivity();
+                }
+                if (donateCharityLoveEnabled && charity?.love?.canDonate && Number(charity?.love?.count || 0) > 0) {
+                    await donateCharityFlowerLove();
+                    charity = await getCharityFlowerActivity();
+                }
+                if (claimCharityRewardsEnabled) {
+                    for (const tier of charity?.personalRewards || []) {
+                        if (!tier.reached || tier.claimed) continue;
+                        await claimCharityFlowerReward(tier.needScore);
+                    }
+                    charity = await getCharityFlowerActivity();
+                }
+                if (claimCharityPublicFundEnabled && charity?.publicFund?.claimable && charity?.publicFund?.complianceAgreed) {
+                    await claimCharityFlowerPublicFund();
+                }
+            }
+        }
+
         if (buyRainPoemBottleEnabled || collectRainPoemWeatherEnabled || useRainPoemSummonEnabled || useRainPoemPrankEnabled || unlockRainPoemResearchEnabled) {
             const {
                 getRainPoemActivity,
@@ -594,40 +633,6 @@ async function runStarActivityAutoClaims() {
                 } catch (err) {
                     log('活动', `自动解锁气象研究失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动研究', result: 'error', count: unlocked });
                 }
-            }
-        }
-
-        // ─── 公益小红花自动执行 ───
-        if (charityFlowerShareClaimEnabled || charityFlowerDonateEnabled || charityFlowerRewardClaimEnabled || charityFlowerPublicFundClaimEnabled) {
-            try {
-                const {
-                    getCharityFlowerActivity,
-                    claimCharityFlowerShareReward,
-                    donateCharityFlowerLove,
-                    claimCharityFlowerReward,
-                    claimCharityFlowerPublicFund
-                } = require('../services/activity');
-                let charity = await getCharityFlowerActivity();
-                if (charity?.active !== false) {
-                    if (charityFlowerShareClaimEnabled && charity?.share?.claimable) {
-                        try { await claimCharityFlowerShareReward(); charity = await getCharityFlowerActivity(); } catch (err) { log('活动', `公益小红花分享领取失败: ${err.message}`, { module: 'activity', event: '公益小红花', result: 'error' }); }
-                    }
-                    if (charityFlowerDonateEnabled && charity?.love?.canDonate && Number(charity?.love?.count || 0) > 0) {
-                        try { await donateCharityFlowerLove(); charity = await getCharityFlowerActivity(); } catch (err) { log('活动', `公益小红花送出爱心失败: ${err.message}`, { module: 'activity', event: '公益小红花', result: 'error' }); }
-                    }
-                    if (charityFlowerRewardClaimEnabled) {
-                        for (const tier of charity?.personalRewards || []) {
-                            if (tier.reached && !tier.claimed) {
-                                try { await claimCharityFlowerReward(tier.needScore); charity = await getCharityFlowerActivity(); } catch (err) { log('活动', `公益小红花档位领取失败(${tier.needScore}): ${err.message}`, { module: 'activity', event: '公益小红花', result: 'error' }); }
-                            }
-                        }
-                    }
-                    if (charityFlowerPublicFundClaimEnabled && charity?.publicFund?.claimable && charity?.publicFund?.complianceAgreed) {
-                        try { await claimCharityFlowerPublicFund(); } catch (err) { log('活动', `公益小红花公益金失败: ${err.message}`, { module: 'activity', event: '公益小红花', result: 'error' }); }
-                    }
-                }
-            } catch (err) {
-                log('活动', `公益小红花自动执行失败: ${err.message}`, { module: 'activity', event: '公益小红花', result: 'error' });
             }
         }
     } catch (err) {
@@ -745,8 +750,42 @@ function resetUnifiedSchedule() {
 
 // ==================== 农场 Tick ====================
 
+const businessBackoff = {
+    farm: { delayMs: 0, reason: '' },
+    friend: { delayMs: 0, reason: '' },
+};
+
+function getBusinessDeferMs(kind) {
+    const state = businessBackoff[kind];
+    const health = getGatewayHealth();
+    if (health.healthy) {
+        if (state.delayMs > 0) {
+            log('系统', `${kind === 'farm' ? '农场' : '好友'}任务网关已恢复`, {
+                module: 'network', event: '业务网关恢复', kind,
+            });
+        }
+        state.delayMs = 0;
+        state.reason = '';
+        return 0;
+    }
+    state.delayMs = nextBusinessBackoffMs(state.delayMs);
+    if (state.reason !== health.reason) {
+        log('系统', `${kind === 'farm' ? '农场' : '好友'}任务因网关不健康退避 ${Math.round(state.delayMs / 1000)} 秒`, {
+            module: 'network', event: '业务网关退避', kind, reason: health.reason,
+            pending: health.pending,
+        });
+    }
+    state.reason = health.reason;
+    return state.delayMs;
+}
+
 async function runFarmTick(autoConfig) {
     if (farmTaskRunning || friendSyncPaused) return;
+    const deferMs = getBusinessDeferMs('farm');
+    if (deferMs > 0) {
+        nextFarmRunAt = Date.now() + deferMs;
+        return;
+    }
     farmTaskRunning = true;
 
     const nextDelay = randomIntervalMs(
@@ -755,10 +794,9 @@ async function runFarmTick(autoConfig) {
     );
 
     try {
-        if (autoConfig.farm) await checkFarm();
-        if (autoConfig.task) await checkAndClaimTasks();
-        if (autoConfig.email) await checkAndClaimEmails();
-        if (autoConfig.fertilizer_gift) await openFertilizerGiftPacksSilently();
+        await runWithRequestPriority('farm', async () => {
+            if (autoConfig.farm) await checkFarm();
+        });
     } catch { } finally {
         nextFarmRunAt = Date.now() + nextDelay;
         farmTaskRunning = false;
@@ -773,16 +811,24 @@ let nextHelpRunAt = 0;
 async function runHelpTick(autoConfig) {
     if (helpTaskRunning || friendSyncPaused) return;
     if (!autoConfig.friend_help && !autoConfig.friend_golden_bug) return;
+    const deferMs = getBusinessDeferMs('friend');
+    if (deferMs > 0) {
+        nextHelpRunAt = Date.now() + deferMs;
+        return;
+    }
     helpTaskRunning = true;
 
     const nextDelay = randomIntervalMs(
         CONFIG.helpCheckIntervalMin || 30000,
         CONFIG.helpCheckIntervalMax || 35000
     );
+    const lowFrequencyDelay = Math.max(10 * 60 * 1000, nextDelay);
 
     try {
-        if (autoConfig.friend_help) await checkFriends({ onlyHelp: true });
-        if (autoConfig.friend_golden_bug) await runGoldenBugPlacement();
+        await runWithRequestPriority('friend', async () => {
+            if (autoConfig.friend_help) await checkFriends({ onlyHelp: true });
+            if (autoConfig.friend_golden_bug) await runGoldenBugPlacement();
+        });
     } catch (err) {
         if (!isTransientNetworkError(err)) {
             log('系统', `帮助巡查执行失败: ${  err.message}`, {
@@ -792,7 +838,7 @@ async function runHelpTick(autoConfig) {
             });
         }
     } finally {
-        nextHelpRunAt = Date.now() + nextDelay;
+        nextHelpRunAt = Date.now() + lowFrequencyDelay;
         helpTaskRunning = false;
     }
 }
@@ -804,16 +850,21 @@ let nextStealRunAt = 0;
 
 async function runStealTick(autoConfig) {
     if (stealTaskRunning || friendSyncPaused) return;
-    if (!autoConfig.friend_steal) return;
+    if (!autoConfig.friend_steal) {
+        nextStealRunAt = Date.now() + (15 * 60 * 1000);
+        return;
+    }
+    const deferMs = getBusinessDeferMs('friend');
+    if (deferMs > 0) {
+        nextStealRunAt = Date.now() + deferMs;
+        return;
+    }
     stealTaskRunning = true;
 
-    const nextDelay = randomIntervalMs(
-        CONFIG.stealCheckIntervalMin || 25000,
-        CONFIG.stealCheckIntervalMax || 30000
-    );
+    let nextDelay = 15 * 60 * 1000;
 
     try {
-        await checkFriends({ onlySteal: true });
+        nextDelay = await runWithRequestPriority('friend', () => runScheduledStealCheck());
     } catch (err) {
         if (!isTransientNetworkError(err)) {
             log('系统', `偷菜巡查执行失败: ${  err.message}`, {
@@ -823,7 +874,7 @@ async function runStealTick(autoConfig) {
             });
         }
     } finally {
-        nextStealRunAt = Date.now() + nextDelay;
+        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || 15 * 60 * 1000);
         stealTaskRunning = false;
     }
 }
@@ -950,14 +1001,6 @@ function applyRuntimeConfig(config, syncStatusAfter = false) {
                 !prevAuto?.rain_poem_prank_use && newAuto?.rain_poem_prank_use
             ) || (
                 !prevAuto?.rain_poem_research_unlock && newAuto?.rain_poem_research_unlock
-            ) || (
-                !prevAuto?.charity_flower_share_claim && newAuto?.charity_flower_share_claim
-            ) || (
-                !prevAuto?.charity_flower_donate && newAuto?.charity_flower_donate
-            ) || (
-                !prevAuto?.charity_flower_reward_claim && newAuto?.charity_flower_reward_claim
-            ) || (
-                !prevAuto?.charity_flower_public_fund_claim && newAuto?.charity_flower_public_fund_claim
             );
             if (starClaimBecameEnabled) {
                 workerScheduler.setTimeoutTask('star_activity_claim_after_save', 2000, () => {
@@ -1226,6 +1269,7 @@ async function startBot(config) {
         }
 
         // 启动每日定时器
+        initTaskSystem();
         startDailyRoutineTimer();
         startStarActivityClaimTimer();
         startMysteryShopAutoBuyTimer();
@@ -1584,6 +1628,11 @@ async function handleApiCall(msg) {
                 result = await unlockRainPoemResearch();
                 break;
             }
+            case 'getCharityFlowerActivity': {
+                const { getCharityFlowerActivity } = require('../services/activity');
+                result = await getCharityFlowerActivity();
+                break;
+            }
             case 'scanWeatherFriends': {
                 const { scanWeatherFriends } = require('../services/activity');
                 result = await scanWeatherFriends();
@@ -1597,6 +1646,26 @@ async function handleApiCall(msg) {
             case 'useWeatherCloudBottle': {
                 const { useWeatherCloudBottle } = require('../services/activity');
                 result = await useWeatherCloudBottle(args[0], args[1]);
+                break;
+            }
+            case 'sendCharityFlowerLove': {
+                const { donateCharityFlowerLove } = require('../services/activity');
+                result = await donateCharityFlowerLove();
+                break;
+            }
+            case 'sendCharityFlowerMoney': {
+                const { claimCharityFlowerPublicFund } = require('../services/activity');
+                result = await claimCharityFlowerPublicFund();
+                break;
+            }
+            case 'claimCharityFlowerReward': {
+                const { claimCharityFlowerReward } = require('../services/activity');
+                result = await claimCharityFlowerReward(args[0]);
+                break;
+            }
+            case 'claimCharityFlowerShare': {
+                const { claimCharityFlowerShareReward } = require('../services/activity');
+                result = await claimCharityFlowerShareReward();
                 break;
             }
             case 'exchangeHeluShopItem': {
@@ -1627,31 +1696,6 @@ async function handleApiCall(msg) {
             case 'brewAndSellQingmeiWine': {
                 const { brewAndSellQingmeiWine } = require('../services/activity');
                 result = await brewAndSellQingmeiWine(args[0] || {});
-                break;
-            }
-            case 'getCharityFlowerActivity': {
-                const { getCharityFlowerActivity } = require('../services/activity');
-                result = await getCharityFlowerActivity();
-                break;
-            }
-            case 'sendCharityFlowerLove': {
-                const { sendCharityFlowerLove } = require('../services/activity');
-                result = await sendCharityFlowerLove();
-                break;
-            }
-            case 'sendCharityFlowerMoney': {
-                const { sendCharityFlowerMoney } = require('../services/activity');
-                result = await sendCharityFlowerMoney();
-                break;
-            }
-            case 'claimCharityFlowerReward': {
-                const { claimCharityFlowerReward } = require('../services/activity');
-                result = await claimCharityFlowerReward(args[0]);
-                break;
-            }
-            case 'claimCharityFlowerShare': {
-                const { claimCharityFlowerShare } = require('../services/activity');
-                result = await claimCharityFlowerShare();
                 break;
             }
             case 'getIllustratedList': {

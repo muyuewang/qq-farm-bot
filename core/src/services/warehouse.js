@@ -447,6 +447,7 @@ async function getBagDetail() {
           Number(info && info.rarity) || 0
         ) : 0,
         plantExp: seedPlant ? Math.max(0, Number(seedPlant.exp) || 0) : 0,
+        plantingPriority: seedPlant ? Math.max(0, Number(seedPlant.planting_priority) || 0) : 0,
         plantSize: seedPlant ? Math.max(1, Number(seedPlant.size || 1)) : 1,
         interactionType,
         hoursText: '',
@@ -680,6 +681,7 @@ async function getBagSeeds() {
         Number(info && info.rarity) || 0
       ),
       plantExp: Math.max(0, Number(plant && plant.exp) || 0),
+      plantingPriority: Math.max(0, Number(plant && plant.planting_priority) || 0),
       image: getSeedImageBySeedId(id) || getItemImageById(id),
       plantSize,
     };

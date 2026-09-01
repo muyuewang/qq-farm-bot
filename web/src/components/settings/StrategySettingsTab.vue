@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import StrategyTimingPanel from '@/components/settings/StrategyTimingPanel.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -10,20 +9,11 @@ interface SelectOption<T = string | number> {
   disabled?: boolean
 }
 
-interface SeedItem {
-  seedId: number
-  name: string
-  requiredLevel?: number
-  locked?: boolean
-  soldOut?: boolean
-}
-
 interface StrategySettings {
   plantingStrategy: string
   prioritize2x2Crops: boolean
   bagSeedPriority: number[]
   bagSeedFallbackStrategy: string
-  plantSeedPriority: number[]
   stealDelaySeconds: number
   intervals: {
     farmMin: number
@@ -40,7 +30,7 @@ interface StrategySettings {
   }
 }
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   currentAccountName: string | null
   currentAccountId: string | number | null | undefined
   loading: boolean
@@ -48,7 +38,6 @@ const props = withDefaults(defineProps<{
   plantingStrategyOptions: SelectOption[]
   bagFallbackStrategyOptions: SelectOption[]
   strategyPreviewLabel: string | null
-  availableSeeds?: SeedItem[]
   title?: string
   saveLabel?: string
   showActions?: boolean
@@ -58,7 +47,6 @@ const props = withDefaults(defineProps<{
   saveLabel: '保存策略设置',
   showActions: true,
   timingSection: 'all',
-  availableSeeds: () => [],
 })
 
 const emit = defineEmits<{
@@ -74,22 +62,6 @@ function selectBagFallbackStrategy(value: string | number) {
 function isBagFallbackStrategySelected(value: string | number) {
   return settings.value.bagSeedFallbackStrategy === value
 }
-
-const seedPriorityOptions = computed(() => {
-  const options: SelectOption[] = [{ label: '自动选择', value: 0 }]
-  for (const s of props.availableSeeds) {
-    if (s.locked || s.soldOut) continue
-    options.push({ label: `${s.name} (${s.seedId})`, value: s.seedId })
-  }
-  return options
-})
-
-const currentSeedPriority = computed({
-  get: () => settings.value.plantSeedPriority[0] ?? 0,
-  set: (v: number) => {
-    settings.value.plantSeedPriority = v > 0 ? [v] : []
-  },
-})
 </script>
 
 <template>
@@ -121,13 +93,15 @@ const currentSeedPriority = computed({
           label="种植策略"
           :options="plantingStrategyOptions"
         />
-        <BaseSelect
-          v-if="settings.plantingStrategy === 'seed_priority'"
-          v-model="currentSeedPriority"
-          label="优先种植种子"
-          :options="seedPriorityOptions"
-        />
-        <div v-else class="flex flex-col gap-1.5">
+        <div v-if="settings.plantingStrategy === 'seed_priority'" class="flex flex-col gap-1.5">
+          <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
+            优先种植种子
+          </label>
+          <div class="text-xs text-gray-500 dark:text-gray-400">
+            选择一个种子，每次种植时优先使用该种子
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
           <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
             {{ settings.plantingStrategy === 'bag_priority' ? '第二优先策略预览' : '策略选种预览' }}
           </label>

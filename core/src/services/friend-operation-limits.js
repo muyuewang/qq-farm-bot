@@ -1,7 +1,6 @@
 const { toNum, log, sleep } = require('../utils/utils');
-const { getUserState } = require('../utils/network');
+const { getUserState, sendMsgAsync, networkEvents } = require('../utils/network');
 const { types } = require('../utils/proto');
-const { sendMsgAsync } = require('../utils/network');
 const { toLong } = require('../utils/utils');
 
 // ===== Operation limits state =====
@@ -344,6 +343,13 @@ async function stealHarvest(gid, landIds) {
   );
   const reply = types.HarvestReply.decode(body);
   updateOperationLimits(reply.operation_limits);
+  if (Array.isArray(reply.land) && reply.land.length > 0) {
+    networkEvents.emit('friendLandsObserved', {
+      gid: toNum(gid),
+      lands: reply.land,
+      source: 'harvest_reply',
+    });
+  }
   return reply;
 }
 

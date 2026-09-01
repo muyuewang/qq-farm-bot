@@ -1,7 +1,7 @@
 const { PlantPhase } = require('../config/config');
 const { getPlantBlacklist, isAutomationOn } = require('../models/store');
 const { getUserState } = require('../utils/network');
-const { toNum, log, logWarn, randomDelay, sleep } = require('../utils/utils');
+const { toNum, log, logWarn, randomDelay } = require('../utils/utils');
 const { recordOperation } = require('./stats');
 const { sellAllFruits } = require('./warehouse');
 const {
@@ -35,24 +35,32 @@ const {
  * Run an operation on multiple land IDs. Falls back to single-ID calls if batch fails.
  * Returns the number of successful operations.
  */
-async function runBatchWithFallback(landIds, batchFn, singleFn) {
+function isExplicitBatchShapeError(error) {
+  if (!error) return false;
+  if (error.code === 'BATCH_UNSUPPORTED') return true;
+  const message = String(error.message || error);
+  return /batch (?:is )?not supported|unsupported batch|不支持批量|批量参数(?:无效|错误)/i.test(message);
+}
+
+async function runBatchWithFallback(landIds, batchFn, singleFn, options = {}) {
   const ids = Array.isArray(landIds) ? landIds.filter(Boolean) : [];
   if (ids.length === 0) return 0;
 
   try {
     await batchFn(ids);
     return ids.length;
-  } catch (_) {
-    // Fallback: one by one
+  } catch (error) {
+    if (!isExplicitBatchShapeError(error)) throw error;
+    const maxFallbacks = Math.max(1, Math.min(Number(options.maxFallbacks) || 4, 8));
     let ok = 0;
-    for (const id of ids) {
+    for (const id of ids.slice(0, maxFallbacks)) {
       try {
         await singleFn([id]);
         ok++;
-      } catch (_) {
+      } catch {
         // Skip individual failures
       }
-      await sleep(100);
+      await randomDelay(800, 1600);
     }
     return ok;
   }
@@ -279,7 +287,7 @@ async function doFriendOperation(gid, opType) {
   } finally {
     try {
       await leaveFriendFarm(numericGid);
-    } catch (_) {
+    } catch {
       // Ignore leave errors
     }
   }
@@ -405,19 +413,17 @@ async function visitFriend(friend, tally, myGid, accountId) {
           const info = analysis.stealableInfo.find(s => s.landId === landId);
           if (info) stolenNames.push(info.name);
         });
-      } catch (_) {
-        // Fallback: steal one by one
-        for (const landId of targetLands) {
-          try {
-            await stealHarvest(gid, [landId]);
-            stolen++;
-            const info = analysis.stealableInfo.find(s => s.landId === landId);
-            if (info) stolenNames.push(info.name);
-          } catch (_) {
-            // Skip individual failures
-          }
-          await randomDelay(500, 1000);
+      } catch (error) {
+        if (!isExplicitBatchShapeError(error)) {
+          await leaveFriendFarm(gid);
+          throw error;
         }
+        stolen = await runBatchWithFallback(
+          targetLands,
+          async () => { throw error; },
+          ids => stealHarvest(gid, ids),
+          { maxFallbacks: 4 }
+        );
       }
 
       if (stolen > 0) {
@@ -580,18 +586,17 @@ async function visitFriendForSteal(friend, tally, myGid, accountId) {
           const info = analysis.stealableInfo.find(s => s.landId === landId);
           if (info) stolenNames.push(info.name);
         });
-      } catch (_) {
-        for (const landId of targetLands) {
-          try {
-            await stealHarvest(gid, [landId]);
-            stolen++;
-            const info = analysis.stealableInfo.find(s => s.landId === landId);
-            if (info) stolenNames.push(info.name);
-          } catch (_) {
-            // Skip individual failures
-          }
-          await randomDelay(200, 600);
+      } catch (error) {
+        if (!isExplicitBatchShapeError(error)) {
+          await leaveFriendFarm(gid);
+          throw error;
         }
+        stolen = await runBatchWithFallback(
+          targetLands,
+          async () => { throw error; },
+          ids => stealHarvest(gid, ids),
+          { maxFallbacks: 4 }
+        );
       }
 
       if (stolen > 0) {
@@ -635,7 +640,7 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
 
   // Skip if exp limit reached and no guard dog
   if (checkExpLimit && !getCanGetHelpExp() && !hasGuardDog) {
-    return { acted: false, entered: false, status: 'skipped_exp_limit' };
+    return { acted: false, entered: false };
   }
 
   let enterReply;
@@ -644,7 +649,7 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
   } catch (err) {
     const handled = handleFriendEnterError(gid, name, err);
     if (handled.handled) {
-      return { acted: false, entered: false, status: 'enter_failed' };
+      return { acted: false, entered: false };
     }
     logWarn('好友', `进入 ${name} 农场失败: ${err.message}`, {
       module: 'friend',
@@ -653,13 +658,13 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
       friendName: name,
       friendGid: gid,
     });
-    return { acted: false, entered: false, status: 'enter_failed' };
+    return { acted: false, entered: false };
   }
 
   const lands = enterReply.lands || [];
   if (lands.length === 0) {
     await leaveFriendFarm(gid);
-    return { acted: false, entered: true, status: 'no_action' };
+    return { acted: false, entered: true };
   }
 
   const analysis = analyzeFriendLands(lands, myGid, name, {});
@@ -741,12 +746,13 @@ async function visitFriendForHelp(friend, tally, myGid, accountId, ignoreExpLimi
   }
 
   await leaveFriendFarm(gid);
-  return { acted: actionLogs.length > 0, entered: true, status: actionLogs.length > 0 ? 'helped' : 'no_action' };
+  return { acted: actionLogs.length > 0, entered: true };
 }
 
 // ===== Exports =====
 module.exports = {
   runBatchWithFallback,
+  isExplicitBatchShapeError,
   doFriendOperation,
   visitFriend,
   visitFriendForSteal,
