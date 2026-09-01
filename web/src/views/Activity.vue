@@ -210,6 +210,16 @@ const activityCards = computed(() => {
     endTime: CHARITY_FLOWER_ACTIVITY_WINDOW.endMs / 1000,
     activityIds: [2026090901],
   }]
+  // 始终注入公益小红花（服务器可能未返回该活动）
+  if (!source.some(g => g.activityIds.includes(2026090901))) {
+    source.push({
+      id: 2026090901,
+      title: '公益小红花',
+      startTime: CHARITY_FLOWER_ACTIVITY_WINDOW.startMs / 1000,
+      endTime: CHARITY_FLOWER_ACTIVITY_WINDOW.endMs / 1000,
+      activityIds: [2026090901],
+    })
+  }
   return source.map((group) => {
     const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const
       : group.activityIds.includes(2026090901) ? 'charity-flower' as const
@@ -303,7 +313,11 @@ function applyActivityDirectoryReport(report: any) {
   activityDirectoryWindows.value = Array.isArray(report?.online?.activityWindows) ? report.online.activityWindows : []
   activityDirectoryActivities.value = Array.isArray(report?.online?.activities) ? report.online.activities : []
   activityDirectoryGroups.value = Array.isArray(report?.online?.groups) ? report.online.groups : []
-  unknownActivityIds.value = new Set((report?.online?.unknownActivityIds || []).map(Number))
+  // 过滤掉已适配的活动 ID，避免显示"待适配"标签
+  const adaptedIds = new Set([2026070300, 2026090901])
+  unknownActivityIds.value = new Set(
+    (report?.online?.unknownActivityIds || []).map(Number).filter((id: number) => !adaptedIds.has(id))
+  )
 }
 
 function flattenActivityDetails(node: ActivityDirectoryNode): ActivityDirectoryNode[] {
