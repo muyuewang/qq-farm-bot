@@ -3124,11 +3124,9 @@ function charityFlowerItemName(id) {
 }
 
 async function getCharityFlowerActivity() {
-  const request = types.ActivityGetGroupRequest.encode(
-    types.ActivityGetGroupRequest.create({ id: toLong(CHARITY_FLOWER_ACTIVITY_ID), name: '' })
-  ).finish();
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'GetGroup', request);
-  return normalizeCharityFlowerActivity(body);
+  const reply = await getActivityGroup(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_ACTIVITY_UID);
+  const rawBody = reply.__rawBody || Buffer.alloc(0);
+  return normalizeCharityFlowerActivity(rawBody);
 }
 
 async function sendCharityFlowerLove() {

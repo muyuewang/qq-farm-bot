@@ -115,7 +115,7 @@ let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 const charityFlowerActivityActive = computed(() => isWithinActivityWindowMs(CHARITY_FLOWER_ACTIVITY_WINDOW, nowMs.value))
 const selectedActivity = ref<string | null>(null)
-const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
+const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('active')
 const activeSection = ref<ActivitySectionKey>('journey')
 const activityDirectoryWindows = ref<Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string }>>([])
 interface ActivityDirectoryNode {
