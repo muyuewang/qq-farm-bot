@@ -242,7 +242,7 @@ const activityCards = computed(() => {
       window,
       updatedMs: window.startMs,
       status: activityWindowStatus(window),
-      pending: group.activityIds.some(id => unknownActivityIds.value.has(id)),
+      pending: group.activityIds.some(id => ![2026070300, 2026090901].includes(id) && unknownActivityIds.value.has(id)),
       backgroundStyle: {
         background: `radial-gradient(circle at 84% 18%, hsl(${(hue + 42) % 360} 82% 68% / 0.38), transparent 34%), radial-gradient(circle at 12% 92%, hsl(${(hue + 310) % 360} 75% 58% / 0.26), transparent 38%), linear-gradient(135deg, hsl(${hue} 52% 38%), hsl(${(hue + 32) % 360} 58% 18%))`,
       },
@@ -371,18 +371,18 @@ async function rescanActivityDirectory() {
 }
 
 async function refreshAll() {
-  if (currentAccountId.value && !rainPoemLoading.value && !heluLoading.value && !qixiLoading.value) {
-    const requests = []
-    if (SHOW_STAR_ACTIVITY)
-      requests.push(activityStore.fetchHeluActivity(String(currentAccountId.value)))
-    if (SHOW_QIXI_ACTIVITY)
-      requests.push(activityStore.fetchQixiActivity(String(currentAccountId.value)))
-    if (rainPoemActivityActive.value)
-      requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
-    if (charityFlowerActivityActive.value)
-      requests.push(activityStore.fetchCharityFlowerActivity(String(currentAccountId.value)))
-    await Promise.all(requests)
-  }
+  if (!currentAccountId.value) return
+  const id = String(currentAccountId.value)
+  const requests = []
+  if (SHOW_STAR_ACTIVITY && !heluLoading.value)
+    requests.push(activityStore.fetchHeluActivity(id))
+  if (SHOW_QIXI_ACTIVITY && !qixiLoading.value)
+    requests.push(activityStore.fetchQixiActivity(id))
+  if (rainPoemActivityActive.value && !rainPoemLoading.value)
+    requests.push(activityStore.fetchRainPoemActivity(id))
+  if (charityFlowerActivityActive.value && !charityFlowerLoading.value)
+    requests.push(activityStore.fetchCharityFlowerActivity(id))
+  await Promise.all(requests)
 }
 
 function handleVisibilityChange() {
@@ -570,6 +570,10 @@ watch(rainPoemActivityActive, (active) => {
     selectedActivity.value = null
     activityStore.clearActivityData()
   }
+})
+watch(charityFlowerActivityActive, (active) => {
+  if (active)
+    refreshAll()
 })
 onMounted(() => {
   nowTimer = window.setInterval(() => {
