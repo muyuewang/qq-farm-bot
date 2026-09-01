@@ -59,6 +59,7 @@ export function getPlatformClass(p?: string) {
 export const useAccountStore = defineStore('account', () => {
   const accounts = ref<Account[]>([])
   const currentAccountId = useStorage('current_account_id', '')
+  const showAllAccounts = useStorage('show_all_accounts', true)
   const loading = ref(false)
   const logs = ref<AccountLog[]>([])
 
@@ -84,7 +85,10 @@ export const useAccountStore = defineStore('account', () => {
     loading.value = true
     try {
       // api interceptor adds x-admin-token
-      const res = await api.get('/api/accounts')
+      const params: Record<string, string> = {}
+      if (!showAllAccounts.value)
+        params.filter = 'mine'
+      const res = await api.get('/api/accounts', { params })
       if (res.data.ok && res.data.data && res.data.data.accounts) {
         applyAccounts(Array.isArray(res.data.data.accounts) ? res.data.data.accounts : [])
       }
@@ -103,6 +107,11 @@ export const useAccountStore = defineStore('account', () => {
 
   function selectAccount(id: string) {
     currentAccountId.value = id
+  }
+
+  function toggleAccountFilter() {
+    showAllAccounts.value = !showAllAccounts.value
+    fetchAccounts()
   }
 
   function setCurrentAccount(acc: Account) {
@@ -174,8 +183,10 @@ export const useAccountStore = defineStore('account', () => {
     currentAccount,
     loading,
     logs,
+    showAllAccounts,
     fetchAccounts,
     selectAccount,
+    toggleAccountFilter,
     startAccount,
     stopAccount,
     refreshWxCodes,

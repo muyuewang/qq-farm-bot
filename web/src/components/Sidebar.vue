@@ -280,6 +280,16 @@ async function handleLogout() {
             <span>设置公告</span>
           </button>
           <button
+            v-if="userStore.isAdmin"
+            class="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors"
+            :class="accountStore.showAllAccounts ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20' : 'hover:bg-orange-50 dark:hover:bg-orange-900/20'"
+            :style="{ color: accountStore.showAllAccounts ? 'var(--theme-primary)' : '#f97316' }"
+            @click="accountStore.toggleAccountFilter()"
+          >
+            <div class="text-base" :class="accountStore.showAllAccounts ? 'i-carbon-eye' : 'i-carbon-view'" />
+            <span>{{ accountStore.showAllAccounts ? '显示全部账户' : '仅显示我的账户' }}</span>
+          </button>
+          <button
             class="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500"
             @click="handleLogout"
           >

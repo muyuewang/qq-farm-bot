@@ -87,18 +87,23 @@ function registerAdminAccountRoutes({
   app.get("/api/accounts", (req, res) => {
     try {
       const currentUser = req.currentUser;
+      const filter = (req.query.filter || "").toString().trim();
       let data;
       if (currentUser) {
         const accounts = provider.getAccounts();
-        data =
-          currentUser.role === "admin" || currentUser.role === "super_admin"
-            ? accounts
-            : {
-                ...accounts,
-                accounts: accounts.accounts.filter(
-                  (account) => account.username === currentUser.username,
-                ),
-              };
+        const isAdmin =
+          currentUser.role === "admin" || currentUser.role === "super_admin";
+        // 管理员默认显示全部；?filter=mine 时仅显示自己添加的
+        if (isAdmin && filter !== "mine") {
+          data = accounts;
+        } else {
+          data = {
+            ...accounts,
+            accounts: accounts.accounts.filter(
+              (account) => account.username === currentUser.username,
+            ),
+          };
+        }
       } else {
         data = { accounts: [], nextId: 1 };
       }
