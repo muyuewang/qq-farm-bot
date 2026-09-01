@@ -402,6 +402,7 @@ const DEFAULT_ACCOUNT_CONFIG = {
     fertilizerBuyNormalThresholdHours: 10,
     fertilizerBuyCheckIntervalMinutes: 60,
     bagSeedPriority: [],
+    plantSeedPriority: [],
     bagSeedKnownIds: [],
     bagSeedFallbackStrategy: 'level',
     autoAcceptFriendMinLevel: 0,
@@ -1194,6 +1195,7 @@ function getConfigSnapshot(accountId) {
         goldenBugKeepCount: Math.max(0, Math.min(9999, Number(cfg.goldenBugKeepCount) || 0)),
         goldenBugRoundLimit: Math.max(1, Math.min(100, Number(cfg.goldenBugRoundLimit) || 24)),
         bagSeedPriority: [...cfg.bagSeedPriority || []],
+        plantSeedPriority: [...cfg.plantSeedPriority || []],
         bagSeedKnownIds: [...cfg.bagSeedKnownIds || []],
         ui
     };
@@ -1371,6 +1373,11 @@ function getFriendBadRetryDate(accountId) {
 
 function getBagSeedPriority(accountId) {
     return [...getAccountConfigSnapshot(accountId).bagSeedPriority || []];
+}
+
+function getPlantSeedPriority(accountId) {
+    const list = getAccountConfigSnapshot(accountId).plantSeedPriority;
+    return Array.isArray(list) && list.length > 0 ? Number(list[0]) || 0 : 0;
 }
 
 function getBagSeedFallbackStrategy(accountId) {
@@ -1968,6 +1975,7 @@ module.exports = {
     getPrioritize2x2Crops,
     getFriendBadRetryDate,
     getBagSeedPriority,
+    getPlantSeedPriority,
     syncBagSeedPriority,
     getBagSeedFallbackStrategy,
     getIntervals,
