@@ -204,15 +204,15 @@ const activityCards = computed(() => {
     endTime: RAIN_POEM_ACTIVITY_WINDOW.endMs / 1000,
     activityIds: [2026070300],
   }, {
-    id: 2026090100,
+    id: 2026090901,
     title: '公益小红花',
     startTime: CHARITY_FLOWER_ACTIVITY_WINDOW.startMs / 1000,
     endTime: CHARITY_FLOWER_ACTIVITY_WINDOW.endMs / 1000,
-    activityIds: [2026090100],
+    activityIds: [2026090901],
   }]
   return source.map((group) => {
     const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const
-      : group.activityIds.includes(2026090100) ? 'charity-flower' as const
+      : group.activityIds.includes(2026090901) ? 'charity-flower' as const
       : null
     const window = { startMs: group.startTime * 1000, endMs: group.endTime * 1000 }
     const hue = Math.abs(group.id * 37) % 360

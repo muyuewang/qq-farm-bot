@@ -65,7 +65,7 @@ function formatDate(ts: number) {
               {{ activity.totalLovePoints }}
             </div>
             <div class="mt-0.5 text-xs text-pink-500 dark:text-pink-300">
-              个人爱心值
+              累计爱心值
             </div>
           </div>
           <div class="rounded-lg bg-red-50 p-3 text-center dark:bg-red-900/20">
@@ -137,41 +137,38 @@ function formatDate(ts: number) {
           <div class="space-y-2">
             <div
               v-for="tier in activity.tiers"
-              :key="tier.tier"
+              :key="tier.threshold"
               class="flex items-center justify-between rounded-lg border px-3 py-2 transition"
-              :class="tier.claimed
-                ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20'
-                : tier.reached
-                  ? 'border-pink-200 bg-pink-50 dark:border-pink-800 dark:bg-pink-900/20'
-                  : 'border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800'"
+              :class="!tier.claimable
+                ? 'border-gray-100 bg-white dark:border-gray-700 dark:bg-gray-800'
+                : 'border-pink-200 bg-pink-50 dark:border-pink-800 dark:bg-pink-900/20'"
             >
               <div class="flex items-center gap-2">
                 <span
-                  class="grid h-6 w-6 place-items-center rounded-full text-xs font-bold text-white"
-                  :class="tier.claimed ? 'bg-green-500' : tier.reached ? 'bg-pink-500' : 'bg-gray-300 dark:bg-gray-600'"
+                  class="grid h-8 w-8 place-items-center rounded-full text-xs font-bold text-white"
+                  :class="tier.claimable ? 'bg-pink-500' : 'bg-gray-300 dark:bg-gray-600'"
                 >
-                  {{ tier.tier }}
+                  {{ tier.threshold }}
                 </span>
                 <div>
                   <div class="text-sm font-medium text-gray-800 dark:text-gray-200">
-                    {{ tier.label }}
+                    {{ tier.itemName }} ×{{ tier.count }}
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    奖励: {{ tier.reward }}
+                    累计 {{ tier.donated }} / {{ tier.threshold }} 爱心值
                   </div>
                 </div>
               </div>
               <BaseButton
-                v-if="tier.reached && !tier.claimed"
+                v-if="tier.claimable"
                 size="sm"
                 variant="primary"
                 :loading="claimRewardPending"
-                @click="emit('claimReward', tier.tier)"
+                @click="emit('claimReward', tier.threshold)"
               >
                 领取
               </BaseButton>
-              <span v-else-if="tier.claimed" class="text-xs text-green-500">已领取</span>
-              <span v-else class="text-xs text-gray-400">{{ tier.lovePoints }}点</span>
+              <span v-else class="text-xs text-gray-400">未达标</span>
             </div>
           </div>
         </div>

@@ -2931,140 +2931,243 @@ async function getNanguaShop() {
 
 // ─── 公益小红花活动 ───
 // 活动时间: 2026-09-01 ~ 2026-09-09
-// TODO: 以下 ID / CMD / ITEM_ID 需要用抓包数据替换
+// 参数来源: Aoluis1005/QQ-farm-BOT-GO 抓包实锤 (2026-08-31 / 2026-09-01)
 
-const CHARITY_FLOWER_ACTIVITY_UID = 'CharityFlower';
-const CHARITY_FLOWER_ACTIVITY_ID = 2026090100;       // 活动主 ID（待抓包确认）
-const CHARITY_FLOWER_SHARE_ACTIVITY_ID = 2026090101; // 分享子活动
-const CHARITY_FLOWER_REWARD_ACTIVITY_ID = 2026090102; // 领奖子活动
+const CHARITY_FLOWER_ACTIVITY_UID = 'CharityRedFlower';
+const CHARITY_FLOWER_ACTIVITY_ID = 2026090901; // 捐赠/领取子节点（抓包确认 Operate 落此节点）
 
-const CHARITY_FLOWER_SEND_LOVE_CMD = 1;   // 送出爱心值
-const CHARITY_FLOWER_SEND_MONEY_CMD = 2;  // 送出公益金
-const CHARITY_FLOWER_CLAIM_REWARD_CMD = 3; // 领取个人档位奖励
-const CHARITY_FLOWER_SHARE_CMD = 4;        // 分享奖励
+// 命令字（线上逐 cmd 实测确认，扫 cmd 30~45 仅以下 4 个有效）
+const CHARITY_FLOWER_SHARE_CMD = 35; // 领取分享奖励
+const CHARITY_FLOWER_SEND_LOVE_CMD = 36;  // 送出爱心值
+const CHARITY_FLOWER_SEND_MONEY_CMD = 38; // 送出公益金（单账号仅 1 次 + 真实 1 元）
+const CHARITY_FLOWER_CLAIM_TIER_CMD = 39;  // 领取个人爱心值档位奖励
 
-const CHARITY_FLOWER_FERTILIZER_ITEM_ID = 80013; // 公益礼包内含化肥×2
+// 扩展参数字段号 = cmd + 99（必带空子消息，缺失一律返回「活动参数错误」）
+const CHARITY_FLOWER_EXT_BASE = 99;
 
-// 爱心值 5 档奖励阈值
+// 奖励物品 ID
+const CHARITY_FLOWER_ITEM_ORGANIC = 80013;  // 有机化肥（8小时）
+const CHARITY_FLOWER_ITEM_COUPON = 1002;    // 点券
+const CHARITY_FLOWER_ITEM_FRAME = 2158;     // 公益小红花做好事头像框
+const CHARITY_FLOWER_GIFT_ITEM = 80001;     // 化肥（1小时）— 公益礼包
+
+// 爱心值 5 档奖励（抓包 f116 实锤：30/60/90/120/150）
 const CHARITY_FLOWER_REWARD_TIERS = [
-  { tier: 1, lovePoints: 10,  label: '10点爱心值', reward: '公益礼包' },
-  { tier: 2, lovePoints: 30,  label: '30点爱心值', reward: '公益礼包×2' },
-  { tier: 3, lovePoints: 60,  label: '60点爱心值', reward: '公益礼包×3' },
-  { tier: 4, lovePoints: 100, label: '100点爱心值', reward: '公益礼包×5' },
-  { tier: 5, lovePoints: 150, label: '150点爱心值', reward: '公益礼包×8' },
+  { threshold: 30,  itemId: 80013, itemName: '有机化肥(8小时)', count: 1 },
+  { threshold: 60,  itemId: 1002,  itemName: '点券', count: 50 },
+  { threshold: 90,  itemId: 80013, itemName: '有机化肥(8小时)', count: 2 },
+  { threshold: 120, itemId: 1002,  itemName: '点券', count: 100 },
+  { threshold: 150, itemId: 2158,  itemName: '公益小红花做好事头像框', count: 1 },
 ];
 
-const CHARITY_FLOWER_START_TIME = 1756684800; // 2025-09-01 00:00:00 CST (待确认)
-const CHARITY_FLOWER_END_TIME = 1757375999;   // 2025-09-09 23:59:59 CST (待确认)
+const CHARITY_FLOWER_START_TIME = 1788192000; // 2026-09-01 00:00 CST
+const CHARITY_FLOWER_END_TIME = 1788969599;   // 2026-09-09 23:59:59 CST
 
-function normalizeCharityFlowerActivity(reply, nowSeconds = Math.floor(Date.now() / 1000)) {
-  const root = reply?.group || null;
-  const startTime = toNum(root?.activity?.start_time) || CHARITY_FLOWER_START_TIME;
-  const endTime = toNum(root?.activity?.end_time) || CHARITY_FLOWER_END_TIME;
+// 公益金防重（单账号活动期仅 1 次，真实 1 元扣款）
+const charityFlowerFundClaimed = new Map(); // accountId -> date string
 
-  // 解析子活动节点
-  const shareNode = findActivityNodeById([root], CHARITY_FLOWER_SHARE_ACTIVITY_ID);
-  const rewardNode = findActivityNodeById([root], CHARITY_FLOWER_REWARD_ACTIVITY_ID);
+function charityFlowerFundMarkedToday(accountId) {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return charityFlowerFundClaimed.get(accountId) === today;
+}
 
-  // 从根节点或子节点提取数据
-  const charityData = root?.charity_flower || root?.activity?.charity_flower || {};
-  const shareData = shareNode?.charity_flower_share || shareNode?.activity?.charity_flower_share || {};
-  const rewardData = rewardNode?.charity_flower_reward || rewardNode?.activity?.charity_flower_reward || {};
+function charityFlowerFundMark(accountId) {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  charityFlowerFundClaimed.set(accountId, today);
+}
 
-  const lovePoints = toNum(charityData.love_points) || 0;
-  const totalLovePoints = toNum(charityData.total_love_points) || lovePoints;
-  const serverGoalProgress = toNum(charityData.server_goal_progress) || 0;
-  const serverGoalTarget = toNum(charityData.server_goal_target) || 1;
-  const todaySent = toNum(charityData.today_sent) || 0;
+// 手动拼 protobuf 扩展字段（wiretype=2, length-delimited），内容允许为空
+function charityFlowerAppendVarint(b, v) {
+  const buf = [];
+  let val = v >>> 0;
+  while (val > 0x7f) { buf.push((val & 0x7f) | 0x80); val >>>= 7; }
+  buf.push(val);
+  return Buffer.concat([b, Buffer.from(buf)]);
+}
 
-  // 个人 5 档领奖状态
-  const claimedTiers = (rewardData.claimed_tiers || []).map(toNum);
-  const tiers = CHARITY_FLOWER_REWARD_TIERS.map(tier => ({
-    ...tier,
-    reached: totalLovePoints >= tier.lovePoints,
-    claimed: claimedTiers.includes(tier.tier),
-  }));
+function charityFlowerAppendMsg(b, field, sub) {
+  let out = charityFlowerAppendVarint(b, (field << 3) | 2);
+  out = charityFlowerAppendVarint(out, sub.length);
+  return Buffer.concat([out, sub]);
+}
 
-  // 分享状态
-  const shareAvailable = toNum(shareData.available_count) > 0;
-  const shareUsedToday = toNum(shareData.used_today) || 0;
+// 构建带 ext 字段的 Operate 请求体
+function charityFlowerBuildOperateBody(cmd, extBody) {
+  // field1 = activity_id (int64), field2 = cmd (int64)
+  const Writer = protobuf.Writer;
+  const w = Writer.create();
+  w.uint32(1 << 3 | 0).int64(CHARITY_FLOWER_ACTIVITY_ID); // field1
+  w.uint32(2 << 3 | 0).int64(cmd);                         // field2
+  let body = w.finish();
+  // ext 字段：field = cmd + 99, wiretype=2, 必带空子消息
+  const extField = cmd + CHARITY_FLOWER_EXT_BASE;
+  const ext = extBody || Buffer.alloc(0);
+  body = charityFlowerAppendMsg(Buffer.from(body), extField, ext);
+  return body;
+}
+
+// 构建档位领取的 ext 子消息（field1 = threshold）
+function charityFlowerBuildTierExt(threshold) {
+  const Writer = protobuf.Writer;
+  const w = Writer.create();
+  w.uint32(1 << 3 | 0).int64(threshold);
+  return Buffer.from(w.finish());
+}
+
+function normalizeCharityFlowerActivity(body, nowSeconds = Math.floor(Date.now() / 1000)) {
+  // 从 GetGroup 响应的 f116 解析进度（抓包实锤字段）
+  // f116 { f1=1040(爱心物品id), f3=累计已捐, f4=全服进度(分÷100=元), f5=全服目标(分÷100=元), f9=repeated档位 }
+  let donated = 0, serverTotal = 0, serverGoal = 1, tiers = [];
+
+  function decodeFields(buf) {
+    const reader = protobuf.Reader.create(buf);
+    const fields = [];
+    while (reader.pos < reader.len) {
+      let tag = 0;
+      try { tag = reader.uint32(); } catch { break; }
+      const field = tag >>> 3;
+      const wire = tag & 0x7;
+      try {
+        if (wire === 0) fields.push({ field, wire, value: toNum(reader.uint64()) });
+        else if (wire === 2) fields.push({ field, wire, data: Buffer.from(reader.bytes()) });
+        else if (wire === 5) fields.push({ field, wire, value: reader.uint32() });
+        else if (wire === 1) fields.push({ field, wire, value: reader.fixed64() });
+        else reader.skipType(wire);
+      } catch { break; }
+    }
+    return fields;
+  }
+
+  function getField(fields, num) {
+    return fields.find(f => f.field === num);
+  }
+
+  function findField116(fields) {
+    for (const f of fields) {
+      if (f.field === 116 && f.wire === 2 && f.data) return f.data;
+      if (f.wire === 2 && f.data) {
+        const sub = decodeFields(f.data);
+        const found = findField116(sub);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  try {
+    const root = types.ActivityGetGroupReply.decode(body);
+    const groupBuf = root.group;
+    if (groupBuf) {
+      const groupFields = decodeFields(groupBuf);
+      const raw116 = findField116(groupFields);
+      if (raw116) {
+        const g = decodeFields(raw116);
+        donated = Number(getField(g, 3)?.value || 0);
+        serverTotal = Number(getField(g, 4)?.value || 0) / 100;
+        serverGoal = Number(getField(g, 5)?.value || 0) / 100;
+        for (const tf of g) {
+          if (tf.field === 9 && tf.wire === 2 && tf.data) {
+            const tfFields = decodeFields(tf.data);
+            const threshold = Number(getField(tfFields, 1)?.value || 0);
+            let itemId = 0, itemName = '', count = 0;
+            const rewardField = getField(tfFields, 2);
+            if (rewardField?.data) {
+              const rfs = decodeFields(rewardField.data);
+              itemId = Number(getField(rfs, 1)?.value || 0);
+              count = Number(getField(rfs, 2)?.value || 0);
+              itemName = charityFlowerItemName(itemId);
+            }
+            tiers.push({ threshold, donated, claimable: donated >= threshold, itemId, itemName, count });
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // fallback: 使用硬编码档位
+  if (tiers.length === 0) {
+    tiers = CHARITY_FLOWER_REWARD_TIERS.map(t => ({
+      threshold: t.threshold, donated, claimable: donated >= t.threshold,
+      itemId: t.itemId, itemName: t.itemName, count: t.count,
+    }));
+  }
 
   return {
     uid: CHARITY_FLOWER_ACTIVITY_UID,
-    title: String(root?.activity?.title || '公益小红花'),
+    title: '公益小红花',
     activityId: CHARITY_FLOWER_ACTIVITY_ID,
-    startTime,
-    endTime,
-    active: nowSeconds >= startTime && nowSeconds <= endTime && root?.activity?.visible !== false,
-    lovePoints,
-    totalLovePoints,
-    todaySent,
+    startTime: CHARITY_FLOWER_START_TIME,
+    endTime: CHARITY_FLOWER_END_TIME,
+    active: nowSeconds >= CHARITY_FLOWER_START_TIME && nowSeconds <= CHARITY_FLOWER_END_TIME,
+    lovePoints: donated,
+    totalLovePoints: donated,
+    todaySent: 0,
     serverGoal: {
-      progress: serverGoalProgress,
-      target: serverGoalTarget,
-      percent: serverGoalTarget > 0 ? Math.min(100, Math.round(serverGoalProgress / serverGoalTarget * 100)) : 0,
+      progress: serverTotal,
+      target: serverGoal,
+      percent: serverGoal > 0 ? Math.min(100, Math.round(serverTotal / serverGoal * 100)) : 0,
     },
     tiers,
-    share: {
-      available: shareAvailable,
-      usedToday: shareUsedToday,
-    },
+    share: { available: false, usedToday: 0 },
   };
 }
 
+function charityFlowerItemName(id) {
+  switch (id) {
+    case 80013: return '有机化肥(8小时)';
+    case 1002: return '点券';
+    case 2158: return '公益小红花做好事头像框';
+    case 80001: return '化肥(1小时)';
+    case 101604: return '金豆豆';
+    default: return `物品${id}`;
+  }
+}
+
 async function getCharityFlowerActivity() {
-  const reply = await getActivityGroup(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_ACTIVITY_UID);
-  return normalizeCharityFlowerActivity(reply);
+  const request = types.ActivityGetGroupRequest.encode(
+    types.ActivityGetGroupRequest.create({ id: toLong(CHARITY_FLOWER_ACTIVITY_ID), name: '' })
+  ).finish();
+  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'GetGroup', request);
+  return normalizeCharityFlowerActivity(body);
 }
 
 async function sendCharityFlowerLove() {
-  const request = types.ActivityOperateRequest.encode(
-    types.ActivityOperateRequest.create({
-      id: toLong(CHARITY_FLOWER_ACTIVITY_ID),
-      cmd: CHARITY_FLOWER_SEND_LOVE_CMD,
-    })
-  ).finish();
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
-  const reply = types.ActivityOperateReply.decode(body);
-  return { ok: true, raw: reply, activity: await getCharityFlowerActivity() };
+  const body = charityFlowerBuildOperateBody(CHARITY_FLOWER_SEND_LOVE_CMD, null);
+  const { body: replyBody } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+  return { ok: true, activity: await getCharityFlowerActivity() };
 }
 
-async function sendCharityFlowerMoney() {
-  const request = types.ActivityOperateRequest.encode(
-    types.ActivityOperateRequest.create({
-      id: toLong(CHARITY_FLOWER_ACTIVITY_ID),
-      cmd: CHARITY_FLOWER_SEND_MONEY_CMD,
-    })
-  ).finish();
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
-  const reply = types.ActivityOperateReply.decode(body);
-  return { ok: true, raw: reply, activity: await getCharityFlowerActivity() };
+async function sendCharityFlowerMoney(accountId) {
+  if (charityFlowerFundMarkedToday(accountId)) {
+    return { ok: true, alreadyDonated: true, msg: '今日已送出公益金（单账号活动期仅 1 次资格）' };
+  }
+  try {
+    const body = charityFlowerBuildOperateBody(CHARITY_FLOWER_SEND_MONEY_CMD, null);
+    const { body: replyBody } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+    charityFlowerFundMark(accountId);
+    return { ok: true, donated: true, activity: await getCharityFlowerActivity() };
+  } catch (err) {
+    const es = String(err?.message || err);
+    if (es.includes('已') && (es.includes('捐赠') || es.includes('资格') || es.includes('公益金'))) {
+      charityFlowerFundMark(accountId);
+      return { ok: true, alreadyDonated: true, msg: es };
+    }
+    throw err;
+  }
 }
 
-async function claimCharityFlowerReward(tier) {
-  const request = types.ActivityOperateRequest.encode(
-    types.ActivityOperateRequest.create({
-      id: toLong(CHARITY_FLOWER_REWARD_ACTIVITY_ID),
-      cmd: CHARITY_FLOWER_CLAIM_REWARD_CMD,
-      // TODO: tier 参数的字段号需抓包确认，以下为常见模式
-      params: tier ? { tier: toLong(tier) } : undefined,
-    })
-  ).finish();
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
-  const reply = types.ActivityOperateReply.decode(body);
-  return { ok: true, raw: reply, activity: await getCharityFlowerActivity() };
+async function claimCharityFlowerReward(tierThreshold) {
+  const threshold = Number(tierThreshold) || 30;
+  const ext = charityFlowerBuildTierExt(threshold);
+  const body = charityFlowerBuildOperateBody(CHARITY_FLOWER_CLAIM_TIER_CMD, ext);
+  const { body: replyBody } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+  return { ok: true, activity: await getCharityFlowerActivity() };
 }
 
 async function claimCharityFlowerShare() {
-  const request = types.ActivityOperateRequest.encode(
-    types.ActivityOperateRequest.create({
-      id: toLong(CHARITY_FLOWER_SHARE_ACTIVITY_ID),
-      cmd: CHARITY_FLOWER_SHARE_CMD,
-    })
-  ).finish();
-  const { body } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', request);
-  const reply = types.ActivityOperateReply.decode(body);
-  return { ok: true, raw: reply, activity: await getCharityFlowerActivity() };
+  const body = charityFlowerBuildOperateBody(CHARITY_FLOWER_SHARE_CMD, null);
+  const { body: replyBody } = await sendMsgAsync('gamepb.activitypb.ActivityService', 'Operate', body);
+  return { ok: true, activity: await getCharityFlowerActivity() };
 }
 
 module.exports = {
@@ -3147,8 +3250,6 @@ module.exports = {
   normalizeHeluGroup,
   CHARITY_FLOWER_ACTIVITY_UID,
   CHARITY_FLOWER_ACTIVITY_ID,
-  CHARITY_FLOWER_SHARE_ACTIVITY_ID,
-  CHARITY_FLOWER_REWARD_ACTIVITY_ID,
   CHARITY_FLOWER_REWARD_TIERS,
   getCharityFlowerActivity,
   sendCharityFlowerLove,

@@ -195,12 +195,12 @@ export interface WeatherFriend {
 }
 
 export interface CharityFlowerTier {
-  tier: number
-  lovePoints: number
-  label: string
-  reward: string
-  reached: boolean
-  claimed: boolean
+  threshold: number
+  donated: number
+  claimable: boolean
+  itemId: number
+  itemName: string
+  count: number
 }
 
 export interface CharityFlowerActivityData {
