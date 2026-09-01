@@ -170,6 +170,8 @@ const {
   selectAccount,
   openClearStoppedConfirm,
   confirmClearStopped,
+  showAllAccounts,
+  toggleAccountFilter,
 } = useAccountSettings(showAlert)
 
 const {
@@ -431,12 +433,14 @@ onMounted(async () => {
           :refresh-wx-codes-loading="refreshWxCodesLoading"
           :default-plan-setting-id="defaultPlanSettingId"
           :default-plan-applying-id="defaultPlanApplyingId"
+          :show-all-accounts="showAllAccounts"
           @add="openAddModal"
           @clear-stopped="openClearStoppedConfirm"
           @refresh-wx-codes="refreshWxCodesNow"
           @select="selectAccount"
           @toggle="toggleAccount"
           @settings="openAccountSettings"
+          @toggle-account-filter="toggleAccountFilter"
           @set-default-plan="requestDefaultPlanConfirmation('set', $event)"
           @apply-default-plan="requestDefaultPlanConfirmation('apply', $event)"
           @edit="openEditModal"

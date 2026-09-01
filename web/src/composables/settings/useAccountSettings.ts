@@ -199,6 +199,7 @@ export function useAccountSettings(showAlert: (message: string, type?: AlertType
     isAddAccountDisabled,
     addAccountDisabledReason,
     isAccountOpsDisabled,
+    showAllAccounts: computed(() => accountStore.showAllAccounts),
     fetchAccounts,
     selectFirstAccountIfNeeded,
     openSettings,
@@ -212,5 +213,6 @@ export function useAccountSettings(showAlert: (message: string, type?: AlertType
     selectAccount,
     openClearStoppedConfirm,
     confirmClearStopped,
+    toggleAccountFilter: () => accountStore.toggleAccountFilter(),
   }
 }

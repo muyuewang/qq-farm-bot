@@ -23,12 +23,14 @@ defineProps<{
   refreshWxCodesLoading: boolean
   defaultPlanSettingId: string
   defaultPlanApplyingId: string
+  showAllAccounts: boolean
 }>()
 
 const emit = defineEmits<{
   add: []
   clearStopped: []
   refreshWxCodes: []
+  toggleAccountFilter: []
   select: [account: any]
   toggle: [account: any]
   settings: [account: any]
@@ -94,6 +96,15 @@ function accountAvatar(acc: any) {
         >
           <div class="i-carbon-add mr-2" />
           添加账号
+        </BaseButton>
+        <BaseButton
+          v-if="userIsAdmin"
+          variant="outline"
+          size="sm"
+          @click="emit('toggleAccountFilter')"
+        >
+          <div class="mr-2" :class="showAllAccounts ? 'i-carbon-eye' : 'i-carbon-view'" />
+          {{ showAllAccounts ? '显示全部' : '仅我的' }}
         </BaseButton>
       </div>
     </div>
