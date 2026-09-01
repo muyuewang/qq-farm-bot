@@ -194,6 +194,30 @@ export interface WeatherFriend {
   statusLabel: string
 }
 
+export interface CharityFlowerTier {
+  tier: number
+  lovePoints: number
+  label: string
+  reward: string
+  reached: boolean
+  claimed: boolean
+}
+
+export interface CharityFlowerActivityData {
+  uid: string
+  title: string
+  activityId: number
+  startTime: number
+  endTime: number
+  active: boolean
+  lovePoints: number
+  totalLovePoints: number
+  todaySent: number
+  serverGoal: { progress: number, target: number, percent: number }
+  tiers: CharityFlowerTier[]
+  share: { available: boolean, usedToday: number }
+}
+
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'
 
 export interface QingmeiActivity {
@@ -329,12 +353,21 @@ export const useActivityStore = defineStore('activity', () => {
 
   const heluError = ref('')
 
+  // ─── 公益小红花 ───
+  const charityFlowerActivity = ref<CharityFlowerActivityData | null>(null)
+  const charityFlowerLoading = ref(false)
+  const charitySendLovePending = ref(false)
+  const charitySendMoneyPending = ref(false)
+  const charityClaimRewardPending = ref(false)
+  const charitySharePending = ref(false)
+
   let heluRequestId = 0
 
   function clearActivityData() {
     heluActivity.value = null
     qixiActivity.value = null
     rainPoemActivity.value = null
+    charityFlowerActivity.value = null
     weatherFriends.value = []
     scanPending.value = false
     frogPending.value = false
@@ -348,6 +381,11 @@ export const useActivityStore = defineStore('activity', () => {
     starRecordClaimLoading.value = false
     qingmeiClaimLoading.value = false
     qingmeiSellLoading.value = false
+    charityFlowerLoading.value = false
+    charitySendLovePending.value = false
+    charitySendMoneyPending.value = false
+    charityClaimRewardPending.value = false
+    charitySharePending.value = false
     heluError.value = ''
   }
 
@@ -449,6 +487,62 @@ export const useActivityStore = defineStore('activity', () => {
       return data
     }
     finally { researchPending.value = false }
+  }
+
+  // ─── 公益小红花 ───
+  async function fetchCharityFlowerActivity(accountId: string) {
+    charityFlowerLoading.value = true
+    try {
+      const { data } = await api.get('/api/activity/charity-flower', { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId)))
+        charityFlowerActivity.value = data.activity || null
+      return data
+    }
+    finally { charityFlowerLoading.value = false }
+  }
+
+  async function sendCharityFlowerLove(accountId: string) {
+    charitySendLovePending.value = true
+    try {
+      const { data } = await api.post('/api/activity/charity-flower/send-love', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        charityFlowerActivity.value = data.activity
+      return data
+    }
+    finally { charitySendLovePending.value = false }
+  }
+
+  async function sendCharityFlowerMoney(accountId: string) {
+    charitySendMoneyPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/charity-flower/send-money', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        charityFlowerActivity.value = data.activity
+      return data
+    }
+    finally { charitySendMoneyPending.value = false }
+  }
+
+  async function claimCharityFlowerReward(accountId: string, tier?: number) {
+    charityClaimRewardPending.value = true
+    try {
+      const { data } = await api.post('/api/activity/charity-flower/claim-reward', { tier }, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        charityFlowerActivity.value = data.activity
+      return data
+    }
+    finally { charityClaimRewardPending.value = false }
+  }
+
+  async function claimCharityFlowerShare(accountId: string) {
+    charitySharePending.value = true
+    try {
+      const { data } = await api.post('/api/activity/charity-flower/share', {}, { headers: { 'x-account-id': accountId } })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        charityFlowerActivity.value = data.activity
+      return data
+    }
+    finally { charitySharePending.value = false }
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -705,5 +799,16 @@ export const useActivityStore = defineStore('activity', () => {
     claimHeluSolar,
     claimQingmeiSeeds,
     brewAndSellQingmeiWine,
+    charityFlowerActivity,
+    charityFlowerLoading,
+    charitySendLovePending,
+    charitySendMoneyPending,
+    charityClaimRewardPending,
+    charitySharePending,
+    fetchCharityFlowerActivity,
+    sendCharityFlowerLove,
+    sendCharityFlowerMoney,
+    claimCharityFlowerReward,
+    claimCharityFlowerShare,
   }
 })

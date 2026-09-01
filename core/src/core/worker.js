@@ -300,12 +300,17 @@ async function runStarActivityAutoClaims() {
     const useRainPoemSummonEnabled = automation.rain_poem_summon_use === true;
     const useRainPoemPrankEnabled = automation.rain_poem_prank_use === true;
     const unlockRainPoemResearchEnabled = automation.rain_poem_research_unlock === true;
+    const charityFlowerSendLoveEnabled = automation.charity_flower_send_love === true;
+    const charityFlowerSendMoneyEnabled = automation.charity_flower_send_money === true;
+    const charityFlowerClaimRewardEnabled = automation.charity_flower_claim_reward === true;
+    const charityFlowerShareEnabled = automation.charity_flower_share === true;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
     if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
         && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled
         && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled && !useRainPoemPrankEnabled
-        && !unlockRainPoemResearchEnabled) return;
+        && !unlockRainPoemResearchEnabled
+        && !charityFlowerSendLoveEnabled && !charityFlowerSendMoneyEnabled && !charityFlowerClaimRewardEnabled && !charityFlowerShareEnabled) return;
 
     starActivityClaimRunning = true;
     try {
@@ -589,6 +594,68 @@ async function runStarActivityAutoClaims() {
                 } catch (err) {
                     log('活动', `自动解锁气象研究失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动研究', result: 'error', count: unlocked });
                 }
+            }
+        }
+
+        // ─── 公益小红花自动执行 ───
+        if (charityFlowerSendLoveEnabled || charityFlowerSendMoneyEnabled || charityFlowerClaimRewardEnabled || charityFlowerShareEnabled) {
+            try {
+                const {
+                    getCharityFlowerActivity,
+                    sendCharityFlowerLove,
+                    sendCharityFlowerMoney,
+                    claimCharityFlowerReward,
+                    claimCharityFlowerShare,
+                    CHARITY_FLOWER_REWARD_TIERS,
+                } = require('../services/activity');
+                const charity = await getCharityFlowerActivity();
+                if (!charity?.active) {
+                    log('活动', '公益小红花活动未开启或已结束，跳过自动执行', { module: 'activity', event: '公益小红花', result: 'skip' });
+                } else {
+                    if (charityFlowerSendLoveEnabled) {
+                        try {
+                            await sendCharityFlowerLove();
+                            log('活动', '自动送出爱心值成功', { module: 'activity', event: '公益小红花爱心值', result: 'success' });
+                        } catch (err) {
+                            log('活动', `自动送出爱心值失败: ${err.message}`, { module: 'activity', event: '公益小红花爱心值', result: 'error' });
+                        }
+                    }
+                    if (charityFlowerSendMoneyEnabled) {
+                        try {
+                            await sendCharityFlowerMoney();
+                            log('活动', '自动送出公益金成功（含化肥礼包）', { module: 'activity', event: '公益小红花公益金', result: 'success' });
+                        } catch (err) {
+                            log('活动', `自动送出公益金失败: ${err.message}`, { module: 'activity', event: '公益小红花公益金', result: 'error' });
+                        }
+                    }
+                    if (charityFlowerClaimRewardEnabled) {
+                        try {
+                            const refreshed = await getCharityFlowerActivity();
+                            for (const tier of (refreshed.tiers || [])) {
+                                if (tier.reached && !tier.claimed) {
+                                    await claimCharityFlowerReward(tier.tier);
+                                    log('活动', `自动领取公益小红花 ${tier.label} 奖励成功`, { module: 'activity', event: '公益小红花领奖', result: 'success', tier: tier.tier });
+                                    await new Promise(resolve => setTimeout(resolve, 500));
+                                }
+                            }
+                        } catch (err) {
+                            log('活动', `自动领取公益小红花档位奖励失败: ${err.message}`, { module: 'activity', event: '公益小红花领奖', result: 'error' });
+                        }
+                    }
+                    if (charityFlowerShareEnabled) {
+                        try {
+                            const refreshed = await getCharityFlowerActivity();
+                            if (refreshed?.share?.available) {
+                                await claimCharityFlowerShare();
+                                log('活动', '自动领取公益小红花分享奖励成功', { module: 'activity', event: '公益小红花分享', result: 'success' });
+                            }
+                        } catch (err) {
+                            log('活动', `自动领取公益小红花分享奖励失败: ${err.message}`, { module: 'activity', event: '公益小红花分享', result: 'error' });
+                        }
+                    }
+                }
+            } catch (err) {
+                log('活动', `公益小红花自动执行失败: ${err.message}`, { module: 'activity', event: '公益小红花自动执行', result: 'error' });
             }
         }
     } catch (err) {
@@ -911,6 +978,14 @@ function applyRuntimeConfig(config, syncStatusAfter = false) {
                 !prevAuto?.rain_poem_prank_use && newAuto?.rain_poem_prank_use
             ) || (
                 !prevAuto?.rain_poem_research_unlock && newAuto?.rain_poem_research_unlock
+            ) || (
+                !prevAuto?.charity_flower_send_love && newAuto?.charity_flower_send_love
+            ) || (
+                !prevAuto?.charity_flower_send_money && newAuto?.charity_flower_send_money
+            ) || (
+                !prevAuto?.charity_flower_claim_reward && newAuto?.charity_flower_claim_reward
+            ) || (
+                !prevAuto?.charity_flower_share && newAuto?.charity_flower_share
             );
             if (starClaimBecameEnabled) {
                 workerScheduler.setTimeoutTask('star_activity_claim_after_save', 2000, () => {
@@ -1580,6 +1655,31 @@ async function handleApiCall(msg) {
             case 'brewAndSellQingmeiWine': {
                 const { brewAndSellQingmeiWine } = require('../services/activity');
                 result = await brewAndSellQingmeiWine(args[0] || {});
+                break;
+            }
+            case 'getCharityFlowerActivity': {
+                const { getCharityFlowerActivity } = require('../services/activity');
+                result = await getCharityFlowerActivity();
+                break;
+            }
+            case 'sendCharityFlowerLove': {
+                const { sendCharityFlowerLove } = require('../services/activity');
+                result = await sendCharityFlowerLove();
+                break;
+            }
+            case 'sendCharityFlowerMoney': {
+                const { sendCharityFlowerMoney } = require('../services/activity');
+                result = await sendCharityFlowerMoney();
+                break;
+            }
+            case 'claimCharityFlowerReward': {
+                const { claimCharityFlowerReward } = require('../services/activity');
+                result = await claimCharityFlowerReward(args[0]);
+                break;
+            }
+            case 'claimCharityFlowerShare': {
+                const { claimCharityFlowerShare } = require('../services/activity');
+                result = await claimCharityFlowerShare();
                 break;
             }
             case 'getIllustratedList': {
