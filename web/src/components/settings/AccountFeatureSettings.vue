@@ -19,6 +19,7 @@ const props = defineProps<{
   plantingStrategyOptions: any[]
   bagFallbackStrategyOptions: any[]
   strategyPreviewLabel: string | null
+  availableSeeds?: Array<{ seedId: number, name: string, requiredLevel: number, locked?: boolean, soldOut?: boolean }>
   fertilizerLandTypeOptions: any[]
   fertilizerOptions: any[]
 }>()
@@ -375,6 +376,7 @@ watch(() => props.currentAccountId, loadQixiFriends)
                   :planting-strategy-options="plantingStrategyOptions"
                   :bag-fallback-strategy-options="bagFallbackStrategyOptions"
                   :strategy-preview-label="strategyPreviewLabel"
+                  :available-seeds="availableSeeds"
                 />
               </section>
             </div>

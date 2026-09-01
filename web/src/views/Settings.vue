@@ -20,15 +20,16 @@ import { useSettingStore } from '@/stores/setting'
 const settingStore = useSettingStore()
 const route = useRoute()
 
-type SettingsTabKey = 'account' | 'account-config' | 'notification' | 'system'
+type SettingsTabKey = 'account' | 'account-config' | 'notification'
 
-const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification', 'system']
+const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification']
 const LEGACY_SETTINGS_TABS: Record<string, SettingsTabKey> = {
   'strategy': 'account-config',
   'automation': 'account-config',
   'default-plan': 'account-config',
   'user': 'notification',
-  'capture': 'system',
+  'capture': 'notification',
+  'system': 'notification',
 }
 
 function getInitialSettingsTab(): SettingsTabKey {
@@ -63,7 +64,6 @@ const tabs = [
   { key: 'account', label: '账号管理', icon: 'i-carbon-user-settings' },
   { key: 'account-config', label: '账号设置', icon: 'i-carbon-settings-adjust' },
   { key: 'notification', label: '通知设置', icon: 'i-carbon-notification' },
-  { key: 'system', label: '系统配置', icon: 'i-carbon-settings-services' },
 ] as const
 
 const modalVisible = ref(false)
@@ -191,6 +191,7 @@ const {
   plantingStrategyOptions,
   bagFallbackStrategyOptions,
   strategyPreviewLabel,
+  availableSeeds,
   loadStrategyData,
   resetStrategyState,
 } = useStrategySettings({
@@ -459,6 +460,7 @@ onMounted(async () => {
           :planting-strategy-options="plantingStrategyOptions"
           :bag-fallback-strategy-options="bagFallbackStrategyOptions"
           :strategy-preview-label="strategyPreviewLabel"
+          :available-seeds="availableSeeds"
           :fertilizer-land-type-options="fertilizerLandTypeOptions"
           :fertilizer-options="fertilizerOptions"
           @save="saveCurrentAccountSettings"

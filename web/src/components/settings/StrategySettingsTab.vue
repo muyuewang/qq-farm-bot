@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import StrategyTimingPanel from '@/components/settings/StrategyTimingPanel.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseSelect from '@/components/ui/BaseSelect.vue'
@@ -13,6 +14,7 @@ interface StrategySettings {
   plantingStrategy: string
   prioritize2x2Crops: boolean
   bagSeedPriority: number[]
+  plantSeedPriority: number[]
   bagSeedFallbackStrategy: string
   stealDelaySeconds: number
   intervals: {
@@ -30,7 +32,15 @@ interface StrategySettings {
   }
 }
 
-withDefaults(defineProps<{
+interface SeedOption {
+  seedId: number
+  name: string
+  requiredLevel: number
+  locked?: boolean
+  soldOut?: boolean
+}
+
+const props = withDefaults(defineProps<{
   currentAccountName: string | null
   currentAccountId: string | number | null | undefined
   loading: boolean
@@ -38,11 +48,13 @@ withDefaults(defineProps<{
   plantingStrategyOptions: SelectOption[]
   bagFallbackStrategyOptions: SelectOption[]
   strategyPreviewLabel: string | null
+  availableSeeds?: SeedOption[]
   title?: string
   saveLabel?: string
   showActions?: boolean
   timingSection?: 'all' | 'planting' | 'friends' | 'steal'
 }>(), {
+  availableSeeds: () => [],
   title: '策略设置',
   saveLabel: '保存策略设置',
   showActions: true,
@@ -54,6 +66,15 @@ const emit = defineEmits<{
 }>()
 
 const settings = defineModel<StrategySettings>('settings', { required: true })
+
+const seedPriorityOptions = computed(() => {
+  const seeds = (props.availableSeeds || []).filter(s => !s.locked && !s.soldOut)
+  return seeds.map(s => ({ label: `${s.name} (Lv.${s.requiredLevel})`, value: s.seedId }))
+})
+
+function selectSeedPriority(value: string | number) {
+  settings.value.plantSeedPriority = [Number(value)]
+}
 
 function selectBagFallbackStrategy(value: string | number) {
   settings.value.bagSeedFallbackStrategy = String(value)
@@ -97,9 +118,13 @@ function isBagFallbackStrategySelected(value: string | number) {
           <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
             优先种植种子
           </label>
-          <div class="text-xs text-gray-500 dark:text-gray-400">
-            选择一个种子，每次种植时优先使用该种子
-          </div>
+          <BaseSelect
+            :model-value="settings.plantSeedPriority?.[0] ?? undefined"
+            :options="seedPriorityOptions"
+            label="选择种子"
+            placeholder="点击选择种子..."
+            @update:model-value="(v: string | number | undefined) => v != null ? selectSeedPriority(v) : null"
+          />
         </div>
         <div class="flex flex-col gap-1.5">
           <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
