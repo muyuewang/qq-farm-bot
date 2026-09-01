@@ -176,6 +176,18 @@ watch(
 )
 
 const showThemeDropdown = ref(false)
+const showUserPanel = ref(false)
+
+async function handleLogout() {
+  try {
+    await userStore.logout()
+    router.push('/login')
+  }
+  catch {
+    // 即使请求失败也清除本地状态并跳转
+    router.push('/login')
+  }
+}
 </script>
 
 <template>
@@ -214,6 +226,63 @@ const showThemeDropdown = ref(false)
 
     <!-- 渐变分隔线 -->
     <div class="mx-2 mb-3 h-px flex-none" style="background: linear-gradient(90deg, color-mix(in srgb, var(--theme-primary) 45%, transparent), transparent);" />
+
+    <!-- User Info Card -->
+    <div v-if="userStore.isLoggedIn" class="mx-2 mb-3 rounded-xl overflow-hidden" style="background: color-mix(in srgb, var(--surface-2) 80%, transparent);">
+      <button
+        class="w-full flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-gray-100/50 dark:hover:bg-gray-700/50"
+        @click="showUserPanel = !showUserPanel"
+      >
+        <div
+          class="h-10 w-10 flex-none flex items-center justify-center rounded-full text-base font-bold text-white shadow-md"
+          :style="{ background: 'var(--theme-gradient)' }"
+        >
+          {{ userStore.avatar || userStore.username?.charAt(0)?.toUpperCase() || '?' }}
+        </div>
+        <div class="min-w-0 flex-1 text-left">
+          <div class="truncate text-sm font-semibold" style="color: var(--theme-text);">{{ userStore.username || '未知用户' }}</div>
+          <div
+            class="mt-0.5 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold leading-tight text-white"
+            :style="{ background: userStore.isAdmin ? 'var(--theme-primary)' : '#94a3b8' }"
+          >
+            {{ userStore.isAdmin ? '管理员' : '用户' }}
+          </div>
+        </div>
+        <div
+          class="h-6 w-6 flex-none flex items-center justify-center rounded-md transition-transform duration-200"
+          :class="{ 'rotate-180': showUserPanel }"
+        >
+          <div class="i-carbon-chevron-down text-sm" style="color: var(--theme-text); opacity: 0.5;" />
+        </div>
+      </button>
+
+      <!-- Expanded Panel -->
+      <div v-show="showUserPanel" class="border-t px-3 py-2" style="border-color: color-mix(in srgb, var(--theme-text) 8%, transparent);">
+        <div class="mb-1 text-sm font-medium" style="color: var(--theme-text);">{{ userStore.username }}</div>
+        <div class="mb-2 text-[11px] opacity-55" style="color: var(--theme-text);">
+          {{ userStore.isAdmin ? '管理员' : '用户' }}
+          <template v-if="userStore.userCard?.expiresAt"> · 到期 {{ new Date(userStore.userCard.expiresAt).toLocaleDateString() }}</template>
+        </div>
+        <div class="space-y-1">
+          <button
+            v-if="userStore.isAdmin"
+            class="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-gray-100/60 dark:hover:bg-gray-700/60"
+            style="color: var(--theme-primary);"
+            @click="router.push('/settings?tab=system'); if (window.innerWidth < 1024) appStore.closeSidebar()"
+          >
+            <div class="i-carbon-notification text-base" />
+            <span>设置公告</span>
+          </button>
+          <button
+            class="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500"
+            @click="handleLogout"
+          >
+            <div class="i-carbon-logout text-base" />
+            <span>退出登录</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Navigation -->
     <nav class="custom-scrollbar flex-1 overflow-y-auto px-1 py-1 space-y-1">
