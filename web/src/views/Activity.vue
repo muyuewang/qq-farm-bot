@@ -7,7 +7,7 @@ import HeluPassportPanel from '@/components/activity/HeluPassportPanel.vue'
 import HeluSolarTermsPanel from '@/components/activity/HeluSolarTermsPanel.vue'
 import QixiActivityPanel from '@/components/activity/QixiActivityPanel.vue'
 import RainPoemActivityPanel from '@/components/activity/RainPoemActivityPanel.vue'
-import CharityFlowerPanel from '@/components/activity/CharityFlowerPanel.vue'
+import CharityFlowerActivityPanel from '@/components/activity/CharityFlowerActivityPanel.vue'
 import StarRecordPanel from '@/components/activity/StarRecordPanel.vue'
 import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -100,12 +100,7 @@ const {
   collectPending,
   summonPending,
   researchPending,
-  charityFlowerActivity,
   charityFlowerLoading,
-  charitySendLovePending,
-  charitySendMoneyPending,
-  charityClaimRewardPending,
-  charitySharePending,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
@@ -485,41 +480,7 @@ async function unlockWeatherResearch() {
 }
 
 // ─── 公益小红花 ───
-async function sendCharityFlowerLove() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.sendCharityFlowerLove(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('送出爱心值成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '送出爱心值失败'))
-}
-
-async function sendCharityFlowerMoney() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.sendCharityFlowerMoney(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('送出公益金成功（含化肥礼包）')
-  else
-    toast.error(friendlyActivityError(result?.error || '送出公益金失败'))
-}
-
-async function claimCharityFlowerReward(tier?: number) {
-  if (!currentAccountId.value) return
-  const result = await activityStore.claimCharityFlowerReward(String(currentAccountId.value), tier)
-  if (result?.ok)
-    toast.success('领取档位奖励成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '领取档位奖励失败'))
-}
-
-async function claimCharityFlowerShare() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.claimCharityFlowerShare(String(currentAccountId.value))
-  if (result?.ok)
-    toast.success('领取分享奖励成功')
-  else
-    toast.error(friendlyActivityError(result?.error || '领取分享奖励失败'))
-}
+// CharityFlowerActivityPanel 通过 store 内部处理所有操作
 
 async function claimRecords() {
   if (!currentAccountId.value)
@@ -760,19 +721,10 @@ onUnmounted(() => {
         <span class="i-carbon-arrow-left" />
         返回活动列表
       </button>
-      <CharityFlowerPanel
+      <CharityFlowerActivityPanel
         v-if="charityFlowerActivityActive && currentAccountId"
-        :activity="charityFlowerActivity"
-        :loading="charityFlowerLoading"
-        :send-love-pending="charitySendLovePending"
-        :send-money-pending="charitySendMoneyPending"
-        :claim-reward-pending="charityClaimRewardPending"
-        :share-pending="charitySharePending"
-        @refresh="refreshAll"
-        @send-love="sendCharityFlowerLove"
-        @send-money="sendCharityFlowerMoney"
-        @claim-reward="claimCharityFlowerReward"
-        @share="claimCharityFlowerShare"
+        :account-id="currentAccountId"
+        :active-account-id="currentAccountId"
       />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
         {{ L.needAccount }}

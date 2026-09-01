@@ -194,28 +194,61 @@ export interface WeatherFriend {
   statusLabel: string
 }
 
-export interface CharityFlowerTier {
-  threshold: number
-  donated: number
-  claimable: boolean
-  itemId: number
-  itemName: string
-  count: number
+export interface CharityFlowerItem {
+  id?: number
+  name?: string
+  count?: number
+}
+
+export interface CharityFlowerPersonalReward {
+  needScore: number
+  reached: boolean
+  claimed: boolean
+  rewards: CharityFlowerItem[]
 }
 
 export interface CharityFlowerActivityData {
-  uid: string
-  title: string
-  activityId: number
-  startTime: number
-  endTime: number
-  active: boolean
-  lovePoints: number
-  totalLovePoints: number
-  todaySent: number
-  serverGoal: { progress: number, target: number, percent: number }
-  tiers: CharityFlowerTier[]
-  share: { available: boolean, usedToday: number }
+  uid?: string
+  title?: string
+  activityId?: number
+  startTime?: number
+  endTime?: number
+  active?: boolean
+  love?: {
+    itemId?: number
+    count?: number
+    personalScore?: number
+    canDonate?: boolean
+  }
+  global?: {
+    score?: number
+    target?: number
+    amountYuan?: number
+    targetYuan?: number
+    reached?: boolean
+  }
+  share?: {
+    status?: number
+    claimable?: boolean
+    claimed?: boolean
+    rewards?: CharityFlowerItem[]
+  }
+  personalRewards?: CharityFlowerPersonalReward[]
+  finalReward?: {
+    threshold?: number
+    settlementTime?: number
+    settled?: boolean
+    eligible?: boolean
+    rewards?: CharityFlowerItem[]
+  }
+  publicFund?: {
+    status?: number
+    claimable?: boolean
+    claimed?: boolean
+    complianceAgreed?: boolean
+    rewards?: CharityFlowerItem[]
+    successCount?: number
+  }
 }
 
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'
@@ -354,12 +387,8 @@ export const useActivityStore = defineStore('activity', () => {
   const heluError = ref('')
 
   // ─── 公益小红花 ───
-  const charityFlowerActivity = ref<CharityFlowerActivityData | null>(null)
+  const charityFlowerActivity = ref<CharityFlowerActivityData>({})
   const charityFlowerLoading = ref(false)
-  const charitySendLovePending = ref(false)
-  const charitySendMoneyPending = ref(false)
-  const charityClaimRewardPending = ref(false)
-  const charitySharePending = ref(false)
 
   let heluRequestId = 0
 
@@ -367,7 +396,7 @@ export const useActivityStore = defineStore('activity', () => {
     heluActivity.value = null
     qixiActivity.value = null
     rainPoemActivity.value = null
-    charityFlowerActivity.value = null
+    charityFlowerActivity.value = {}
     weatherFriends.value = []
     scanPending.value = false
     frogPending.value = false
@@ -382,10 +411,6 @@ export const useActivityStore = defineStore('activity', () => {
     qingmeiClaimLoading.value = false
     qingmeiSellLoading.value = false
     charityFlowerLoading.value = false
-    charitySendLovePending.value = false
-    charitySendMoneyPending.value = false
-    charityClaimRewardPending.value = false
-    charitySharePending.value = false
     heluError.value = ''
   }
 
@@ -495,54 +520,10 @@ export const useActivityStore = defineStore('activity', () => {
     try {
       const { data } = await api.get('/api/activity/charity-flower', { headers: { 'x-account-id': accountId } })
       if (data.ok && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity || null
+        charityFlowerActivity.value = data.activity || {}
       return data
     }
     finally { charityFlowerLoading.value = false }
-  }
-
-  async function sendCharityFlowerLove(accountId: string) {
-    charitySendLovePending.value = true
-    try {
-      const { data } = await api.post('/api/activity/charity-flower/send-love', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity
-      return data
-    }
-    finally { charitySendLovePending.value = false }
-  }
-
-  async function sendCharityFlowerMoney(accountId: string) {
-    charitySendMoneyPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/charity-flower/send-money', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity
-      return data
-    }
-    finally { charitySendMoneyPending.value = false }
-  }
-
-  async function claimCharityFlowerReward(accountId: string, tier?: number) {
-    charityClaimRewardPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/charity-flower/claim-reward', { tier }, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity
-      return data
-    }
-    finally { charityClaimRewardPending.value = false }
-  }
-
-  async function claimCharityFlowerShare(accountId: string) {
-    charitySharePending.value = true
-    try {
-      const { data } = await api.post('/api/activity/charity-flower/share', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-        charityFlowerActivity.value = data.activity
-      return data
-    }
-    finally { charitySharePending.value = false }
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -801,14 +782,6 @@ export const useActivityStore = defineStore('activity', () => {
     brewAndSellQingmeiWine,
     charityFlowerActivity,
     charityFlowerLoading,
-    charitySendLovePending,
-    charitySendMoneyPending,
-    charityClaimRewardPending,
-    charitySharePending,
     fetchCharityFlowerActivity,
-    sendCharityFlowerLove,
-    sendCharityFlowerMoney,
-    claimCharityFlowerReward,
-    claimCharityFlowerShare,
   }
 })

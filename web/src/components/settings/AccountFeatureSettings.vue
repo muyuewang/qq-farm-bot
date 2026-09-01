@@ -597,10 +597,10 @@ watch(() => props.currentAccountId, loadQixiFriends)
                   <span class="font-medium text-gray-800 dark:text-gray-200">公益小红花</span>
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
-                  <BaseSwitch v-model="automation.automation.charity_flower_send_love" label="自动送出爱心值" />
-                  <BaseSwitch v-model="automation.automation.charity_flower_send_money" label="自动送出公益金" />
-                  <BaseSwitch v-model="automation.automation.charity_flower_claim_reward" label="自动领取档位奖励" />
-                  <BaseSwitch v-model="automation.automation.charity_flower_share" label="自动领取分享奖励" />
+                  <BaseSwitch v-model="automation.automation.charity_flower_share_claim" label="领取分享奖励" />
+                  <BaseSwitch v-model="automation.automation.charity_flower_donate" label="自动送出爱心" />
+                  <BaseSwitch v-model="automation.automation.charity_flower_reward_claim" label="领取档位奖励" />
+                  <BaseSwitch v-model="automation.automation.charity_flower_public_fund_claim" label="送出公益金" />
                 </div>
               </section>
             </div>
