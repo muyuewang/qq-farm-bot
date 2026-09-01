@@ -52,15 +52,18 @@ const router = createRouter({
       })),
     },
     { path: '/admin', redirect: '/settings?tab=system' },
-    { path: '/login', redirect: '/' },
-    { path: '/renewal', redirect: '/' },
+    { path: '/login', name: 'login', component: () => import('@/views/Login.vue') },
+    { path: '/renewal', name: 'renewal', component: () => import('@/views/Renewal.vue') },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })
 
-router.beforeEach(async () => {
+router.beforeEach(async (to) => {
   NProgress.start()
-  await ensureAdminSession()
+  const ok = await ensureAdminSession()
+  if (!ok && to.name !== 'login' && to.name !== 'renewal') {
+    return { name: 'login' }
+  }
   return true
 })
 
