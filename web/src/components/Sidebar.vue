@@ -178,6 +178,12 @@ watch(
 const showThemeDropdown = ref(false)
 const showUserPanel = ref(false)
 
+function navigateToSystemSettings() {
+  router.push('/settings?tab=system')
+  if (window.innerWidth < 1024)
+    appStore.closeSidebar()
+}
+
 async function handleLogout() {
   try {
     await userStore.logout()
@@ -268,7 +274,7 @@ async function handleLogout() {
             v-if="userStore.isAdmin"
             class="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-gray-100/60 dark:hover:bg-gray-700/60"
             style="color: var(--theme-primary);"
-            @click="router.push('/settings?tab=system'); if (window.innerWidth < 1024) appStore.closeSidebar()"
+            @click="navigateToSystemSettings"
           >
             <div class="i-carbon-notification text-base" />
             <span>设置公告</span>
