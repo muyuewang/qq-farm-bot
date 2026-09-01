@@ -114,19 +114,15 @@ function isBagFallbackStrategySelected(value: string | number) {
           label="种植策略"
           :options="plantingStrategyOptions"
         />
-        <div v-if="settings.plantingStrategy === 'seed_priority'" class="flex flex-col gap-1.5">
-          <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
-            优先种植种子
-          </label>
-          <BaseSelect
-            :model-value="settings.plantSeedPriority?.[0] ?? undefined"
-            :options="seedPriorityOptions"
-            label="选择种子"
-            placeholder="点击选择种子..."
-            @update:model-value="(v: string | number | undefined) => v != null ? selectSeedPriority(v) : null"
-          />
-        </div>
-        <div class="flex flex-col gap-1.5">
+        <BaseSelect
+          v-if="settings.plantingStrategy === 'seed_priority'"
+          :model-value="settings.plantSeedPriority?.[0] ?? undefined"
+          :options="seedPriorityOptions"
+          label="优先种植种子"
+          placeholder="点击选择种子..."
+          @update:model-value="(v: string | number | undefined) => v != null ? selectSeedPriority(v) : null"
+        />
+        <div v-if="settings.plantingStrategy !== 'seed_priority'" class="flex flex-col gap-1.5">
           <label class="text-sm text-gray-700 font-medium dark:text-gray-300">
             {{ settings.plantingStrategy === 'bag_priority' ? '第二优先策略预览' : '策略选种预览' }}
           </label>
