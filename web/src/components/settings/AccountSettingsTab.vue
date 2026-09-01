@@ -99,7 +99,7 @@ function accountAvatar(acc: any) {
         </BaseButton>
         <BaseButton
           v-if="userIsAdmin"
-          variant="outline"
+          variant="secondary"
           size="sm"
           @click="emit('toggleAccountFilter')"
         >
