@@ -1388,6 +1388,10 @@ async function handleApiCall(msg) {
             case 'getFriends':
                 result = await getFriendsList(args[0] === true);
                 break;
+            case 'getDiamondBalance':
+                result = await require('../services/pay').getDiamondBalance();
+                getUserState().diamond = Math.max(0, Number(result) || 0);
+                break;
             case 'clearFriendsCache':
                 require('../services/friend').clearFriendsListCache();
                 result = { ok: true };

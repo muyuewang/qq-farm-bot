@@ -245,6 +245,16 @@ async function fetchGoldBeanFromBag() {
     }
 }
 
+async function fetchDiamondBalance() {
+    try {
+        const diamond = await require('../services/pay').getDiamondBalance();
+        userState.diamond = Math.max(0, Number(diamond) || 0);
+        return userState.diamond;
+    } catch {
+        return userState.diamond;
+    }
+}
+
 function hasOwn(obj, key) {
     return !!obj && Object.hasOwn(obj, key);
 }
@@ -410,12 +420,9 @@ function handleNotify(msg) {
 
         // 钻石由支付系统维护，不会出现在 ItemService.Bag 的普通物品列表中。
         // 登录及打开商城时服务端都会下发该余额通知。
+        // 通知不携带余额；收到充值上下文后主动刷 PayService 余额。
         if (type.includes('RechargeInfoNotify')) {
-            try {
-                const notify = types.RechargeInfoNotify.decode(eventBody);
-                const diamond = toNum(notify?.recharge_info?.diamond);
-                if (diamond >= 0) userState.diamond = diamond;
-            } catch { }
+            fetchDiamondBalance();
             return;
         }
 
@@ -699,6 +706,7 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
 
                 // 登录后主动获取背包中的金豆豆数量
                 fetchGoldBeanFromBag();
+                fetchDiamondBalance();
 
             }
 

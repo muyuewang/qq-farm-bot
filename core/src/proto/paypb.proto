@@ -2,12 +2,25 @@ syntax = "proto3";
 
 package gamepb.paypb;
 
-// 支付系统下发的余额摘要。钻石不属于普通背包物品，不能通过 ItemService.Bag 获取。
-message RechargeInfo {
-    int64 diamond = 1;
+service PayService {
+    rpc GetRechargeInfo(GetRechargeInfoRequest) returns (GetRechargeInfoReply);
 }
 
+message GetRechargeInfoRequest {
+    string source = 1; // 官方商城使用 "MallUI"。
+}
+
+message RechargeInfo {
+    int64 balance = 1; // 当前钻石余额。
+    int64 field_3 = 3; // 语义未确认。
+}
+
+message GetRechargeInfoReply {
+    repeated RechargeInfo recharge_infos = 1;
+}
+
+// 充值通知只携带交易上下文，不携带余额；余额需主动查询。
 message RechargeInfoNotify {
-    RechargeInfo recharge_info = 1;
-    string scene = 2;
+    string transaction_id = 1;
+    string source = 2;
 }

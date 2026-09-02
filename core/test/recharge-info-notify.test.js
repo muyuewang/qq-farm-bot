@@ -3,15 +3,17 @@ const assert = require('node:assert/strict');
 const { loadProto, types } = require('../src/utils/proto');
 const { getUserState, handleMessage } = require('../src/utils/network');
 
-test('updates diamond balance from RechargeInfoNotify', async () => {
+test('RechargeInfoNotify does not decode transaction context as a diamond balance', async () => {
   await loadProto();
   const state = getUserState();
   const previous = state.diamond;
 
   try {
-    state.diamond = 0;
-    // Captured official payload: recharge_info.field_1 (diamond) = 155.
-    const notifyBody = Buffer.from('0a09089b01183c2a02ba17120131', 'hex');
+    state.diamond = 77;
+    const notifyBody = types.RechargeInfoNotify.encode({
+      transaction_id: 'transaction-155',
+      source: 'MallUI',
+    }).finish();
     const eventBody = types.EventMessage.encode({
       message_type: 'gamepb.paypb.RechargeInfoNotify',
       body: notifyBody,
@@ -22,7 +24,8 @@ test('updates diamond balance from RechargeInfoNotify', async () => {
     }).finish();
 
     handleMessage(gateBody);
-    assert.equal(state.diamond, 155);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(state.diamond, 77);
   } finally {
     state.diamond = previous;
   }

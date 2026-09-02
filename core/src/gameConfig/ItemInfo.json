@@ -5778,7 +5778,7 @@
     "sells": "1001:12000",
     "sell_cond": null,
     "cond_sells": null,
-    "level": 200,
+    "level": 1,
     "target_id": null,
     "asset_name": "Crop_416",
     "icon_res": null,

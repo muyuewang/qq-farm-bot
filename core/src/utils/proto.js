@@ -245,6 +245,8 @@ async function loadProto() {
     types.InteractRecordsReply = root.lookupType('gamepb.interactpb.InteractRecordsReply');
     types.ItemNotify = root.lookupType('gamepb.itempb.ItemNotify');
     types.RechargeInfoNotify = root.lookupType('gamepb.paypb.RechargeInfoNotify');
+    types.GetRechargeInfoRequest = root.lookupType('gamepb.paypb.GetRechargeInfoRequest');
+    types.GetRechargeInfoReply = root.lookupType('gamepb.paypb.GetRechargeInfoReply');
     types.GoodsUnlockNotify = root.lookupType('gamepb.shoppb.GoodsUnlockNotify');
     types.TaskInfoNotify = root.lookupType('gamepb.taskpb.TaskInfoNotify');
 
