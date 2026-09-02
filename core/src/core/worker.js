@@ -1214,8 +1214,9 @@ async function startBot(config) {
         };
         networkEvents.on('dogSkillGiftPending', onDogSkillGiftPending);
 
-        // 获取背包点券数
+        // ── 登录后串行执行初始化任务，避免并发洪泛连接 ──
         try {
+            // 1. 获取背包
             const bag = await getBag();
             const items = getBagItems(bag);
             let couponCount = 0;
@@ -1229,7 +1230,7 @@ async function startBot(config) {
             state.coupon = Math.max(0, couponCount);
         } catch { }
 
-        // 初始化统计数据
+        // 2. 初始化统计数据
         const userState = getUserState();
         const accountId = process.env.FARM_ACCOUNT_ID || '';
         initStatsWithPersistence(
@@ -1240,16 +1241,36 @@ async function startBot(config) {
         );
         resetSessionGains();
 
-        // 处理邀请码
-        await processInviteCodes();
+        // 3. 处理邀请码
+        try { await processInviteCodes(); } catch { }
 
-        // 打开肥料礼包
+        // 4. 打开肥料礼包
         if (getAutomation().fertilizer_gift) {
-            await openFertilizerGiftPacksSilently().catch(() => 0);
+            try { await openFertilizerGiftPacksSilently(); } catch { }
         }
 
-        // 延迟执行放虫放草
-        workerScheduler.setTimeoutTask('bad_startup_once', 15000, async () => {
+        // 5. 启动检查循环（先注册监听器，延迟首次执行）
+        startFarmCheckLoop({ externalScheduler: true });
+        startFriendCheckLoop({ externalScheduler: true });
+
+        // 6. 启动统一调度器
+        if (unifiedSchedulerRunning) {
+            resetUnifiedSchedule();
+            scheduleUnifiedNextTick();
+        } else {
+            startUnifiedScheduler();
+        }
+
+        // 7. 启动每日定时器（延迟启动，避免与农场/好友检查重叠）
+        workerScheduler.setTimeoutTask('startup_daily_timers', 5000, () => {
+            initTaskSystem();
+            startDailyRoutineTimer();
+            startStarActivityClaimTimer();
+            startMysteryShopAutoBuyTimer();
+        });
+
+        // 8. 延迟执行放虫放草
+        workerScheduler.setTimeoutTask('bad_startup_once', 20000, async () => {
             try {
                 await runBadOnceOnStartup();
             } catch (err) {
@@ -1258,24 +1279,6 @@ async function startBot(config) {
                 });
             }
         });
-
-        // 启动各检查循环
-        startFarmCheckLoop({ externalScheduler: true });
-        startFriendCheckLoop({ externalScheduler: true });
-
-        // 启动统一调度器
-        if (unifiedSchedulerRunning) {
-            resetUnifiedSchedule();
-            scheduleUnifiedNextTick();
-        } else {
-            startUnifiedScheduler();
-        }
-
-        // 启动每日定时器
-        initTaskSystem();
-        startDailyRoutineTimer();
-        startStarActivityClaimTimer();
-        startMysteryShopAutoBuyTimer();
 
         syncStatus();
     };
