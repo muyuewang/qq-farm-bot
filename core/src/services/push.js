@@ -7,6 +7,8 @@ try {
   pushoo = null;
 }
 
+const MEOW_DEFAULT_BASE_URL = 'https://api.chuckfang.com';
+
 function assertRequiredText(name, value) {
   const text = String(value || '').trim();
   if (!text) throw new Error(`${name} 不能为空`);
@@ -72,11 +74,12 @@ function parsePushResult(result) {
  * @returns {{ ok, code, msg, raw }}
  */
 async function sendPushooMessage(payload = {}) {
+  const channel = assertRequiredText('推送渠道', payload.channel).toLowerCase();
+  if (channel === 'meow') return sendMeowMessage(payload);
   if (!pushoo) {
     throw new Error('缺少 pushoo 依赖，请在 core 目录执行 npm install');
   }
 
-  const channel = assertRequiredText('推送渠道', payload.channel).toLowerCase();
   const endpoint = String(payload.endpoint || '').trim();
   const rawToken = String(payload.token || '').trim();
   const token = channel === 'webhook' ? rawToken : assertRequiredText('推送 token', rawToken);
@@ -96,6 +99,41 @@ async function sendPushooMessage(payload = {}) {
 
   const result = await pushoo(channel, request);
   return parsePushResult(result);
+}
+
+/**
+ * 发送 MeoW 推送（鸿蒙 MeoW 消息推送 API）。
+ * @param {object} payload
+ * @param {string} payload.token 必填 MeoW 注册昵称
+ * @param {string} [payload.endpoint] 可选 自定义接口地址（默认 https://api.chuckfang.com）
+ * @param {string} payload.title 推送标题
+ * @param {string} payload.content 推送内容
+ * @returns {{ ok, code, msg, raw }}
+ */
+async function sendMeowMessage(payload = {}) {
+  const nickname = assertRequiredText('MeoW 昵称', payload.token);
+  const title = assertRequiredText('推送标题', payload.title);
+  const content = assertRequiredText('推送内容', payload.content);
+  const baseUrl = String(payload.endpoint || MEOW_DEFAULT_BASE_URL).trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(baseUrl)) throw new Error('MeoW 接口地址格式无效');
+
+  const response = await fetch(`${baseUrl}/${encodeURIComponent(nickname)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, msg: content }),
+  });
+  let raw;
+  try {
+    raw = await response.json();
+  } catch {
+    raw = { status: response.status };
+  }
+  // MeoW 业务状态码非 200 视为失败，转为 error 结构便于统一结果判断
+  const bizStatus = Number(raw && raw.status);
+  if (Number.isFinite(bizStatus) && bizStatus !== 200) {
+    return { ok: false, code: 'error', msg: String(raw.msg || raw.message || 'MeoW 推送失败'), raw };
+  }
+  return parsePushResult(raw);
 }
 
 /**
@@ -160,5 +198,6 @@ async function sendSmtpEmail(options = {}) {
 
 module.exports = {
   sendSmtpEmail,
-  sendPushooMessage
+  sendPushooMessage,
+  sendMeowMessage
 };

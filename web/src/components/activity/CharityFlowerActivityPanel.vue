@@ -46,7 +46,7 @@ function settlementStatus(activity: CharityFlowerActivityData) {
       <div class="mt-6 grid grid-cols-3 gap-3 text-center">
         <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">可送爱心</div><div class="mt-1 text-2xl font-semibold">{{ activity?.love?.count || 0 }}</div></div>
         <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">个人爱心值</div><div class="mt-1 text-2xl font-semibold">{{ activity?.love?.personalScore || 0 }}</div></div>
-        <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">公益金今日状态</div><div class="mt-1 text-sm font-medium">{{ activity?.publicFund?.claimedToday ? '今日已送出' : activity?.publicFund?.complianceAgreed ? '今日可送出' : '未同意协议' }}</div></div>
+        <div class="rounded-lg bg-white/15 p-3"><div class="text-xs text-white/70">公益金今日状态</div><div class="mt-1 text-sm font-medium">{{ activity?.publicFund?.claimedToday ? '今日已送出' : !activity?.dailyGift?.harvestedToday ? '待收获小红花' : activity?.publicFund?.complianceAgreed ? '今日可送出' : '未同意协议' }}</div></div>
       </div>
     </div>
 
@@ -74,7 +74,7 @@ function settlementStatus(activity: CharityFlowerActivityData) {
           </div>
           <div class="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
             <div class="text-xs text-gray-500">每日公益礼包</div>
-            <div class="mt-1 text-sm font-medium">{{ activity.dailyGift?.claimed ? '已领取' : activity.dailyGift?.claimable ? '可领取' : '不可领取' }}</div>
+            <div class="mt-1 text-sm font-medium">{{ activity.dailyGift?.claimed ? '已领取' : !activity.dailyGift?.harvestedToday ? '今日收获小红花后可领取' : '可领取' }}</div>
             <BaseButton class="mt-2" size="sm" :disabled="!activity.dailyGift?.claimable || pendingDailyGift" @click="$emit('claimDailyGift')">{{ pendingDailyGift ? '领取中…' : '领取礼包' }}</BaseButton>
           </div>
         </div>
@@ -85,7 +85,7 @@ function settlementStatus(activity: CharityFlowerActivityData) {
         <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div v-for="tier in activity.personalRewards" :key="tier.needScore" class="rounded-lg border p-3" :class="tier.claimed ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20' : tier.claimable ? 'border-rose-300 bg-rose-50 dark:bg-rose-950/20' : 'border-gray-200 dark:border-gray-700'">
             <div class="text-xs text-gray-500">{{ tier.needScore }} 爱心</div><div class="mt-2 text-sm font-medium">{{ itemsText(tier.rewards) }}</div>
-            <div class="mt-2 text-xs">{{ tier.claimed ? '已领取' : tier.claimable ? '可领取' : tier.reached ? '等待解锁' : '未达成' }}</div>
+            <div class="mt-2 text-xs">{{ tier.claimed ? '已领取' : tier.claimable ? '可领取' : '未达成' }}</div>
             <BaseButton v-if="tier.claimable" class="mt-2 w-full" size="sm" :disabled="pendingReward === tier.needScore" @click="$emit('claimReward', tier.needScore)">{{ pendingReward === tier.needScore ? '领取中…' : '领取奖励' }}</BaseButton>
           </div>
         </div>

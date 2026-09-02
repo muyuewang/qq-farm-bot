@@ -15,7 +15,10 @@ function fixture() {
       max_global_score: 10000000,
       seed_reward_status: 2,
       seed_reward: { id: 1001, count: 2 },
-      personal_rewards: [{ target: 20, reward: [{ id: 1002, count: 1 }], status: 1 }],
+      personal_rewards: [
+        { target: 20, reward: [{ id: 1002, count: 1 }], status: 0 },
+        { target: 50, reward: [{ id: 1006, count: 1 }], status: 1 },
+      ],
       global_reward: { target: 10000000, reward: [{ id: 1005, count: 1 }] },
       final_pack_threshold: 100,
       final_reward: [{ id: 1003, count: 1 }],
@@ -49,11 +52,16 @@ test('charity flower normalizes official state without exposing order details', 
   assert.equal(activity.global.reward[0].itemId, 1005);
   assert.equal(activity.seedReward.claimable, true);
   assert.equal(activity.seedReward.claimed, false);
-  // 30 份爱心达到 20 档且 status=1 → 可领取
+  // 抓包语义：status 0=已达成可领取，1=已领取。30 份爱心达到 20 档 → 档位 0 可领取
   assert.equal(activity.personalRewards[0].needScore, 20);
   assert.equal(activity.personalRewards[0].claimable, true);
   assert.equal(activity.personalRewards[0].claimed, false);
-  // 当日存在公益基金记录 → 每日礼包已领取
+  // 档位 50 未达成且 status=1 → 已领取语义，不可再领取
+  assert.equal(activity.personalRewards[1].reached, false);
+  assert.equal(activity.personalRewards[1].claimable, false);
+  assert.equal(activity.personalRewards[1].claimed, true);
+  // flow_status=2（今日已收获小红花）+ 当日公益基金记录 → 每日礼包已领取
+  assert.equal(activity.dailyGift.harvestedToday, true);
   assert.equal(activity.dailyGift.claimed, true);
   assert.equal(activity.dailyGift.claimable, false);
   assert.equal(activity.publicFund.claimedToday, true);
@@ -76,6 +84,44 @@ test('charity flower daily gift stays claimable when only past fund orders exist
   assert.equal(activity.publicFund.claimable, true);
   assert.equal(activity.dailyGift.claimed, false);
   assert.equal(activity.dailyGift.claimable, true);
+});
+
+test('charity daily gift follows the red-flower flow status', () => {
+  // flow_status=1：今日小红花未收获 → 即使没有今日订单也不可领礼包
+  const notHarvested = normalizeCharityFlowerActivity((() => {
+    const node = fixture();
+    node.charity_flower.public_fund_orders = [];
+    node.charity_flower.flow_status = 1;
+    return node;
+  })(), 1788192000);
+  assert.equal(notHarvested.dailyGift.harvestedToday, false);
+  assert.equal(notHarvested.dailyGift.claimed, false);
+  assert.equal(notHarvested.dailyGift.claimable, false);
+  assert.equal(notHarvested.publicFund.claimable, false);
+
+  // flow_status=2：已收获待领 → 无今日订单时可领取
+  const harvested = normalizeCharityFlowerActivity((() => {
+    const node = fixture();
+    node.charity_flower.public_fund_orders = [];
+    node.charity_flower.flow_status = 2;
+    return node;
+  })(), 1788192000);
+  assert.equal(harvested.dailyGift.harvestedToday, true);
+  assert.equal(harvested.dailyGift.claimed, false);
+  assert.equal(harvested.dailyGift.claimable, true);
+  assert.equal(harvested.publicFund.claimable, true);
+
+  // flow_status=3：每日礼包已领取
+  const claimed = normalizeCharityFlowerActivity((() => {
+    const node = fixture();
+    node.charity_flower.public_fund_orders = [];
+    node.charity_flower.flow_status = 3;
+    return node;
+  })(), 1788192000);
+  assert.equal(claimed.dailyGift.harvestedToday, true);
+  assert.equal(claimed.dailyGift.claimed, true);
+  assert.equal(claimed.dailyGift.claimable, false);
+  assert.equal(claimed.publicFund.claimable, false);
 });
 
 test('charity flower reward replies decode the capture-verified selectors', async () => {

@@ -134,15 +134,15 @@ const config = defineModel<OfflineReminderConfig>('config', { required: true })
           v-model="config.endpoint"
           label="接口地址"
           type="text"
-          :disabled="config.channel !== 'webhook'"
-          placeholder="Webhook 渠道填写接口地址"
+          :disabled="config.channel !== 'webhook' && config.channel !== 'meow'"
+          :placeholder="config.channel === 'meow' ? '留空使用默认接口地址' : 'Webhook 渠道填写接口地址'"
         />
 
         <BaseInput
           v-model="config.token"
-          label="Token"
+          :label="config.channel === 'meow' ? '昵称' : 'Token'"
           type="text"
-          placeholder="接收端 token"
+          :placeholder="config.channel === 'meow' ? 'MeoW 注册昵称' : '接收端 token'"
         />
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">

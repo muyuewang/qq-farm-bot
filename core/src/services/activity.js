@@ -3021,6 +3021,17 @@ const CHARITY_FLOWER_CLAIM_SHARE_CMD = 35;
 const CHARITY_FLOWER_DONATE_ALL_CMD = 36;
 const CHARITY_FLOWER_CLAIM_REWARD_CMD = 37;
 const CHARITY_FLOWER_CLAIM_XHH_CMD = 38;
+// flow_status 是每日小红花流程：1=今日小红花未收获，2=已收获待领每日礼包，3=每日礼包已领取。
+// 每日礼包（送出公益金）必须先收获当日小红花，否则官方返回 1034088/1034092。
+const CHARITY_FLOW_HARVESTED = 2;
+const CHARITY_FLOW_DAILY_GIFT_CLAIMED = 3;
+// 网关错误码 → 面板友好文案（与参考客户端行为交叉确认）
+const CHARITY_FLOWER_ERROR_MESSAGES = new Map([
+  [1034087, '该公益进度奖励档位已经领取'],
+  [1034088, '今天还没有收获小红花，暂时无法领取公益礼包'],
+  [1034091, '当前爱心不足，无法捐赠'],
+  [1034092, '今天还没有收获小红花，暂时无法领取公益礼包'],
+]);
 
 function isCharityFlowerActive(nowSeconds = Math.floor(Date.now() / 1000)) {
   return nowSeconds >= CHARITY_FLOWER_START_TIME && nowSeconds <= CHARITY_FLOWER_END_TIME;
@@ -3049,6 +3060,10 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
   }));
   const todayKey = getCharityFlowerDateKey(nowSeconds);
   const publicFundClaimedToday = publicFundOrders.some(order => order.date === todayKey);
+  // flow_status 随每日流程重置：仅 2/3 表示今日已收获小红花，礼包领取以此为前置。
+  const flowStatus = toNum(body.flow_status);
+  const dailyGiftHarvestedToday = flowStatus === CHARITY_FLOW_HARVESTED || flowStatus === CHARITY_FLOW_DAILY_GIFT_CLAIMED;
+  const dailyGiftClaimed = flowStatus === CHARITY_FLOW_DAILY_GIFT_CLAIMED || publicFundClaimedToday;
   const finalThreshold = toNum(body.final_pack_threshold);
   const personalReached = finalThreshold > 0 && personalScore >= finalThreshold;
   const globalReached = globalTarget > 0 && globalScore >= globalTarget;
@@ -3081,9 +3096,10 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
     },
     dailyGift: {
       statusCode: toNum(body.daily_reward_status),
-      claimable: publicFundClaimedToday === false,
-      claimed: publicFundClaimedToday,
-      // 公益基金记录跨天重置后仍保留昨日订单，因此"今日已领取"以 orders 中存在今日记录为准
+      claimable: dailyGiftHarvestedToday && !dailyGiftClaimed,
+      claimed: dailyGiftClaimed,
+      // 每日礼包以"今日已收获小红花"（flow_status 2/3）为前置；公益基金订单仅作已领取佐证
+      harvestedToday: dailyGiftHarvestedToday,
       reward: normalizeCoreItem(body.daily_reward),
     },
     personalRewards: (body.personal_rewards || []).map(item => {
@@ -3095,8 +3111,9 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
         target,
         status,
         reached,
-        claimable: reached && status === 1,
-        claimed: status >= 2,
+        // 抓包证实：领取成功后 status 从 0 变 1 —— 0=已达成可领取，1=已领取
+        claimable: reached && status === 0,
+        claimed: status >= 1,
         rewards: (item.reward || []).map(normalizeCoreItem),
       };
     }),
@@ -3114,9 +3131,10 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
       orders: publicFundOrders,
       successCount: publicFundOrders.length,
       claimedToday: publicFundClaimedToday,
-      claimable: publicFundClaimedToday === false,
+      // 送出公益金与每日礼包是同一动作（cmd 38）：需今日已收获小红花且今日未送出
+      claimable: dailyGiftHarvestedToday && !dailyGiftClaimed,
       complianceAgreed: !!body.compliance_agreed,
-      flowStatus: toNum(body.flow_status),
+      flowStatus,
     },
   };
 }
@@ -3155,13 +3173,25 @@ async function donateCharityFlowerLove() {
   return { ok: true, consumedLoveCount: toNum(result.consumed_love_count), scoreAdded: toNum(result.score_added) };
 }
 
+function translateCharityFlowerError(err) {
+  const message = String(err?.message || '');
+  for (const [code, text] of CHARITY_FLOWER_ERROR_MESSAGES) {
+    if (message.includes(`code=${code}`)) return new Error(text);
+  }
+  return err;
+}
+
 async function claimCharityFlowerReward(needPersonalScore) {
   assertCharityFlowerActive('领取爱心档位奖励');
   const threshold = Math.max(1, toNum(needPersonalScore));
-  const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_REWARD_CMD, {
-    charityFlowerClaimReward: { needPersonalScore: threshold },
-  });
-  return { ok: true, needScore: threshold, awards: (reply?.charity_flower_claim_reward?.awards || []).map(normalizeCoreItem) };
+  try {
+    const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_REWARD_CMD, {
+      charityFlowerClaimReward: { needPersonalScore: threshold },
+    });
+    return { ok: true, needScore: threshold, awards: (reply?.charity_flower_claim_reward?.awards || []).map(normalizeCoreItem) };
+  } catch (err) {
+    throw translateCharityFlowerError(err);
+  }
 }
 
 async function claimCharityFlowerPublicFund() {
@@ -3169,8 +3199,13 @@ async function claimCharityFlowerPublicFund() {
   const before = await getCharityFlowerActivity();
   if (!before.publicFund.complianceAgreed) throw new Error('送出公益金失败: 尚未同意腾讯公益平台协议');
   if (before.publicFund.claimedToday) return { ok: true, claimed: false, reason: 'already_claimed_today' };
-  const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_XHH_CMD, { charityFlowerClaimXhh: true });
-  return { ok: true, claimed: true, awards: (reply?.charity_flower_claim_xhh?.awards || []).map(normalizeCoreItem) };
+  if (!before.dailyGift.harvestedToday) throw new Error('今天还没有收获小红花，暂时无法领取公益礼包');
+  try {
+    const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_XHH_CMD, { charityFlowerClaimXhh: true });
+    return { ok: true, claimed: true, awards: (reply?.charity_flower_claim_xhh?.awards || []).map(normalizeCoreItem) };
+  } catch (err) {
+    throw translateCharityFlowerError(err);
+  }
 }
 
 module.exports = {

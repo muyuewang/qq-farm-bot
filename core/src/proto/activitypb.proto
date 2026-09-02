@@ -251,7 +251,7 @@ message ActivityNode {
 message CharityFlowerPersonalReward {
     int64 target = 1;
     repeated corepb.Item reward = 2;
-    // 进度奖励状态：0=未达成解锁，1=已解锁可领取（>=2 视为已处理）
+    // 进度奖励状态：抓包证实领取成功后从 0 变 1 —— 0=已达成可领取，1=已领取
     int64 status = 3;
 }
 

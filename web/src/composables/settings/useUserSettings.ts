@@ -94,6 +94,7 @@ const CHANNEL_DOCS: Record<string, string> = {
   ifttt: 'https://ifttt.com/maker_webhooks',
   discord: 'https://discord.com/developers/docs/resources/webhook#execute-webhook',
   wxpusher: 'https://wxpusher.zjiecode.com/docs/#/',
+  meow: 'https://www.chuckfang.com/MeoW/api_doc.html',
 }
 
 export function useUserSettings(showAlert: (message: string, type?: AlertType) => void) {
@@ -158,6 +159,7 @@ export function useUserSettings(showAlert: (message: string, type?: AlertType) =
     { label: '企业微信群机器人', value: 'wecombot' },
     { label: 'Discord', value: 'discord' },
     { label: 'WxPusher', value: 'wxpusher' },
+    { label: 'MeoW', value: 'meow' },
   ]
 
   const reloginUrlModeOptions = [
