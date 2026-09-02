@@ -11,6 +11,7 @@ let root = null;
 const types = {};
 let protoReadyResolve = null;
 let protoReadyPromise = null;
+let protoReady = false;
 
 function getProtoReadyPromise() {
     if (!protoReadyPromise) {
@@ -23,6 +24,7 @@ function getProtoReadyPromise() {
 
 async function loadProto() {
     log('系统', '正在加载 Protobuf 定义...');
+    protoReady = false;
     root = new protobuf.Root();
     await root.load([
         getResourcePath('proto', 'game.proto'),
@@ -252,6 +254,7 @@ async function loadProto() {
 
     // Proto 加载完成
     log('系统', 'Protobuf 定义加载完成');
+    protoReady = true;
     if (protoReadyResolve) protoReadyResolve(true);
 }
 
@@ -260,7 +263,7 @@ function getRoot() {
 }
 
 async function waitForProtoReady() {
-    if (root) return true;
+    if (protoReady) return true;
     await getProtoReadyPromise();
     return true;
 }
