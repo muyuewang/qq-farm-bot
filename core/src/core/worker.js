@@ -1368,6 +1368,13 @@ async function handleApiCall(msg) {
     let result = null;
     let error = null;
 
+    // 网关心跳失联时，拒绝大部分 API 调用，避免在死连接上堆积
+    if (!loginReady && method !== 'setAutomation' && method !== 'getDiamondBalance') {
+        error = '网关未就绪，已跳过';
+        sendToMaster({ type: 'api_response', id, result, error });
+        return;
+    }
+
     // 好友同步操作期间暂停自动化
     const isFriendSync = method === 'getFriends' && args[0] === true
         || method === 'fetchFriendsDogInfo'

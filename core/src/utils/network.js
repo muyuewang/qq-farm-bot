@@ -321,6 +321,13 @@ async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 20000,
             return;
         }
 
+        // 心跳已失联超过一轮时，拒绝非关键请求，避免在死连接上堆积
+        const heartbeatAge = Date.now() - lastHeartbeatResponse;
+        if (heartbeatAge > HEARTBEAT_TIMEOUT && priority !== 'critical') {
+            reject(new Error(`网关心跳失联，拒绝请求: ${methodName} (失联${Math.round(heartbeatAge / 1000)}s)`));
+            return;
+        }
+
         if (pendingCallbacks.size >= 20) {
             reject(new Error(`请求队列已满: ${methodName} (pending=${pendingCallbacks.size})`));
             return;
