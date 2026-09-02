@@ -6,14 +6,16 @@ function getOldestPendingAgeMs(startedAtValues, now = Date.now()) {
 
 function evaluateGatewayHealth(input = {}) {
   const connected = input.connected !== false;
-  const heartbeatAgeMs = Math.max(0, Number(input.heartbeatAgeMs) || 0);
+  const heartbeatMisses = Math.max(0, Number(input.heartbeatMisses) || 0);
   const oldestPendingAgeMs = Math.max(0, Number(input.oldestPendingAgeMs) || 0);
-  const heartbeatLimitMs = Math.max(1000, Number(input.heartbeatLimitMs) || 30000);
   const pendingLimitMs = Math.max(1000, Number(input.pendingLimitMs) || 5000);
 
   if (!connected) return { healthy: false, reason: 'disconnected' };
-  if (heartbeatAgeMs > heartbeatLimitMs) return { healthy: false, reason: 'heartbeat_stale' };
-  if (oldestPendingAgeMs > pendingLimitMs) return { healthy: false, reason: 'request_stuck' };
+  // 判定口径对齐官方客户端保活节奏：心跳按 25s 周期发送，「距上次回包的时长」
+  // 在周期后段必然超过任何小于间隔的阈值，不能用 heartbeatAgeMs 判定健康；
+  // 只有心跳真正漏拍（请求失败）才视为失联。
+  if (heartbeatMisses > 0) return { healthy: false, reason: 'heartbeat_stale' };
+  if (oldestPendingAgeMs >= pendingLimitMs) return { healthy: false, reason: 'request_stuck' };
   return { healthy: true, reason: 'ok' };
 }
 

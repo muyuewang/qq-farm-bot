@@ -938,13 +938,11 @@ const MAX_HEARTBEAT_MISS = 2;
 const HEARTBEAT_REQUEST_TIMEOUT = 20000;
 
 function getGatewayHealth() {
-    const now = Date.now();
     const result = evaluateGatewayHealth({
         connected: isConnected(),
-        heartbeatAgeMs: now - lastHeartbeatResponse,
-        oldestPendingAgeMs: getOldestPendingAgeMs(pendingStartedAt.values(), now),
-        heartbeatLimitMs: HEARTBEAT_TIMEOUT,
-        pendingLimitMs: 10000,
+        heartbeatMisses: heartbeatMissCount,
+        oldestPendingAgeMs: getOldestPendingAgeMs(pendingStartedAt.values(), Date.now()),
+        pendingLimitMs: 5000,
     });
     return {
         ...result,
