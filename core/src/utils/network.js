@@ -121,19 +121,30 @@ function logAce(level, message) {
     else log('ACE', message);
 }
 
+function buildTsdkDeviceInfo(deviceProtocol) {
+    const custom = deviceProtocol && deviceProtocol.enabled ? deviceProtocol : null;
+    if (!custom) {
+        return { platform: CONFIG.os };
+    }
+
+    const device = resolveDeviceFingerprint(custom);
+    return {
+        deviceModel: device.deviceModel,
+        deviceBrand: device.deviceBrand,
+        deviceId: device.deviceId,
+        deviceMac: String(custom.deviceMac || '').trim(),
+        imei: String(custom.imei || '').trim(),
+        platform: device.os,
+        system: device.sysSoftware,
+    };
+}
+
 function createTsdkRuntime(deviceProtocol) {
-    const device = resolveDeviceFingerprint(deviceProtocol);
     return new TsdkRuntime({
         accountId: process.env.FARM_ACCOUNT_ID,
         gameId: CONFIG.tsdkGameId,
         appKey: CONFIG.tsdkAppKey,
-        deviceInfo: {
-            deviceModel: device.deviceModel,
-            deviceBrand: device.deviceBrand,
-            deviceId: device.deviceId,
-            platform: device.os,
-            system: device.sysSoftware,
-        },
+        deviceInfo: buildTsdkDeviceInfo(deviceProtocol),
         logger: logAce,
     });
 }
@@ -990,6 +1001,7 @@ module.exports = {
     getAceStatus,
     buildLoginDeviceInfo,
     buildWebSocketHeaders,
+    buildTsdkDeviceInfo,
     resolveDeviceFingerprint,
     extractServerClientVersion,
     applyServerVersionInfo,
