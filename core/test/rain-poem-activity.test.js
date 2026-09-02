@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { normalizeRainPoemActivity, normalizeWeatherStatus, getOwnWeatherStatus, isLightningMutantPlant, encodeRainPoemSummonUseRequest, mergeRainPoemTaskUsage } = require('../src/services/activity');
+const { normalizeRainPoemActivity, normalizeWeatherStatus, describeRainPoemFriendWeather, getOwnWeatherStatus, isLightningMutantPlant, encodeRainPoemSummonUseRequest, mergeRainPoemTaskUsage } = require('../src/services/activity');
 const { getMutantEffectsByIds } = require('../src/config/gameConfig');
 const { loadProto, types } = require('../src/utils/proto');
 
@@ -59,6 +59,43 @@ test('both weather phases are rainstorms only during their active time', () => {
   assert.equal(normalizeWeatherStatus({ type: 0, status: 1 }, 150).rainstorm, false);
   assert.equal(normalizeWeatherStatus({ type: 1, status: 0 }, 150).rainstorm, false);
   assert.equal(normalizeWeatherStatus({ type: 1, status: 2, start_time: 100, end_time: 200 }, 150).rainstorm, true);
+});
+
+test('field 9 marks the current thunderstorm cycle as collected', () => {
+  // 本轮雷雨进行中且字段 9=4 → 本轮已采集
+  const collected = normalizeWeatherStatus({ type: 2, status: 1, start_time: 100, end_time: 200, field_9: 4 }, 150);
+  assert.equal(collected.collectedThisCycle, true);
+  // 标记为 0 → 本轮未采集
+  assert.equal(normalizeWeatherStatus({ type: 2, status: 1, start_time: 100, end_time: 200, field_9: 0 }, 150).collectedThisCycle, false);
+  // 雷雨已结束：即使字段 9 仍为 4，也不再代表“本轮”状态
+  assert.equal(normalizeWeatherStatus({ type: 2, status: 1, start_time: 100, end_time: 200, field_9: 4 }, 201).collectedThisCycle, false);
+  // 非雷雨天气不判采集
+  assert.equal(normalizeWeatherStatus({ type: 0, status: 0, field_9: 4 }, 150).collectedThisCycle, false);
+});
+
+test('weather status field 9 decodes from the wire format', async () => {
+  if (!types.GetWeatherStatusReply) await loadProto();
+  const reply = types.GetWeatherStatusReply.decode(Buffer.from('0a06080210014804', 'hex'));
+  assert.equal(reply.weather.type, 2);
+  assert.equal(reply.weather.status, 1);
+  assert.equal(reply.weather.field_9, 4);
+});
+
+test('friend weather panel states cover available, collected, expired and plain farms', () => {
+  const available = describeRainPoemFriendWeather(normalizeWeatherStatus({ type: 2, status: 1, start_time: 100, end_time: 200 }, 150));
+  assert.deepEqual(available, { weatherType: 2, weatherStatus: 1, weatherEndTime: 200, rainstorm: true, collected: false, expired: false });
+
+  const collected = describeRainPoemFriendWeather(normalizeWeatherStatus({ type: 1, status: 1, start_time: 100, end_time: 200, field_9: 4 }, 150));
+  assert.equal(collected.rainstorm, true);
+  assert.equal(collected.collected, true);
+
+  const expired = describeRainPoemFriendWeather(normalizeWeatherStatus({ type: 1, status: 1, start_time: 100, end_time: 200 }, 201));
+  assert.equal(expired.rainstorm, false);
+  assert.equal(expired.expired, true);
+  assert.equal(expired.collected, false);
+
+  const plain = describeRainPoemFriendWeather(normalizeWeatherStatus({ type: 0, status: 0 }, 150));
+  assert.deepEqual(plain, { weatherType: 0, weatherStatus: 0, weatherEndTime: 0, rainstorm: false, collected: false, expired: false });
 });
 
 test('weather task exposes daily progress', () => {

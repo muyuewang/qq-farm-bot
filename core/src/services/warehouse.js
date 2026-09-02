@@ -64,6 +64,7 @@ const ORGANIC_FERTILIZER_ITEM_HOURS = new Map([
 
 let fertilizerGiftDoneDateKey = '';
 let fertilizerGiftLastOpenAt = 0;
+let charitySettlementGiftLastOpenAt = 0;
 
 // ---- 日期工具 ----
 
@@ -318,6 +319,53 @@ async function autoOpenFertilizerGiftPacks() {
 
 async function openFertilizerGiftPacksSilently() {
   return autoOpenFertilizerGiftPacks();
+}
+
+const CHARITY_SETTLEMENT_GIFT_ID = 101604;
+const CHARITY_SETTLEMENT_GIFT_COOLDOWN_MS = 5 * 60 * 1000;
+
+function isBagItemLocked(item) {
+  return item?.locked === true || item?.locked === 1 || item?.locked === '1';
+}
+
+/**
+ * 静默打开公益小红花结算礼包（活动结束后随结算邮件发放，5 分钟冷却兜底轮询）。
+ */
+async function openCharitySettlementGiftPacksSilently() {
+  const now = Date.now();
+  if (now - charitySettlementGiftLastOpenAt < CHARITY_SETTLEMENT_GIFT_COOLDOWN_MS) return 0;
+  charitySettlementGiftLastOpenAt = now;
+
+  try {
+    const bagReply = await getBag();
+    const giftItems = getBagItems(bagReply).filter(item =>
+      toNum(item && item.id) === CHARITY_SETTLEMENT_GIFT_ID
+      && !isBagItemLocked(item)
+      && toNum(item && item.count) > 0
+    );
+    if (giftItems.length === 0) return 0;
+
+    let opened = 0;
+    for (const item of giftItems) {
+      const count = Math.max(1, toNum(item && item.count));
+      try {
+        await useItem(CHARITY_SETTLEMENT_GIFT_ID, count, toNum(item && item.uid));
+        opened += count;
+      } catch { /* 背包变化或单次失败留给下个冷却周期重试 */ }
+    }
+
+    if (opened > 0) {
+      log('仓库', `自动打开公益小红花结算礼包 x${opened}`, {
+        module: 'warehouse', event: 'charity_settlement_gift_open', result: 'ok', count: opened,
+      });
+    }
+    return opened;
+  } catch (err) {
+    logWarn('仓库', `打开公益小红花结算礼包失败: ${err.message}`, {
+      module: 'warehouse', event: 'charity_settlement_gift_open', result: 'error',
+    });
+    return 0;
+  }
 }
 
 // ---- 金币计算 ----
@@ -706,6 +754,7 @@ module.exports = {
   useItem,
   batchUseItems,
   openFertilizerGiftPacksSilently,
+  openCharitySettlementGiftPacksSilently,
   getFertilizerGiftDailyState: () => ({
     key: 'fertilizer_gift_open',
     doneToday: fertilizerGiftDoneDateKey === getDateKey(),

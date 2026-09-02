@@ -13,6 +13,9 @@ message WeatherStatus {
     int64 end_time = 4;
     int32 source = 5;
     int32 field_8 = 8;
+    // 本轮雷雨采集标记：随每轮雷雨重置，不是跨天采集记录。
+    // 抓包验证采集成功后回包该值为 4；不能把 field_8 当作该标记。
+    int32 field_9 = 9;
 }
 
 message GetWeatherStatusRequest {}

@@ -17,6 +17,7 @@ const { getDataDir } = require('../config/runtime-paths');
 const { createModuleLogger } = require('./logger');
 const { readJsonFile, writeJsonFileAtomic } = require('./json-db');
 const { getBag, getBagItems } = require('./warehouse');
+const { getPrankCandidateLandIds } = require('./rain-poem-prank-service');
 
 const activityLogger = createModuleLogger('activity');
 
@@ -45,6 +46,8 @@ const RAIN_POEM_START_TIME = 1787709600;
 const RAIN_POEM_END_TIME = 1788883199;
 const LIGHTNING_MUTANT_TYPE = 12;
 const RAIN_POEM_SUMMON_DAILY_LIMIT = 50;
+// WeatherStatus.field 9 是“本轮雷雨已采集”标记，采集成功后为 4，随下一轮雷雨重置。
+const RAIN_POEM_COLLECTED_MARKER = 4;
 const RAIN_POEM_ITEM_NAMES = new Map([
   [1027, '雷电徽章'], [5001, '天气采集瓶'], [5002, '雷雨召唤瓶'],
   [5005, '青蛙使坏瓶'], [5006, '乌云使坏瓶'],
@@ -614,11 +617,15 @@ function normalizeWeatherStatus(weather, nowSeconds = Math.floor(Date.now() / 10
   const status = toNum(weather?.status);
   const startTime = toNum(weather?.start_time);
   const endTime = toNum(weather?.end_time);
+  const collectedMarker = toNum(weather?.field_9);
+  // type=1（30 分钟）和 type=2（2 小时）是同一次雷雨的两个有效阶段。
+  const rainstorm = (type === 1 || type === 2) && status > 0
+    && (!startTime || nowSeconds >= startTime) && (!endTime || nowSeconds <= endTime);
   return {
-    type, status, startTime, endTime,
-    // type=1（30 分钟）和 type=2（2 小时）是同一次雷雨的两个有效阶段。
-    rainstorm: (type === 1 || type === 2) && status > 0
-      && (!startTime || nowSeconds >= startTime) && (!endTime || nowSeconds <= endTime),
+    type, status, startTime, endTime, collectedMarker,
+    rainstorm,
+    // 仅当前雷雨仍在进行时，字段 9 才代表“本轮已采集”。
+    collectedThisCycle: rainstorm && collectedMarker === RAIN_POEM_COLLECTED_MARKER,
   };
 }
 
@@ -711,10 +718,19 @@ async function collectRainPoemWeather() {
       checkedCount++;
       const weather = normalizeWeatherStatus(visit?.weather);
       if (!weather.rainstorm) continue;
-      await operateActivityReply(RAIN_POEM_COLLECTION_ACTIVITY_ID, RAIN_POEM_COLLECTION_CMD, {
-        // 抓包确认 field 107.3 承载目标好友 GID；沿用现有消息字段名 item_uid。
-        helu_paid_draw: { item_uid: gid },
-      });
+      // 本轮雷雨已采集过（字段 9 标记），下轮雷雨可再采；跳过避免浪费采集次数。
+      if (weather.collectedThisCycle) continue;
+      try {
+        await operateActivityReply(RAIN_POEM_COLLECTION_ACTIVITY_ID, RAIN_POEM_COLLECTION_CMD, {
+          // 抓包确认 field 107.3 承载目标好友 GID；沿用现有消息字段名 item_uid。
+          helu_paid_draw: { item_uid: gid },
+        });
+      } catch (err) {
+        // 官方在“本轮雷雨已采集”时返回 1034040：扫描与采集之间的状态竞争，
+        // 视作该好友本轮已采，继续检查下一位好友。
+        if (String(err?.message || '').includes('code=1034040')) continue;
+        throw err;
+      }
       return {
         ok: true, friendGid: gid, friendName: String(friend?.name || ''), weather,
         checkedCount, visitFailureCount, activity: await getRainPoemActivity(),
@@ -756,6 +772,21 @@ async function unlockRainPoemResearch() {
   };
 }
 
+// 由归一化天气推导好友面板展示状态：
+// - collected：本轮雷雨已采集（字段 9 标记，下轮雷雨重置）
+// - expired：仍是雷雨阶段但已不在有效时间
+function describeRainPoemFriendWeather(weather) {
+  const status = weather || { type: 0, status: 0, endTime: 0, rainstorm: false, collectedThisCycle: false };
+  return {
+    weatherType: status.type || 0,
+    weatherStatus: status.status || 0,
+    weatherEndTime: status.endTime || 0,
+    rainstorm: !!status.rainstorm,
+    collected: status.collectedThisCycle === true,
+    expired: !status.rainstorm && (status.type === 1 || status.type === 2),
+  };
+}
+
 async function scanWeatherFriends() {
   const before = await getRainPoemActivity();
   if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
@@ -770,16 +801,11 @@ async function scanWeatherFriends() {
     try {
       const visit = await enterFriendFarm(gid);
       entered = true;
-      const weather = normalizeWeatherStatus(visit?.weather);
       results.push({
         gid,
         name: String(friend?.name || ''),
         avatar: friend?.avatarUrl || friend?.avatar_url || '',
-        rainstorm: !!weather.rainstorm,
-        weatherType: weather.type || 0,
-        weatherStatus: weather.status || 0,
-        collected: false,
-        expired: false,
+        ...describeRainPoemFriendWeather(normalizeWeatherStatus(visit?.weather)),
       });
     } catch {
       results.push({ gid, name: String(friend?.name || ''), avatar: friend?.avatarUrl || friend?.avatar_url || '', error: '检查失败' });
@@ -847,16 +873,20 @@ async function useWeatherCloudBottle(friendGid, landId) {
   const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
   let entered = false;
   try {
-    await enterFriendFarm(targetGid);
+    const visit = await enterFriendFarm(targetGid);
     entered = true;
-    const landIds = landId ? [toNum(landId)] : [];
-    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, landIds));
+    // 未指定地块时，从好友农场土地中挑选一块可使用乌云使坏瓶的作物地块。
+    const resolvedLandId = toNum(landId) || getPrankCandidateLandIds(visit?.lands, RAIN_POEM_CLOUD_PRANK_ITEM_ID)[0];
+    if (!resolvedLandId) {
+      throw new Error('好友当前没有可使用乌云使坏瓶的作物');
+    }
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, [resolvedLandId]));
+    return { ok: true, friendGid: targetGid, landId: resolvedLandId, activity: await getRainPoemActivity() };
   } finally {
     if (entered) {
       try { await leaveFriendFarm(targetGid); } catch {}
     }
   }
-  return { ok: true, friendGid: targetGid, activity: await getRainPoemActivity() };
 }
 
 async function useRainPoemLightningAttractBottle(friendGid) {
@@ -2996,11 +3026,32 @@ function isCharityFlowerActive(nowSeconds = Math.floor(Date.now() / 1000)) {
   return nowSeconds >= CHARITY_FLOWER_START_TIME && nowSeconds <= CHARITY_FLOWER_END_TIME;
 }
 
+function getCharityFlowerDateKey(nowSeconds = Math.floor(Date.now() / 1000)) {
+  const now = new Date(nowSeconds * 1000);
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return Number(`${year}${month}${day}`);
+}
+
 function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now() / 1000)) {
   const body = node?.charity_flower || {};
   const activity = node?.activity || {};
   const personalScore = toNum(body.personal_score);
   const globalScore = toNum(body.global_score);
+  const globalRewardTarget = toNum(body.global_reward?.target);
+  const globalTarget = globalRewardTarget > 0 ? globalRewardTarget : toNum(body.max_global_score);
+  const publicFundOrders = (body.public_fund_orders || []).map(order => ({
+    date: toNum(order.date),
+    orderId: String(order.order_id || ''),
+    token: String(order.token || ''),
+    status: toNum(order.status),
+  }));
+  const todayKey = getCharityFlowerDateKey(nowSeconds);
+  const publicFundClaimedToday = publicFundOrders.some(order => order.date === todayKey);
+  const finalThreshold = toNum(body.final_pack_threshold);
+  const personalReached = finalThreshold > 0 && personalScore >= finalThreshold;
+  const globalReached = globalTarget > 0 && globalScore >= globalTarget;
   return {
     uid: CHARITY_FLOWER_ACTIVITY_UID,
     title: String(activity.title || '公益小红花'),
@@ -3016,16 +3067,11 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
     },
     global: {
       score: globalScore,
-      target: toNum(body.max_global_score),
+      target: globalTarget,
+      reward: (body.global_reward?.reward || []).map(normalizeCoreItem),
       amountYuan: globalScore / 100,
-      targetYuan: toNum(body.max_global_score) / 100,
-      reached: globalScore >= toNum(body.max_global_score) && toNum(body.max_global_score) > 0,
-    },
-    share: {
-      status: toNum(body.share_status),
-      claimable: toNum(body.share_status) === 2,
-      claimed: toNum(body.share_status) === 3,
-      rewards: (body.share_reward || []).map(normalizeCoreItem),
+      targetYuan: globalTarget / 100,
+      reached: globalReached,
     },
     seedReward: {
       statusCode: toNum(body.seed_reward_status),
@@ -3035,30 +3081,42 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
     },
     dailyGift: {
       statusCode: toNum(body.daily_reward_status),
-      claimable: toNum(body.daily_reward_status) === 2,
-      claimed: toNum(body.daily_reward_status) === 3,
+      claimable: publicFundClaimedToday === false,
+      claimed: publicFundClaimedToday,
+      // 公益基金记录跨天重置后仍保留昨日订单，因此"今日已领取"以 orders 中存在今日记录为准
       reward: normalizeCoreItem(body.daily_reward),
     },
-    personalRewards: (body.personal_rewards || []).map(item => ({
-      needScore: toNum(item.need_personal_score),
-      reached: !!item.reached || personalScore >= toNum(item.need_personal_score),
-      claimed: !!item.claimed,
-      rewards: (item.reward || []).map(normalizeCoreItem),
-    })),
+    personalRewards: (body.personal_rewards || []).map(item => {
+      const target = toNum(item.target);
+      const status = toNum(item.status);
+      const reached = target > 0 && personalScore >= target;
+      return {
+        needScore: target,
+        target,
+        status,
+        reached,
+        claimable: reached && status === 1,
+        claimed: status >= 2,
+        rewards: (item.reward || []).map(normalizeCoreItem),
+      };
+    }),
     finalReward: {
-      threshold: toNum(body.final_pack_threshold),
+      threshold: finalThreshold,
       settlementTime: toNum(body.settlement_time),
       settled: !!body.settled,
-      eligible: !!body.final_reward_eligible,
+      serverEligible: !!body.final_reward_eligible,
+      personalReached,
+      globalReached,
+      eligible: personalReached && globalReached,
       rewards: (body.final_reward || []).map(normalizeCoreItem),
     },
     publicFund: {
-      status: toNum(body.xhh_status),
-      claimable: toNum(body.xhh_status) === 2,
-      claimed: toNum(body.xhh_status) === 3,
+      orders: publicFundOrders,
+      successCount: publicFundOrders.length,
+      claimedToday: publicFundClaimedToday,
+      claimable: publicFundClaimedToday === false,
       complianceAgreed: !!body.compliance_agreed,
-      rewards: (body.xhh_reward || []).map(normalizeCoreItem),
-      successCount: (body.xhh_success_orders || []).length,
+      flowStatus: toNum(body.flow_status),
     },
   };
 }
@@ -3110,7 +3168,7 @@ async function claimCharityFlowerPublicFund() {
   assertCharityFlowerActive('送出公益金');
   const before = await getCharityFlowerActivity();
   if (!before.publicFund.complianceAgreed) throw new Error('送出公益金失败: 尚未同意腾讯公益平台协议');
-  if (!before.publicFund.claimable) return { ok: true, claimed: false, reason: 'not_claimable' };
+  if (before.publicFund.claimedToday) return { ok: true, claimed: false, reason: 'already_claimed_today' };
   const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_XHH_CMD, { charityFlowerClaimXhh: true });
   return { ok: true, claimed: true, awards: (reply?.charity_flower_claim_xhh?.awards || []).map(normalizeCoreItem) };
 }
@@ -3177,6 +3235,7 @@ module.exports = {
   normalizeRainPoemActivity,
   mergeRainPoemTaskUsage,
   normalizeWeatherStatus,
+  describeRainPoemFriendWeather,
   getOwnWeatherStatus,
   encodeRainPoemSummonUseRequest,
   isLightningMutantPlant,

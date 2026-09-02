@@ -197,13 +197,12 @@ export interface WeatherFriend {
 export interface CharityFlowerActivityData {
   uid: string; title: string; activityId: number; startTime: number; endTime: number; active: boolean
   love: { itemId: number, count: number, personalScore: number, canDonate: boolean }
-  global: { score: number, target: number, amountYuan: number, targetYuan: number, reached: boolean }
-  share: { status: number, claimable: boolean, claimed: boolean, rewards: QixiItem[] }
+  global: { score: number, target: number, reward: QixiItem[], amountYuan: number, targetYuan: number, reached: boolean }
   seedReward: { statusCode: number, claimable: boolean, claimed: boolean, reward: QixiItem | null }
   dailyGift: { statusCode: number, claimable: boolean, claimed: boolean, reward: QixiItem | null }
-  personalRewards: Array<{ needScore: number, reached: boolean, claimed: boolean, rewards: QixiItem[] }>
-  finalReward: { threshold: number, settlementTime: number, settled: boolean, eligible: boolean, rewards: QixiItem[] }
-  publicFund: { status: number, claimable: boolean, claimed: boolean, complianceAgreed: boolean, rewards: QixiItem[], successCount: number }
+  personalRewards: Array<{ needScore: number, target: number, status: number, reached: boolean, claimable: boolean, claimed: boolean, rewards: QixiItem[] }>
+  finalReward: { threshold: number, settlementTime: number, settled: boolean, serverEligible: boolean, personalReached: boolean, globalReached: boolean, eligible: boolean, rewards: QixiItem[] }
+  publicFund: { orders: Array<{ date: number, orderId: string, token: string, status: number }>, successCount: number, claimedToday: boolean, claimable: boolean, complianceAgreed: boolean, flowStatus: number }
 }
 
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'

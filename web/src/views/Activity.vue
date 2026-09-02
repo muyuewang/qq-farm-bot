@@ -459,6 +459,17 @@ async function handleClaimCharityDailyGift() {
   } finally { pendingCharityDailyGift.value = false }
 }
 
+const pendingCharityReward = ref<number | null>(null)
+
+async function handleClaimCharityReward(needScore: number) {
+  if (!currentAccountId.value) return
+  pendingCharityReward.value = needScore
+  try {
+    const result = await activityStore.claimCharityFlowerReward(String(currentAccountId.value), needScore)
+    result?.ok ? toast.success(`爱心档位奖励领取成功（${needScore} 爱心）`) : toast.error(result?.error || '领取失败')
+  } finally { pendingCharityReward.value = null }
+}
+
 const pendingLightningAttract = ref(false)
 
 async function handleUseLightningAttractBottle(friendGid: number) {
@@ -703,7 +714,7 @@ onUnmounted(() => {
     </div>
     <div v-else-if="selectedActivityCard?.adaptedKey === 'charity-flower' && selectedActivityCard.status === 'active'" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null"><span class="i-carbon-arrow-left" />返回活动列表</button>
-      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" :pending-seeds="pendingCharitySeeds" :pending-donate="pendingCharityDonate" :pending-daily-gift="pendingCharityDailyGift" @refresh="refreshAll" @claim-seeds="handleClaimCharitySeeds" @donate-love="handleDonateCharityLove" @claim-daily-gift="handleClaimCharityDailyGift" />
+      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" :pending-seeds="pendingCharitySeeds" :pending-donate="pendingCharityDonate" :pending-daily-gift="pendingCharityDailyGift" :pending-reward="pendingCharityReward" @refresh="refreshAll" @claim-seeds="handleClaimCharitySeeds" @donate-love="handleDonateCharityLove" @claim-daily-gift="handleClaimCharityDailyGift" @claim-reward="handleClaimCharityReward" />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">

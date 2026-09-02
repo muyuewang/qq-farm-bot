@@ -90,7 +90,8 @@ const {
     sellAllFruits,
     getBag,
     getBagItems,
-    openFertilizerGiftPacksSilently
+    openFertilizerGiftPacksSilently,
+    openCharitySettlementGiftPacksSilently
 } = require('../services/warehouse');
 const {
     connect,
@@ -253,6 +254,8 @@ async function runDailyRoutines(force = false, options = {}) {
     try {
         const automation = getAutomation() || {};
         await checkAndClaimEmails(force);
+        // 公益小红花结算礼包随结算邮件发放；挂在此处避免活动结束后等下一次登录才打开。
+        await openCharitySettlementGiftPacksSilently();
         if (automation.task && !options.skipTask) await checkAndClaimTasks();
         if (automation.fertilizer_gift) await openFertilizerGiftPacksSilently();
         await performDailyShare(force);
@@ -502,23 +505,40 @@ async function runStarActivityAutoClaims() {
             } = require('../services/activity');
             let charity = await getCharityFlowerActivity();
             if (charity?.active !== false) {
-                if (claimCharityShareEnabled && charity?.share?.claimable) {
-                    await claimCharityFlowerShareReward();
+                // 逐动作独立容错：单个动作失败不中断其余公益任务
+                if (claimCharityShareEnabled && charity?.seedReward?.claimable) {
+                    try {
+                        await claimCharityFlowerShareReward();
+                    } catch (err) {
+                        log('活动', `自动领取小红花种子失败: ${err.message}`, { module: 'activity', event: '公益种子领取', result: 'error' });
+                    }
                     charity = await getCharityFlowerActivity();
                 }
                 if (donateCharityLoveEnabled && charity?.love?.canDonate && Number(charity?.love?.count || 0) > 0) {
-                    await donateCharityFlowerLove();
+                    try {
+                        await donateCharityFlowerLove();
+                    } catch (err) {
+                        log('活动', `自动捐赠爱心失败: ${err.message}`, { module: 'activity', event: '公益爱心捐赠', result: 'error' });
+                    }
                     charity = await getCharityFlowerActivity();
                 }
                 if (claimCharityRewardsEnabled) {
                     for (const tier of charity?.personalRewards || []) {
-                        if (!tier.reached || tier.claimed) continue;
-                        await claimCharityFlowerReward(tier.needScore);
+                        if (!tier.claimable) continue;
+                        try {
+                            await claimCharityFlowerReward(tier.needScore);
+                        } catch (err) {
+                            log('活动', `自动领取爱心档位奖励失败 (${tier.needScore}): ${err.message}`, { module: 'activity', event: '公益档位奖励', result: 'error' });
+                        }
                     }
                     charity = await getCharityFlowerActivity();
                 }
                 if (claimCharityPublicFundEnabled && charity?.publicFund?.claimable && charity?.publicFund?.complianceAgreed) {
-                    await claimCharityFlowerPublicFund();
+                    try {
+                        await claimCharityFlowerPublicFund();
+                    } catch (err) {
+                        log('活动', `自动送出公益金失败: ${err.message}`, { module: 'activity', event: '公益金赠送', result: 'error' });
+                    }
                 }
             }
         }
@@ -796,6 +816,8 @@ async function runFarmTick(autoConfig) {
     try {
         await runWithRequestPriority('farm', async () => {
             if (autoConfig.farm) await checkFarm();
+            // 结算礼包服务自带 5 分钟冷却；随农场 tick 轮询可及时打开活动结算邮件里的礼包。
+            if (autoConfig.email !== false) await openCharitySettlementGiftPacksSilently();
         });
     } catch { } finally {
         nextFarmRunAt = Date.now() + nextDelay;
