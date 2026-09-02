@@ -1232,10 +1232,12 @@ async function startBot(config) {
         } catch { }
 
         // 支付服务会更新网关序列状态，等启动背包请求完成后再查询。
-        try {
-            const diamond = await require('../services/pay').getDiamondBalance();
-            getUserState().diamond = Math.max(0, Number(diamond) || 0);
-        } catch { }
+        // 延迟到农场首次 tick 时执行，避免登录阶段请求堆积触发网关退避。
+        workerScheduler.setTimeoutTask('startup_diamond_query', 8000, () => {
+            require('../services/pay').getDiamondBalance()
+                .then(diamond => { getUserState().diamond = Math.max(0, Number(diamond) || 0); })
+                .catch(() => {});
+        });
 
         // 2. 初始化统计数据
         const userState = getUserState();

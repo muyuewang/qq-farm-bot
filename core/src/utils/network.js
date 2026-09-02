@@ -944,7 +944,7 @@ function getGatewayHealth() {
         heartbeatAgeMs: now - lastHeartbeatResponse,
         oldestPendingAgeMs: getOldestPendingAgeMs(pendingStartedAt.values(), now),
         heartbeatLimitMs: HEARTBEAT_TIMEOUT,
-        pendingLimitMs: 5000,
+        pendingLimitMs: 10000,
     });
     return {
         ...result,
