@@ -957,13 +957,12 @@ async function sendLogin(context, onLoginSuccess, deviceProtocol) {
                 startAceService();
                 loginReady = true;
                 startHeartbeat();
-                // 登录后同步用户设置（串行）
-                fetchUserSettings().then(() => {
+                // 登录后同步用户设置（串行），无论成功失败都调用 onLoginSuccess
+                (async () => {
+                    try { await fetchUserSettings(); } catch { /* 忽略 */ }
                     if (!isCurrentConnection(context)) return;
                     if (onLoginSuccess) onLoginSuccess();
-                }).catch((e) => {
-                    logWarn('登录', `登录初始化失败: ${e.message}`);
-                });
+                })();
             } catch (e) {
                 log('登录', `解码失败: ${e.message}`);
             }
