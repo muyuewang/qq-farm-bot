@@ -74,6 +74,7 @@ const networkScheduler = createScheduler('network');
 let tsdkRuntime = null;
 let aceService = null;
 let initialGamePackInfo = '';
+let loginReady = false;
 
 const DEFAULT_DEVICE_FINGERPRINT = Object.freeze({
     os: 'iOS',
@@ -311,24 +312,24 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
 }
 
 /** Promise 版发送 */
-async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 20000, options = {}) {
+async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000, options = {}) {
     const priority = getRequestPriority(options.priority);
     const release = await requestGate.acquire(priority);
     try {
       return await new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            reject(new Error(`连接未打开: ${methodName}`));
+        if (!ws || ws.readyState !== WebSocket.OPEN || !loginReady) {
+            reject(new Error(`连接未就绪: ${methodName}`));
             return;
         }
 
         // 心跳已失联超过一轮时，拒绝非关键请求，避免在死连接上堆积
         const heartbeatAge = Date.now() - lastHeartbeatResponse;
-        if (heartbeatAge > HEARTBEAT_TIMEOUT && priority !== 'critical') {
+        if (heartbeatAge > HEARTBEAT_TIMEOUT * 2 && priority !== 'critical') {
             reject(new Error(`网关心跳失联，拒绝请求: ${methodName} (失联${Math.round(heartbeatAge / 1000)}s)`));
             return;
         }
 
-        if (pendingCallbacks.size >= 20) {
+        if (pendingCallbacks.size >= 15) {
             reject(new Error(`请求队列已满: ${methodName} (pending=${pendingCallbacks.size})`));
             return;
         }
@@ -719,6 +720,7 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
 
             startHeartbeat();
             startAceService();
+            loginReady = true;
             if (onLoginSuccess) onLoginSuccess();
         } catch (e) {
             log('登录', `解码失败: ${e.message}`);
@@ -729,8 +731,8 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
 // ============ 心跳 ============
 let lastHeartbeatResponse = Date.now();
 let heartbeatMissCount = 0;
-const HEARTBEAT_TIMEOUT = 30000;
-const MAX_HEARTBEAT_MISS = 3;
+const HEARTBEAT_TIMEOUT = 15000;
+const MAX_HEARTBEAT_MISS = 2;
 
 function getGatewayHealth() {
     const now = Date.now();
@@ -811,9 +813,9 @@ function buildWebSocketHeaders(deviceProtocol) {
     return headers;
 }
 
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
 const RECONNECT_BASE_DELAY_MS = 2000;
-const RECONNECT_MAX_DELAY_MS = 30000;
+const RECONNECT_MAX_DELAY_MS = 15000;
 
 function closeCurrentWs({ terminate = false } = {}) {
     const current = ws;
@@ -944,6 +946,7 @@ function connect(code, onLoginSuccess) {
 }
 
 function cleanup(reason = '网络清理') {
+    loginReady = false;
     stopSecurityRuntime(reason);
     rejectAllPendingRequests(`请求已中断: ${reason}`);
     networkScheduler.clearAll();
@@ -961,6 +964,7 @@ function reconnect(newCode) {
 
 function stopNetwork(reason = '停止网络') {
     networkStopped = true;
+    loginReady = false;
     savedLoginCallback = null;
     reconnectAttempts = 0;
     stopSecurityRuntime(reason);
@@ -991,4 +995,5 @@ module.exports = {
     applyServerVersionInfo,
     networkEvents,
     handleMessage,
+    isLoginReady: () => loginReady,
 };
