@@ -1215,19 +1215,26 @@ async function startBot(config) {
         networkEvents.on('dogSkillGiftPending', onDogSkillGiftPending);
 
         // ── 登录后串行执行初始化任务，避免并发洪泛连接 ──
+        // 单次背包请求同步点券和金豆豆，避免登录阶段重复并发查询。
         try {
-            // 1. 获取背包
             const bag = await getBag();
             const items = getBagItems(bag);
             let couponCount = 0;
+            let goldBeanCount = 0;
             for (const item of items || []) {
-                if (toNum(item && item.id) === 1002) {
-                    couponCount = toNum(item.count);
-                    break;
-                }
+                const itemId = toNum(item && item.id);
+                if (itemId === 1002) couponCount = toNum(item.count);
+                else if (itemId === 1005) goldBeanCount = toNum(item.count);
             }
             const state = getUserState();
             state.coupon = Math.max(0, couponCount);
+            state.goldBean = Math.max(0, goldBeanCount);
+        } catch { }
+
+        // 支付服务会更新网关序列状态，等启动背包请求完成后再查询。
+        try {
+            const diamond = await require('../services/pay').getDiamondBalance();
+            getUserState().diamond = Math.max(0, Number(diamond) || 0);
         } catch { }
 
         // 2. 初始化统计数据
@@ -1665,6 +1672,11 @@ async function handleApiCall(msg) {
                 result = await useWeatherCloudBottle(args[0], args[1]);
                 break;
             }
+            case 'useRainPoemLightningAttractBottle': {
+                const { useRainPoemLightningAttractBottle } = require('../services/activity');
+                result = await useRainPoemLightningAttractBottle(args[0]);
+                break;
+            }
             case 'sendCharityFlowerLove': {
                 const { donateCharityFlowerLove } = require('../services/activity');
                 result = await donateCharityFlowerLove();
@@ -1683,6 +1695,16 @@ async function handleApiCall(msg) {
             case 'claimCharityFlowerShare': {
                 const { claimCharityFlowerShareReward } = require('../services/activity');
                 result = await claimCharityFlowerShareReward();
+                break;
+            }
+            case 'claimCharityFlowerSeeds': {
+                const { claimCharityFlowerSeeds } = require('../services/activity');
+                result = await claimCharityFlowerSeeds();
+                break;
+            }
+            case 'claimCharityFlowerDailyGift': {
+                const { claimCharityFlowerPublicFund } = require('../services/activity');
+                result = await claimCharityFlowerPublicFund();
                 break;
             }
             case 'exchangeHeluShopItem': {

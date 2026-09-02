@@ -428,6 +428,48 @@ async function unlockWeatherResearch() {
   result?.ok ? toast.success('气象研究解锁成功') : toast.error(result?.error || '气象研究解锁失败')
 }
 
+const pendingCharitySeeds = ref(false)
+const pendingCharityDonate = ref(false)
+const pendingCharityDailyGift = ref(false)
+
+async function handleClaimCharitySeeds() {
+  if (!currentAccountId.value) return
+  pendingCharitySeeds.value = true
+  try {
+    const result = await activityStore.claimCharityFlowerSeeds(String(currentAccountId.value))
+    result?.ok ? toast.success('小红花种子领取成功') : toast.error(result?.error || '领取失败')
+  } finally { pendingCharitySeeds.value = false }
+}
+
+async function handleDonateCharityLove() {
+  if (!currentAccountId.value) return
+  pendingCharityDonate.value = true
+  try {
+    const result = await activityStore.sendCharityFlowerLove(String(currentAccountId.value))
+    result?.ok ? toast.success('爱心捐赠成功') : toast.error(result?.error || '捐赠失败')
+  } finally { pendingCharityDonate.value = false }
+}
+
+async function handleClaimCharityDailyGift() {
+  if (!currentAccountId.value) return
+  pendingCharityDailyGift.value = true
+  try {
+    const result = await activityStore.claimCharityFlowerDailyGift(String(currentAccountId.value))
+    result?.ok ? toast.success('每日公益礼包领取成功') : toast.error(result?.error || '领取失败')
+  } finally { pendingCharityDailyGift.value = false }
+}
+
+const pendingLightningAttract = ref(false)
+
+async function handleUseLightningAttractBottle(friendGid: number) {
+  if (!currentAccountId.value) return
+  pendingLightningAttract.value = true
+  try {
+    const result = await activityStore.useRainPoemLightningAttractBottle(String(currentAccountId.value), friendGid)
+    result?.ok ? toast.success('闪电感应使用成功') : toast.error(result?.error || '使用失败')
+  } finally { pendingLightningAttract.value = false }
+}
+
 async function claimRecords() {
   if (!currentAccountId.value)
     return
@@ -644,6 +686,7 @@ onUnmounted(() => {
         :collect-pending="collectPending"
         :summon-pending="summonPending"
         :research-pending="researchPending"
+        :lightning-attract-pending="pendingLightningAttract"
         @refresh="refreshAll"
         @scan-friends="scanWeatherFriends"
         @use-frog="useWeatherFrogBottle"
@@ -652,6 +695,7 @@ onUnmounted(() => {
         @collect-weather="collectRainPoemWeather"
         @use-summon="useSummonBottle"
         @unlock-research="unlockWeatherResearch"
+        @use-lightning-attract="handleUseLightningAttractBottle"
       />
       <div v-else-if="rainPoemActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
         {{ L.needAccount }}
@@ -659,7 +703,7 @@ onUnmounted(() => {
     </div>
     <div v-else-if="selectedActivityCard?.adaptedKey === 'charity-flower' && selectedActivityCard.status === 'active'" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null"><span class="i-carbon-arrow-left" />返回活动列表</button>
-      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" @refresh="refreshAll" />
+      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" :pending-seeds="pendingCharitySeeds" :pending-donate="pendingCharityDonate" :pending-daily-gift="pendingCharityDailyGift" @refresh="refreshAll" @claim-seeds="handleClaimCharitySeeds" @donate-love="handleDonateCharityLove" @claim-daily-gift="handleClaimCharityDailyGift" />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">

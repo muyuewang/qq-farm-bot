@@ -1,8 +1,22 @@
 <script setup lang="ts">
-defineProps<{ activity: any | null, loading: boolean }>()
-defineEmits<{ refresh: [] }>()
+import type { CharityFlowerActivityData } from '@/stores/activity'
+import BaseButton from '@/components/ui/BaseButton.vue'
+
+defineProps<{
+  activity: CharityFlowerActivityData | null
+  loading: boolean
+  pendingSeeds?: boolean
+  pendingDonate?: boolean
+  pendingDailyGift?: boolean
+}>()
+defineEmits<{
+  refresh: []
+  claimSeeds: []
+  donateLove: []
+  claimDailyGift: []
+}>()
 function pct(value: number, target: number) { return target > 0 ? Math.min(100, Math.max(0, value / target * 100)) : 0 }
-function time(value: number) { return value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '—' }
+function time(value?: number) { return value ? new Date(value * 1000).toLocaleString('zh-CN', { hour12: false }) : '—' }
 </script>
 
 <template>
@@ -26,6 +40,28 @@ function time(value: number) { return value ? new Date(value * 1000).toLocaleStr
         <div class="mt-3 h-3 overflow-hidden rounded-full bg-rose-100 dark:bg-rose-950"><div class="h-full rounded-full bg-rose-500" :style="{ width: `${pct(activity.global.score, activity.global.target)}%` }" /></div>
         <p class="mt-3 text-xs text-gray-500">全服结算时间：{{ time(activity.finalReward.settlementTime) }}</p>
       </section>
+
+      <section class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800">
+        <h2 class="text-base font-semibold">操作</h2>
+        <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <div class="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
+            <div class="text-xs text-gray-500">领取小红花种子</div>
+            <div class="mt-1 text-sm font-medium">{{ activity.seedReward?.claimed ? '已领取' : activity.seedReward?.claimable ? '可领取' : '不可领取' }}</div>
+            <BaseButton class="mt-2" size="sm" :disabled="!activity.seedReward?.claimable || pendingSeeds" @click="$emit('claimSeeds')">{{ pendingSeeds ? '领取中…' : '领取种子' }}</BaseButton>
+          </div>
+          <div class="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
+            <div class="text-xs text-gray-500">捐赠爱心</div>
+            <div class="mt-1 text-sm font-medium">{{ activity.love.canDonate ? `可送 ${activity.love.count} 份` : '暂无可送爱心' }}</div>
+            <BaseButton class="mt-2" size="sm" :disabled="!activity.love.canDonate || activity.love.count <= 0 || pendingDonate" @click="$emit('donateLove')">{{ pendingDonate ? '捐赠中…' : '捐赠全部爱心' }}</BaseButton>
+          </div>
+          <div class="rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900/50 dark:bg-rose-950/20">
+            <div class="text-xs text-gray-500">每日公益礼包</div>
+            <div class="mt-1 text-sm font-medium">{{ activity.dailyGift?.claimed ? '已领取' : activity.dailyGift?.claimable ? '可领取' : '不可领取' }}</div>
+            <BaseButton class="mt-2" size="sm" :disabled="!activity.dailyGift?.claimable || pendingDailyGift" @click="$emit('claimDailyGift')">{{ pendingDailyGift ? '领取中…' : '领取礼包' }}</BaseButton>
+          </div>
+        </div>
+      </section>
+
       <section class="rounded-xl bg-white p-5 shadow-sm dark:bg-gray-800">
         <h2 class="text-base font-semibold">个人爱心奖励</h2>
         <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

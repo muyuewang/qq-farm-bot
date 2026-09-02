@@ -137,6 +137,18 @@ function registerAdminHeluActivityRoutes({
     }
   });
 
+  app.post('/api/activity/rain-poem/use-lightning-attract', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '使用闪电感应失败: 账号未运行')) return;
+      res.json(await provider.useRainPoemLightningAttractBottle(accountId, req.body?.friendGid));
+    } catch (err) {
+      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
+      sendProviderError(res, err);
+    }
+  });
+
   // ─── 公益小红花 ───
   app.get('/api/activity/charity-flower', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
@@ -180,6 +192,24 @@ function registerAdminHeluActivityRoutes({
     try {
       if (!requireConnectedAccount(res, provider, accountId, '领取分享奖励失败: 账号未运行')) return;
       res.json(await provider.claimCharityFlowerShare(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/charity-flower/claim-seeds', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取小红花种子失败: 账号未运行')) return;
+      res.json(await provider.claimCharityFlowerSeeds(accountId));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.post('/api/activity/charity-flower/claim-daily-gift', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '领取每日公益礼包失败: 账号未运行')) return;
+      res.json(await provider.claimCharityFlowerDailyGift(accountId));
     } catch (err) { sendProviderError(res, err); }
   });
 

@@ -53,8 +53,6 @@ function registerAdminFarmResourceRoutes({
 
     try {
       const status = withLevelProgress(provider.getStatus(accountId));
-      const diamond = await provider.getDiamondBalance(accountId);
-      if (status.status) status.status.diamond = Math.max(0, Number(diamond) || 0);
       res.json({ ok: true, data: status });
     }
     catch (error) {

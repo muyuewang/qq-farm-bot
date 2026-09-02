@@ -39,6 +39,7 @@ const RAIN_POEM_BOTTLE_ITEM_ID = 5001;
 const RAIN_POEM_SUMMON_ITEM_ID = 5002;
 const RAIN_POEM_FROG_PRANK_ITEM_ID = 5005;
 const RAIN_POEM_CLOUD_PRANK_ITEM_ID = 5006;
+const RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID = 4003;
 const RAIN_POEM_BADGE_ITEM_ID = 1027;
 const RAIN_POEM_START_TIME = 1787709600;
 const RAIN_POEM_END_TIME = 1788883199;
@@ -88,6 +89,24 @@ function incrementRainPoemSummonUsedToday() {
   const count = Math.min(RAIN_POEM_SUMMON_DAILY_LIMIT, getRainPoemSummonUsedToday() + 1);
   writeJsonFileAtomic(getRainPoemSummonUsageFile(), { date: getLocalDateKey(), count });
   return count;
+}
+
+const FRIEND_WEATHER_CACHE_TTL_MS = 600000; // 10 分钟
+const friendWeatherCache = new Map(); // gid → { weather, expiresAt }
+
+function getCachedFriendWeather(gid) {
+  const entry = friendWeatherCache.get(gid);
+  if (entry && Date.now() < entry.expiresAt) return entry.weather;
+  friendWeatherCache.delete(gid);
+  return null;
+}
+
+function setCachedFriendWeather(gid, weather) {
+  friendWeatherCache.set(gid, { weather, expiresAt: Date.now() + FRIEND_WEATHER_CACHE_TTL_MS });
+}
+
+function clearFriendWeatherCache() {
+  friendWeatherCache.clear();
 }
 
 function mergeRainPoemTaskUsage(activity, summonUsedToday) {
@@ -615,12 +634,13 @@ async function getOwnWeatherStatus() {
 
 async function getRainPoemActivity() {
   const activity = normalizeRainPoemActivity(await getActivityGroup(RAIN_POEM_ACTIVITY_ID, RAIN_POEM_ACTIVITY_UID));
-  const [collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, badges] = await Promise.all([
+  const [collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, lightningAttractBottles, badges] = await Promise.all([
     getBagItemCount(RAIN_POEM_BOTTLE_ITEM_ID), getBagItemCount(RAIN_POEM_SUMMON_ITEM_ID),
     getBagItemCount(RAIN_POEM_FROG_PRANK_ITEM_ID), getBagItemCount(RAIN_POEM_CLOUD_PRANK_ITEM_ID),
+    getBagItemCount(RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID),
     getBagItemCount(RAIN_POEM_BADGE_ITEM_ID),
   ]);
-  activity.items = { collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, badges };
+  activity.items = { collectionBottles, summonBottles, frogPrankBottles, cloudPrankBottles, lightningAttractBottles, badges };
   mergeRainPoemTaskUsage(activity, getRainPoemSummonUsedToday());
   try {
     activity.weather = await getOwnWeatherStatus();
@@ -831,6 +851,30 @@ async function useWeatherCloudBottle(friendGid, landId) {
     entered = true;
     const landIds = landId ? [toNum(landId)] : [];
     await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, landIds));
+  } finally {
+    if (entered) {
+      try { await leaveFriendFarm(targetGid); } catch {}
+    }
+  }
+  return { ok: true, friendGid: targetGid, activity: await getRainPoemActivity() };
+}
+
+async function useRainPoemLightningAttractBottle(friendGid) {
+  const before = await getRainPoemActivity();
+  if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
+  const targetGid = toNum(friendGid);
+  if (!targetGid) throw new Error('好友 GID 无效');
+  const selfGid = toNum(getUserState()?.gid);
+  if (targetGid === selfGid) throw new Error('闪电感应只能在好友农场使用');
+  const bag = await getBag();
+  const bottle = getBagItems(bag).find(item => toNum(item?.id) === RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID && toNum(item?.count) > 0);
+  if (!bottle) throw new Error('背包中没有可用的闪电感应');
+  const { enterFriendFarm, leaveFriendFarm } = require('./friend-api');
+  let entered = false;
+  try {
+    await enterFriendFarm(targetGid);
+    entered = true;
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID, 1, bottle.uid, targetGid, []));
   } finally {
     if (entered) {
       try { await leaveFriendFarm(targetGid); } catch {}
@@ -2983,6 +3027,18 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
       claimed: toNum(body.share_status) === 3,
       rewards: (body.share_reward || []).map(normalizeCoreItem),
     },
+    seedReward: {
+      statusCode: toNum(body.seed_reward_status),
+      claimable: toNum(body.seed_reward_status) === 2,
+      claimed: toNum(body.seed_reward_status) === 3,
+      reward: normalizeCoreItem(body.seed_reward),
+    },
+    dailyGift: {
+      statusCode: toNum(body.daily_reward_status),
+      claimable: toNum(body.daily_reward_status) === 2,
+      claimed: toNum(body.daily_reward_status) === 3,
+      reward: normalizeCoreItem(body.daily_reward),
+    },
     personalRewards: (body.personal_rewards || []).map(item => ({
       needScore: toNum(item.need_personal_score),
       reached: !!item.reached || personalScore >= toNum(item.need_personal_score),
@@ -3022,6 +3078,16 @@ async function claimCharityFlowerShareReward() {
   assertCharityFlowerActive('领取分享奖励');
   const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_SHARE_CMD, { charityFlowerClaimShare: true });
   return { ok: true, awards: (reply?.charity_flower_claim_share?.awards || []).map(normalizeCoreItem) };
+}
+
+async function claimCharityFlowerSeeds() {
+  assertCharityFlowerActive('领取小红花种子');
+  const before = await getCharityFlowerActivity();
+  if (!before.seedReward.claimable) {
+    return { ok: true, claimed: false, reason: 'not_claimable', activity: before };
+  }
+  const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_SHARE_CMD, { charityFlowerClaimShare: true });
+  return { ok: true, claimed: true, awards: (reply?.charity_flower_claim_share?.awards || []).map(normalizeCoreItem), activity: await getCharityFlowerActivity() };
 }
 
 async function donateCharityFlowerLove() {
@@ -3117,6 +3183,10 @@ module.exports = {
   scanWeatherFriends,
   useWeatherFrogBottle,
   useWeatherCloudBottle,
+  useRainPoemLightningAttractBottle,
+  getCachedFriendWeather,
+  setCachedFriendWeather,
+  clearFriendWeatherCache,
   getSeasonPassport,
   claimSeasonPassportRewards,
   getSolarTermsInfo,
@@ -3134,6 +3204,7 @@ module.exports = {
   normalizeCharityFlowerActivity,
   isCharityFlowerActive,
   claimCharityFlowerShareReward,
+  claimCharityFlowerSeeds,
   donateCharityFlowerLove,
   claimCharityFlowerReward,
   claimCharityFlowerPublicFund,

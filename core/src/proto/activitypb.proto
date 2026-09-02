@@ -302,6 +302,10 @@ message ActivityBodyCharityFlower {
     bool compliance_agreed = 19;
     string business_id = 20;
     repeated corepb.Item xhh_reward = 21;
+    int64 seed_reward_status = 22;
+    corepb.Item seed_reward = 23;
+    corepb.Item daily_reward = 24;
+    int64 daily_reward_status = 25;
 }
 
 message CharityFlowerClaimShareRsp { repeated corepb.Item awards = 1; }

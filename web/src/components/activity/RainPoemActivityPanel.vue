@@ -14,6 +14,7 @@ const props = defineProps<{
   collectPending?: boolean
   summonPending?: boolean
   researchPending?: boolean
+  lightningAttractPending?: boolean
 }>()
 const emit = defineEmits<{
   refresh: []
@@ -24,6 +25,7 @@ const emit = defineEmits<{
   collectWeather: []
   useSummon: []
   unlockResearch: []
+  useLightningAttract: [friendGid: number]
 }>()
 
 const selectedFriend = ref<WeatherFriend | null>(null)
@@ -33,6 +35,7 @@ const hasFrogBottles = computed(() => (props.activity?.items.frogPrankBottles ||
 const hasCloudBottles = computed(() => (props.activity?.items.cloudPrankBottles || 0) > 0)
 const hasCollectionBottles = computed(() => (props.activity?.items.collectionBottles || 0) > 0)
 const hasSummonBottles = computed(() => (props.activity?.items.summonBottles || 0) > 0)
+const hasLightningAttractBottles = computed(() => (props.activity?.items.lightningAttractBottles || 0) > 0)
 
 const completedResearchCount = computed(() => props.activity?.research.stages.filter(stage => stage.completed).length || 0)
 const totalResearchCount = computed(() => props.activity?.research.stages.length || 0)
@@ -106,6 +109,10 @@ function handleUseSummon() {
 
 function handleUnlockResearch() {
   emit('unlockResearch')
+}
+
+function handleUseLightningAttract(friendGid: number) {
+  emit('useLightningAttract', friendGid)
 }
 </script>
 
@@ -282,6 +289,18 @@ function handleUnlockResearch() {
             </BaseButton>
           </div>
         </div>
+
+        <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-violet-50 p-4 dark:bg-violet-950/20">
+          <h4 class="text-sm font-medium text-violet-800 dark:text-violet-200">
+            闪电感应
+          </h4>
+          <p class="mt-1 text-xs text-violet-600 dark:text-violet-400">
+            向 {{ selectedFriend.name }} 的农场使用闪电感应瓶
+          </p>
+          <BaseButton size="sm" class="mt-2" variant="success" :loading="lightningAttractPending" :disabled="!hasLightningAttractBottles || lightningAttractPending" @click="handleUseLightningAttract(selectedFriend.gid)">
+            使用闪电感应瓶
+          </BaseButton>
+        </div>
       </div>
 
       <div v-else-if="!scanPending" class="mt-4 rounded-lg border border-gray-200 border-dashed p-6 text-center text-sm text-gray-500 dark:border-gray-700">
@@ -320,6 +339,10 @@ function handleUnlockResearch() {
         <div class="rounded-lg bg-gray-50 p-3 text-center dark:bg-gray-700/30">
           <div class="text-xs text-gray-500">天气采集瓶</div>
           <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity?.items.collectionBottles || 0 }}</div>
+        </div>
+        <div class="rounded-lg bg-purple-50 p-3 text-center dark:bg-purple-950/20">
+          <div class="text-xs text-purple-600 dark:text-purple-400">闪电感应瓶</div>
+          <div class="mt-1 text-lg font-bold text-purple-700 dark:text-purple-300">{{ activity?.items.lightningAttractBottles || 0 }}</div>
         </div>
       </div>
       <BaseButton v-if="hasSummonBottles" size="sm" class="mt-3" variant="success" :loading="summonPending" :disabled="summonPending" @click="handleUseSummon">
