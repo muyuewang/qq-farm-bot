@@ -2,6 +2,12 @@ const { Buffer } = require('node:buffer');
 const EventEmitter = require('node:events');
 /**
  * WebSocket 网络层 - 连接/消息编解码/登录/心跳
+ *
+ * 架构对齐上游 liyangpengs/qq-farm-bot：
+ * - 请求队列 + 按类别分派（requestQueue + drainRequestQueue）
+ * - 按类别在途限制（critical/foreground/farm/friend/background）
+ * - 心跳走队列 criticalLane
+ * - 登录串行化
  */
 
 const process = require('node:process');
@@ -16,7 +22,15 @@ const { toLong, toNum, syncServerTime, log, logWarn } = require('./utils');
 const cryptoWasm = require('./crypto-wasm');
 const { createGatewayToken } = require('./gateway-token');
 const { evaluateGatewayHealth, getOldestPendingAgeMs } = require('./gateway-health');
-const { createRequestGate, getRequestPriority } = require('./request-priority');
+const {
+    resolveRequestClass,
+    selectDispatchIndex,
+    isClassQueueFull,
+    maxQueuedForClass,
+    describeRequestClassMarker,
+    classOf,
+    getRequestPriority,
+} = require('./request-priority');
 const { TsdkRuntime } = require('./tsdk-runtime');
 
 const CLIENT_VERSION_RE = /^\d+(?:\.\d+){2,4}_\d{8}$/;
@@ -68,8 +82,9 @@ let clientSeq = 1;
 let serverSeq = 0;
 const pendingCallbacks = new Map();
 const pendingStartedAt = new Map();
-const requestGate = createRequestGate({ maxActive: 8, maxQueued: 100 });
-let wsErrorState = { code: 0, at: 0, message: '' };
+// 请求队列（替代 requestGate 信号量）
+const requestQueue = [];
+let nextRequestId = 1;
 const networkScheduler = createScheduler('network');
 let tsdkRuntime = null;
 let aceService = null;
@@ -186,18 +201,155 @@ function stopSecurityRuntime(reason = '停止') {
     cryptoWasm.setRuntime(null);
 }
 
+// ============ 请求队列与分派 ============
+
+function settleQueuedRequest(request, error, value) {
+    if (request.settled) return;
+    request.settled = true;
+    networkScheduler.clear(request.timeoutKey);
+    networkScheduler.clear(request.queueWaitKey);
+    if (error) request.reject(error);
+    else request.resolve(value);
+}
+
+function pendingClassCount(requestClass) {
+    let count = 0;
+    for (const pending of pendingCallbacks.values()) {
+        if (pending.requestClass === requestClass) count += 1;
+    }
+    return count;
+}
+
+function pendingBusinessCount() {
+    return pendingClassCount('foreground') + pendingClassCount('farm') + pendingClassCount('friend');
+}
+
+function oldestPendingAgeMs() {
+    const now = Date.now();
+    let oldest = 0;
+    for (const [seq, startedAt] of pendingStartedAt) {
+        const age = Math.max(0, now - startedAt);
+        if (age > oldest) oldest = age;
+    }
+    return oldest;
+}
+
+function getGatewayLoad() {
+    return {
+        pending: pendingCallbacks.size,
+        queued: requestQueue.length,
+        criticalPending: pendingClassCount('critical'),
+        businessPending: pendingBusinessCount(),
+        foregroundPending: pendingClassCount('foreground'),
+        backgroundPending: pendingClassCount('background'),
+        heartbeatMisses: heartbeatMissCount,
+        oldestPendingAgeMs: oldestPendingAgeMs(),
+    };
+}
+
+function isCurrentConnection(context) {
+    return currentConnection === context && ws === context.socket && !context.finalized;
+}
+
+/**
+ * 挑出下一个可发送的请求。分层与容量规则全部在 utils/request-priority.ts 里，
+ * 这里只负责清掉已结算的队列项、把选中项摘出来。
+ */
+function takeDispatchableRequest() {
+    // 清理已结算的队列项
+    for (let index = requestQueue.length - 1; index >= 0; index--) {
+        if (requestQueue[index].settled) requestQueue.splice(index, 1);
+    }
+    if (requestQueue.length === 0) return null;
+    const index = selectDispatchIndex(requestQueue, Array.from(pendingCallbacks.values()), Date.now());
+    if (index < 0) return null;
+    return requestQueue.splice(index, 1)[0];
+}
+
+function drainRequestQueue() {
+    while (requestQueue.length > 0) {
+        const request = takeDispatchableRequest();
+        if (!request) break;
+
+        if (!isCurrentConnection(request.context) || request.context.phase !== 'online') {
+            settleQueuedRequest(request, new Error(`连接未打开: ${request.methodName}`));
+            continue;
+        }
+
+        const seq = clientSeq;
+        request.seq = seq;
+        const pending = request.expectReply ? {
+            serviceName: request.serviceName,
+            methodName: request.methodName,
+            startedAt: Date.now(),
+            requestClass: request.requestClass,
+            criticalLane: request.criticalLane,
+            expectedErrorCodes: request.expectedErrorCodes,
+            callback(err, body, meta) {
+                if (err) settleQueuedRequest(request, err);
+                else settleQueuedRequest(request, undefined, { body, meta });
+                drainRequestQueue();
+            },
+        } : undefined;
+        sendMsg(request.context, request.serviceName, request.methodName, request.bodyBytes, pending).then((sent) => {
+            if (sent) {
+                if (!request.expectReply) {
+                    settleQueuedRequest(request, undefined, { body: Buffer.alloc(0), meta: {} });
+                    drainRequestQueue();
+                }
+                return;
+            }
+            if (pending) pendingCallbacks.delete(seq);
+            settleQueuedRequest(request, new Error(`发送失败: ${request.methodName}`));
+            drainRequestQueue();
+        }).catch((error) => {
+            if (pending) pendingCallbacks.delete(seq);
+            settleQueuedRequest(request, error instanceof Error ? error : new Error(String(error)));
+            drainRequestQueue();
+        });
+    }
+}
+
+function rejectAllQueuedRequests(reason) {
+    const entries = requestQueue.splice(0);
+    for (const request of entries) settleQueuedRequest(request, new Error(reason));
+    return entries.length;
+}
+
 function rejectAllPendingRequests(reason = '请求被中断') {
     const entries = Array.from(pendingCallbacks.entries());
     pendingCallbacks.clear();
     pendingStartedAt.clear();
-    for (const [, callback] of entries) {
+    for (const [, pending] of entries) {
         try {
-            callback(new Error(reason));
+            pending.callback(new Error(reason));
         } catch {
             // ignore callback failure
         }
     }
     return entries.length;
+}
+
+function describePendingRequests() {
+    if (pendingCallbacks.size === 0) return 'none';
+    const now = Date.now();
+    const entries = Array.from(pendingCallbacks.entries());
+    return entries
+        .slice(0, 6)
+        .map(([seq, pending]) => {
+            const method = pending.methodName || 'unknown';
+            const ageMs = pending.startedAt ? Math.max(0, now - pending.startedAt) : 0;
+            return `${method}#${seq}:${ageMs}ms`;
+        })
+        .join(',');
+}
+
+function describeQueuedRequests() {
+    if (requestQueue.length === 0) return 'none';
+    return requestQueue
+        .slice(0, 8)
+        .map(request => `${describeRequestClassMarker(request)}${request.methodName || 'unknown'}`)
+        .join(',');
 }
 
 // ============ 用户状态 (登录后设置) ============
@@ -267,12 +419,24 @@ async function fetchDiamondBalance() {
     }
 }
 
+async function fetchUserSettings() {
+    try {
+        const body = types.GetUserSettingsRequest.encode(types.GetUserSettingsRequest.create({})).finish();
+        const { body: replyBody } = await sendMsgAsync('gamepb.userpb.UserService', 'GetUserSettings', body);
+        const reply = types.GetUserSettingsReply.decode(replyBody);
+        if (reply.settings) {
+            log('系统', '用户设置已同步');
+        }
+    } catch {
+        // 忽略获取失败
+    }
+}
+
 function hasOwn(obj, key) {
     return !!obj && Object.hasOwn(obj, key);
 }
 
 // ============ 消息编解码 ============
-// async function encodeMsg(serviceName, methodName, bodyBytes) {
 async function encodeMsg(serviceName, methodName, bodyBytes, clientSeqValue) {
     let finalBody = bodyBytes || Buffer.alloc(0);
     if (finalBody.length > 0) {
@@ -285,18 +449,52 @@ async function encodeMsg(serviceName, methodName, bodyBytes, clientSeqValue) {
             service_name: serviceName,
             method_name: methodName,
             message_type: 1,
-            // client_seq: toLong(clientSeq),
             client_seq: toLong(clientSeqValue),
             server_seq: toLong(serverSeq),
         },
         body: finalBody,
         auth_token: gatewayToken,
     });
-    // clientSeq++;
     return types.GateMessage.encode(msg).finish();
 }
 
-async function sendMsg(serviceName, methodName, bodyBytes, callback) {
+async function sendMsg(context, serviceName, methodName, bodyBytes, pending) {
+    if (!isCurrentConnection(context) || context.socket.readyState !== WebSocket.OPEN) {
+        log('系统', '[WS] 连接未打开');
+        return false;
+    }
+    const seq = clientSeq;
+    clientSeq += 1;
+    // 加密前登记在途请求，确保排队器能准确计算并发槽位。
+    if (pending) {
+        pendingCallbacks.set(seq, pending);
+        pendingStartedAt.set(seq, Date.now());
+    }
+    const encoded = await encodeMsg(serviceName, methodName, bodyBytes, seq);
+    if (pending && pendingCallbacks.get(seq) !== pending) return false;
+    if (!isCurrentConnection(context) || context.socket.readyState !== WebSocket.OPEN) {
+        if (pending) {
+            pendingCallbacks.delete(seq);
+            pendingStartedAt.delete(seq);
+            pending.callback(new Error(`连接未打开: ${methodName}`));
+        }
+        return false;
+    }
+    try {
+        context.socket.send(encoded);
+    } catch (err) {
+        if (pending) {
+            pendingCallbacks.delete(seq);
+            pendingStartedAt.delete(seq);
+            pending.callback(err);
+        }
+        return false;
+    }
+    return true;
+}
+
+// ============ 兼容旧接口 ============
+async function sendMsgLegacy(serviceName, methodName, bodyBytes, callback) {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         log('系统', '[WS] 连接未打开');
         return false;
@@ -308,7 +506,6 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
         pendingCallbacks.set(seq, callback);
         pendingStartedAt.set(seq, Date.now());
     }
-    // ws.send(encoded);
     try {
         ws.send(encoded);
     } catch (err) {
@@ -322,72 +519,109 @@ async function sendMsg(serviceName, methodName, bodyBytes, callback) {
     return true;
 }
 
-/** Promise 版发送 */
-async function sendMsgAsync(serviceName, methodName, bodyBytes, timeout = 10000, options = {}) {
-    const priority = getRequestPriority(options.priority);
-    const release = await requestGate.acquire(priority);
-    try {
-      return await new Promise((resolve, reject) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN || !loginReady) {
-            reject(new Error(`连接未就绪: ${methodName}`));
-            return;
-        }
-
-        // 心跳已失联超过一轮时，拒绝非关键请求，避免在死连接上堆积
-        const heartbeatAge = Date.now() - lastHeartbeatResponse;
-        if (heartbeatAge > HEARTBEAT_TIMEOUT * 2 && priority !== 'critical') {
-            reject(new Error(`网关心跳失联，拒绝请求: ${methodName} (失联${Math.round(heartbeatAge / 1000)}s)`));
-            return;
-        }
-
-        if (pendingCallbacks.size >= 15) {
-            reject(new Error(`请求队列已满: ${methodName} (pending=${pendingCallbacks.size})`));
-            return;
-        }
-
-        const seq = clientSeq;
-        const timeoutKey = `request_timeout_${seq}`;
-        let settled = false;
-
-        networkScheduler.setTimeoutTask(timeoutKey, timeout, () => {
-            if (settled) return;
-            settled = true;
-            pendingCallbacks.delete(seq);
-            pendingStartedAt.delete(seq);
-            const pending = pendingCallbacks.size;
-            reject(new Error(`请求超时: ${methodName} (seq=${seq}, pending=${pending})`));
-        });
-
-        sendMsg(serviceName, methodName, bodyBytes, (err, body, meta) => {
-            networkScheduler.clear(timeoutKey);
-            if (settled) return;
-            settled = true;
-            if (err) reject(err);
-            else resolve({ body, meta });
-        }).then((sent) => {
-            if (sent || settled) return;
-            networkScheduler.clear(timeoutKey);
-            settled = true;
-            reject(new Error(`发送失败: ${methodName}`));
-        }).catch((error) => {
-            if (settled) return;
-            networkScheduler.clear(timeoutKey);
-            pendingCallbacks.delete(seq);
-            pendingStartedAt.delete(seq);
-            settled = true;
-            reject(error);
-        });
-      });
-    } finally {
-      release();
+/** Promise 版发送 — 走请求队列 + 按类别分派 */
+function sendMsgAsync(serviceName, methodName, bodyBytes, timeoutOrOptions, options) {
+    // 兼容旧调用：sendMsgAsync(service, method, body, timeout, { priority })
+    let timeoutMs;
+    let sendOptions;
+    if (typeof timeoutOrOptions === 'number') {
+        timeoutMs = timeoutOrOptions;
+        sendOptions = options || {};
+    } else if (timeoutOrOptions && typeof timeoutOrOptions === 'object') {
+        timeoutMs = Number(timeoutOrOptions.timeoutMs) || 10000;
+        sendOptions = timeoutOrOptions;
+    } else {
+        timeoutMs = 10000;
+        sendOptions = {};
     }
+    timeoutMs = Math.max(1, timeoutMs);
+
+    const expectedErrorCodes = new Set((sendOptions.expectedErrorCodes || []).map(Number).filter(Number.isFinite));
+    const criticalLane = (sendOptions.criticalLane === 'heartbeat' || sendOptions.criticalLane === 'ace')
+        ? sendOptions.criticalLane
+        : undefined;
+    const expectReply = sendOptions.expectReply !== false;
+
+    // 班次由「显式 requestClass > priority 兼容映射 > 调度器注入的环境班次 > 前台」决定。
+    const requestClass = resolveRequestClass(
+        { priority: sendOptions.priority, requestClass: sendOptions.requestClass, criticalLane },
+        getRequestPriority(),
+    );
+
+    const context = currentConnection;
+    if (!context || !isCurrentConnection(context) || context.socket.readyState !== WebSocket.OPEN) {
+        return Promise.reject(new Error(`连接未打开: ${methodName}`));
+    }
+    if (context.phase !== 'online') {
+        return Promise.reject(new Error(`账号尚未登录: ${methodName}`));
+    }
+
+    // 每个班次有独立的排队配额
+    if (isClassQueueFull(requestQueue, requestClass)) {
+        return Promise.reject(new Error(
+            `请求等待队列已满: ${methodName} (class=${requestClass}, limit=${maxQueuedForClass(requestClass)}, `
+            + `queued=${requestQueue.length}, pending=${pendingCallbacks.size})`,
+        ));
+    }
+
+    return new Promise((resolve, reject) => {
+        const requestId = nextRequestId++;
+        const request = {
+            context,
+            serviceName,
+            methodName,
+            bodyBytes,
+            expectedErrorCodes,
+            resolve,
+            reject,
+            timeoutKey: `request_timeout_${requestId}`,
+            queueWaitKey: `request_queue_wait_${requestId}`,
+            seq: null,
+            settled: false,
+            requestClass,
+            criticalLane,
+            enqueuedAt: Date.now(),
+            expectReply,
+        };
+        requestQueue.push(request);
+        networkScheduler.setTimeoutTask(request.timeoutKey, timeoutMs, () => {
+            if (request.seq !== null) {
+                pendingCallbacks.delete(request.seq);
+                pendingStartedAt.delete(request.seq);
+            }
+            const index = requestQueue.indexOf(request);
+            if (index >= 0) requestQueue.splice(index, 1);
+            const stage = request.seq === null ? 'queued' : 'pending';
+            settleQueuedRequest(request, new Error(
+                `请求超时: ${methodName} (stage=${stage}, pending=${pendingCallbacks.size}, queued=${requestQueue.length}, active=${describePendingRequests()})`,
+            ));
+            drainRequestQueue();
+        });
+        // background 班次请求：拿不到空闲槽位就早点让路
+        if (requestClass === 'background') {
+            const queueWaitMs = Math.min(timeoutMs, 5000);
+            networkScheduler.setTimeoutTask(request.queueWaitKey, queueWaitMs, () => {
+                if (request.settled || request.seq !== null) return;
+                const index = requestQueue.indexOf(request);
+                if (index >= 0) requestQueue.splice(index, 1);
+                settleQueuedRequest(request, new Error(
+                    `网关繁忙，后台请求已让路: ${methodName} (waited=${queueWaitMs}ms, `
+                    + `pending=${pendingCallbacks.size}, queued=${requestQueue.length})`,
+                ));
+            });
+        }
+        drainRequestQueue();
+    });
 }
 
 // ============ 消息处理 ============
+let lastInboundAt = Date.now();
+
 function handleMessage(data) {
     try {
         const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
         const msg = types.GateMessage.decode(buf);
+        lastInboundAt = Date.now();
         const meta = msg.meta;
         if (!meta) return;
 
@@ -466,7 +700,6 @@ function handleNotify(msg) {
                 const hostGid = toNum(notify.host_gid);
                 const lands = notify.lands || [];
                 if (lands.length > 0) {
-                    // 如果是自己的农场，触发事件
                     if (hostGid === userState.gid || hostGid === 0) {
                         networkEvents.emit('landsChanged', lands);
                     } else {
@@ -500,16 +733,12 @@ function handleNotify(msg) {
                     const id = toNum(item.id);
                     const count = toNum(item.count);
                     const delta = toNum(itemChg.delta);
-                    
-                    // 仅使用 ID=1101 作为经验值标准
+
                     if (id === 1101) {
-                        // 优先使用总量；若仅有 delta 也可累加
                         if (count > 0) userState.exp = count;
                         else if (delta !== 0) userState.exp = Math.max(0, Number(userState.exp || 0) + delta);
-                        // 这里调用 updateStatusLevel 会触发 status.js -> worker.js -> stats.js 的更新流程
                         updateStatusLevel(userState.level, userState.exp);
                     } else if (id === 1 || id === 1001) {
-                        // 金币通知有时只有 delta 没有总量，避免把未提供总量误当 0 覆盖
                         if (count > 0) {
                             userState.gold = count;
                         } else if (delta !== 0) {
@@ -517,28 +746,24 @@ function handleNotify(msg) {
                         }
                         updateStatusGold(userState.gold);
                     } else if (id === 1002) {
-                        // 点券
                         if (count > 0) {
                             userState.coupon = count;
                         } else if (delta !== 0) {
                             userState.coupon = Math.max(0, Number(userState.coupon || 0) + delta);
                         }
                     } else if (id === 1005) {
-                        // 金豆豆
                         if (count > 0) {
                             userState.goldBean = count;
                         } else if (delta !== 0) {
                             userState.goldBean = Math.max(0, Number(userState.goldBean || 0) + delta);
                         }
                     } else if (id === 1004) {
-                        // 钻石
                         if (count > 0) {
                             userState.diamond = count;
                         } else if (delta !== 0) {
                             userState.diamond = Math.max(0, Number(userState.diamond || 0) + delta);
                         }
                     } else if (id === 101351) {
-                        // 同气连枝礼包 - 帮忙好友时有概率获得
                         if (delta > 0 || count > 0) {
                             const giftDelta = delta > 0 ? delta : (count > 0 ? 1 : 0);
                             recordTongQiGift(giftDelta);
@@ -638,17 +863,17 @@ function handleNotify(msg) {
                     networkEvents.emit('taskInfoNotify', notify.task_info);
                 }
             } catch { }
-            
+            return;
         }
-
-        // 其他未处理的推送类型 (调试用)
-        // log('推送', `未处理类型: ${type}`);
     } catch (e) {
         logWarn('推送', `解码失败: ${e.message}`);
     }
 }
 
 // ============ 登录 ============
+let currentConnection = null;
+let wsErrorState = { code: 0, at: 0, message: '' };
+
 function buildLoginDeviceInfo(deviceProtocol) {
     const device = resolveDeviceFingerprint(deviceProtocol);
     return {
@@ -661,7 +886,7 @@ function buildLoginDeviceInfo(deviceProtocol) {
     };
 }
 
-async function sendLogin(onLoginSuccess, deviceProtocol) {
+async function sendLogin(context, onLoginSuccess, deviceProtocol) {
     const body = types.LoginRequest.encode(types.LoginRequest.create({
         sharer_id: toLong(0),
         sharer_open_id: '',
@@ -674,68 +899,75 @@ async function sendLogin(onLoginSuccess, deviceProtocol) {
         },
     })).finish();
 
-    await sendMsg('gamepb.userpb.UserService', 'Login', body, (err, bodyBytes, _meta) => {
-        if (err) {
-            log('登录', `失败: ${err.message}`);
-            // 如果是验证失败，直接退出进程
-            if (err.message.includes('code=')) {
-                log('系统', '账号验证失败，即将停止运行...');
-                networkScheduler.setTimeoutTask('login_error_exit', 1000, () => process.exit(0));
+    await sendMsg(context, 'gamepb.userpb.UserService', 'Login', body, {
+        expectedErrorCodes: new Set(),
+        requestClass: 'critical',
+        callback(err, bodyBytes, _meta) {
+            if (!isCurrentConnection(context)) return;
+            if (err) {
+                log('登录', `失败: ${err.message}`);
+                if (err.message.includes('code=')) {
+                    log('系统', '账号验证失败，即将停止运行...');
+                    networkScheduler.setTimeoutTask('login_error_exit', 1000, () => process.exit(0));
+                }
+                return;
             }
-            return;
-        }
-        try {
-            const reply = types.LoginReply.decode(bodyBytes);
-            applyServerVersionInfo(reply.version_info);
-            if (reply.basic) {
-                clearWsErrorState();
-                userState.gid = toNum(reply.basic.gid);
-                userState.name = reply.basic.name || '未知';
-                userState.level = toNum(reply.basic.level);
-                userState.gold = toNum(reply.basic.gold);
-                userState.exp = toNum(reply.basic.exp);
-                userState.openId = String(reply.basic.open_id || '').trim();
-                userState.avatar = String(reply.basic.avatar_url || '').trim();
-                if (tsdkRuntime && userState.openId) {
-                    tsdkRuntime.bindUser(userState.openId);
-                    initialGamePackInfo = tsdkRuntime.getEncryptedInitInfo();
-                    logAce('info', `ACE 用户身份已绑定：初始化凭据长度 ${initialGamePackInfo.length}`);
+            try {
+                const reply = types.LoginReply.decode(bodyBytes);
+                applyServerVersionInfo(reply.version_info);
+                if (reply.basic) {
+                    clearWsErrorState();
+                    userState.gid = toNum(reply.basic.gid);
+                    userState.name = reply.basic.name || '未知';
+                    userState.level = toNum(reply.basic.level);
+                    userState.gold = toNum(reply.basic.gold);
+                    userState.exp = toNum(reply.basic.exp);
+                    userState.openId = String(reply.basic.open_id || '').trim();
+                    userState.avatar = String(reply.basic.avatar_url || '').trim();
+                    if (tsdkRuntime && userState.openId) {
+                        tsdkRuntime.bindUser(userState.openId);
+                        initialGamePackInfo = tsdkRuntime.getEncryptedInitInfo();
+                        logAce('info', `ACE 用户身份已绑定：初始化凭据长度 ${initialGamePackInfo.length}`);
+                    }
+
+                    updateStatusFromLogin({
+                        gid: userState.gid,
+                        name: userState.name,
+                        level: userState.level,
+                        gold: userState.gold,
+                        exp: userState.exp,
+                        openId: userState.openId,
+                        avatar: userState.avatar,
+                    });
+
+                    log('系统', `登录成功: ${userState.name} (Lv${userState.level})`);
+
+                    let loginTimeMs = 0;
+                    if (reply.time_now_millis) {
+                        const loginTime = toNum(reply.time_now_millis);
+                        loginTimeMs = loginTime > 1e12 ? loginTime : loginTime * 1000;
+                        syncServerTime(loginTimeMs);
+                    }
+                    logLoginSummary(loginTimeMs);
                 }
 
-                // 更新状态栏
-                updateStatusFromLogin({
-                    gid: userState.gid,
-                    name: userState.name,
-                    level: userState.level,
-                    gold: userState.gold,
-                    exp: userState.exp,
-                    openId: userState.openId,
-                    avatar: userState.avatar,
+                // 串行化登录引导：先设置用户同步，再调用 onLoginSuccess
+                networkScheduler.clear('login_timeout');
+                context.phase = 'online';
+                startAceService();
+                loginReady = true;
+                startHeartbeat();
+                // 登录后同步用户设置（串行）
+                fetchUserSettings().then(() => {
+                    if (!isCurrentConnection(context)) return;
+                    if (onLoginSuccess) onLoginSuccess();
+                }).catch((e) => {
+                    logWarn('登录', `登录初始化失败: ${e.message}`);
                 });
-
-                log('系统', `登录成功: ${userState.name} (Lv${userState.level})`);
-
-                let loginTimeMs = 0;
-                if (reply.time_now_millis) {
-                    const loginTime = toNum(reply.time_now_millis);
-                    loginTimeMs = loginTime > 1e12 ? loginTime : loginTime * 1000;
-                    syncServerTime(loginTimeMs);
-                }
-                logLoginSummary(loginTimeMs);
-
-                // 登录后主动获取背包中的金豆豆数量
-                fetchGoldBeanFromBag();
-                fetchDiamondBalance();
-
+            } catch (e) {
+                log('登录', `解码失败: ${e.message}`);
             }
-
-            startHeartbeat();
-            startAceService();
-            loginReady = true;
-            if (onLoginSuccess) onLoginSuccess();
-        } catch (e) {
-            log('登录', `解码失败: ${e.message}`);
-        }
+        },
     });
 }
 
@@ -744,6 +976,7 @@ let lastHeartbeatResponse = Date.now();
 let heartbeatMissCount = 0;
 const HEARTBEAT_TIMEOUT = 15000;
 const MAX_HEARTBEAT_MISS = 2;
+const HEARTBEAT_REQUEST_TIMEOUT = 20000;
 
 function getGatewayHealth() {
     const now = Date.now();
@@ -757,52 +990,33 @@ function getGatewayHealth() {
     return {
         ...result,
         pending: pendingCallbacks.size,
-        queue: requestGate.snapshot(),
+        queued: requestQueue.length,
     };
 }
 
 function startHeartbeat() {
     networkScheduler.clear('heartbeat_interval');
     lastHeartbeatResponse = Date.now();
+    lastInboundAt = Date.now();
     heartbeatMissCount = 0;
 
-    networkScheduler.setIntervalTask('heartbeat_interval', CONFIG.heartbeatInterval, () => {
+    networkScheduler.setIntervalTask('heartbeat_interval', CONFIG.heartbeatInterval, async () => {
         if (!userState.gid) return;
-
-        const timeSinceLastResponse = Date.now() - lastHeartbeatResponse;
-        if (timeSinceLastResponse > HEARTBEAT_TIMEOUT) {
-            heartbeatMissCount++;
-            logWarn('心跳', `连接可能已断开 (${Math.round(timeSinceLastResponse/1000)}s 无响应, miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISS}, pending=${pendingCallbacks.size})`);
-            if (heartbeatMissCount >= MAX_HEARTBEAT_MISS) {
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    log('心跳', '连接已关闭，立即重连...');
-                } else {
-                    log('心跳', '心跳超时，关闭连接并重连...');
-                    try { ws.close(); } catch { }
-                }
-                networkEvents.emit('disconnect', { code: 'heartbeat_timeout' });
-                rejectAllPendingRequests('连接超时，已清理');
-                reconnect(null);
-                return;
-            }
-        }
-
-        // 硬超时：心跳失联超过 45s 强制重连，不依赖 miss 计数
-        if (timeSinceLastResponse > 45000) {
-            logWarn('心跳', `心跳失联超过 45s，强制重连...`);
-            try { if (ws) ws.close(); } catch { }
-            networkEvents.emit('disconnect', { code: 'heartbeat_hard_timeout' });
-            rejectAllPendingRequests('心跳硬超时，已清理');
-            reconnect(null);
-            return;
-        }
 
         const body = types.HeartbeatRequest.encode(types.HeartbeatRequest.create({
             gid: toLong(userState.gid),
             client_version: CONFIG.clientVersion,
+            field_3: toLong(0),
         })).finish();
-        sendMsgAsync('gamepb.userpb.UserService', 'Heartbeat', body, 20000, { priority: 'critical' }).then(({ body: replyBody }) => {
+        try {
+            const { body: replyBody } = await sendMsgAsync(
+                'gamepb.userpb.UserService',
+                'Heartbeat',
+                body,
+                { timeoutMs: HEARTBEAT_REQUEST_TIMEOUT, priority: 'high', criticalLane: 'heartbeat' },
+            );
             lastHeartbeatResponse = Date.now();
+            lastInboundAt = Date.now();
             heartbeatMissCount = 0;
             try {
                 const reply = types.HeartbeatReply.decode(replyBody);
@@ -813,8 +1027,39 @@ function startHeartbeat() {
                     syncServerTime(serverTimeMs);
                 }
             } catch { }
-        }).catch(() => { });
-    });
+        } catch {
+            if (!isConnected()) return;
+            heartbeatMissCount += 1;
+            const now = Date.now();
+            const inboundSilenceMs = Math.max(0, now - lastInboundAt);
+            const heartbeatSilenceMs = Math.max(0, now - lastHeartbeatResponse);
+            logWarn(
+                '心跳',
+                `心跳未响应 (miss=${heartbeatMissCount}/${MAX_HEARTBEAT_MISS}, `
+                + `heartbeat=${Math.round(heartbeatSilenceMs / 1000)}s, inbound=${Math.round(inboundSilenceMs / 1000)}s, `
+                + `pending=${pendingCallbacks.size}, queued=${requestQueue.length}, active=${describePendingRequests()})`,
+            );
+            // 双重终止条件：心跳连续失联 AND 连接无入站数据
+            if (heartbeatMissCount >= MAX_HEARTBEAT_MISS && inboundSilenceMs > HEARTBEAT_TIMEOUT * 2) {
+                log('心跳', '连续心跳超时且连接无入站数据，账号将停止运行...');
+                networkEvents.emit('disconnect', { code: 'heartbeat_timeout' });
+                rejectAllPendingRequests('心跳超时，已清理');
+                rejectAllQueuedRequests('心跳超时，已清理');
+                try { if (ws) ws.close(); } catch { }
+                return;
+            }
+            // 硬超时：心跳失联超过 45s 无条件强制重连
+            if (heartbeatSilenceMs > 45000) {
+                logWarn('心跳', '心跳失联超过 45s，强制重连...');
+                try { if (ws) ws.close(); } catch { }
+                networkEvents.emit('disconnect', { code: 'heartbeat_hard_timeout' });
+                rejectAllPendingRequests('心跳硬超时，已清理');
+                rejectAllQueuedRequests('心跳硬超时，已清理');
+                reconnect(null);
+                return;
+            }
+        }
+    }, { preventOverlap: true });
 }
 
 // ============ WebSocket 连接 ============
@@ -879,7 +1124,6 @@ function connect(code, onLoginSuccess) {
     networkStopped = false;
     savedLoginCallback = onLoginSuccess;
     if (code) savedCode = code;
-    // 获取设备协议配置
     let deviceProtocol = null;
     try {
         const store = getStoreModule();
@@ -904,7 +1148,6 @@ function connect(code, onLoginSuccess) {
     const url = `${CONFIG.serverUrl}?platform=${CONFIG.platform}&os=${deviceFingerprint.os}&ver=${CONFIG.clientVersion}&code=${savedCode}&openID=`;
     closeCurrentWs({ terminate: true });
 
-    // 输出自定义设备信息日志
     if (deviceProtocol && deviceProtocol.enabled) {
         const deviceInfo = [
             `品牌: ${deviceProtocol.deviceBrand || '未设置'}`,
@@ -924,14 +1167,32 @@ function connect(code, onLoginSuccess) {
         headers: buildWebSocketHeaders(deviceProtocol),
     });
     ws = socket;
+    const context = {
+        id: Date.now(),
+        socket,
+        phase: 'connecting',
+        intentionalClose: false,
+        finalized: false,
+        loginInitialized: false,
+    };
+    currentConnection = context;
 
     socket.binaryType = 'arraybuffer';
 
     socket.on('open', async () => {
+        if (!isCurrentConnection(context)) return;
+        context.phase = 'login';
         reconnectAttempts = 0;
+        networkScheduler.setTimeoutTask('login_timeout', 20000, () => {
+            if (!isCurrentConnection(context) || context.phase !== 'login') return;
+            logWarn('登录', '登录响应超时，账号将停止运行...');
+            finalizeConnection(context, { source: 'login_timeout', reason: '登录响应超时' });
+            try { socket.terminate(); } catch {}
+        });
         try {
             await startSecurityRuntime(deviceProtocol);
-            await sendLogin(onLoginSuccess, deviceProtocol);
+            if (!isCurrentConnection(context)) return;
+            await sendLogin(context, onLoginSuccess, deviceProtocol);
         } catch (error) {
             logWarn('ACE', `安全运行时启动失败，已中止登录：${error.message}`);
             networkEvents.emit('security_error', { message: error.message });
@@ -941,18 +1202,20 @@ function connect(code, onLoginSuccess) {
     });
 
     socket.on('message', (data) => {
+        if (!isCurrentConnection(context)) return;
         handleMessage(Buffer.isBuffer(data) ? data : Buffer.from(data));
     });
 
     socket.on('close', (code, _reason) => {
         if (ws === socket) ws = null;
+        const reason = Buffer.isBuffer(_reason) ? _reason.toString('utf8') : String(_reason || '');
         logWarn('系统', `[WS] 连接关闭 (code=${code})`);
-        networkEvents.emit('disconnect', { code });
-        cleanup();
+        finalizeConnection(context, { source: 'ws_close', code: Number(code) || 0, reason });
         scheduleReconnect(`close:${code}`);
     });
 
     socket.on('error', (err) => {
+        if (!isCurrentConnection(context)) return;
         const message = err && err.message ? String(err.message) : '';
         logWarn('系统', `[WS] 错误: ${message}`);
         const match = message.match(/Unexpected server response:\s*(\d+)/i);
@@ -966,12 +1229,23 @@ function connect(code, onLoginSuccess) {
     });
 }
 
+function finalizeConnection(context, details) {
+    if (context.finalized) return;
+    context.finalized = true;
+    const wasCurrent = currentConnection === context;
+    if (wasCurrent) {
+        currentConnection = null;
+        ws = null;
+        cleanup(details.reason || details.source);
+    }
+}
+
 function cleanup(reason = '网络清理') {
     loginReady = false;
     stopSecurityRuntime(reason);
     rejectAllPendingRequests(`请求已中断: ${reason}`);
+    rejectAllQueuedRequests(`请求已中断: ${reason}`);
     networkScheduler.clearAll();
-    // pendingCallbacks.clear();
 }
 
 function reconnect(newCode) {
@@ -990,6 +1264,7 @@ function stopNetwork(reason = '停止网络') {
     reconnectAttempts = 0;
     stopSecurityRuntime(reason);
     rejectAllPendingRequests(`请求已中断: ${reason}`);
+    rejectAllQueuedRequests(`请求已中断: ${reason}`);
     networkScheduler.clearAll();
     closeCurrentWs({ terminate: true });
     userState.gid = 0;
@@ -1004,7 +1279,7 @@ function getAceStatus() {
 
 module.exports = {
     connect, reconnect, cleanup, stopNetwork, getWs, isConnected,
-    sendMsg, sendMsgAsync,
+    sendMsg: sendMsgLegacy, sendMsgAsync,
     getUserState,
     getWsErrorState,
     getGatewayHealth,
