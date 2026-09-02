@@ -643,14 +643,17 @@ function handleMessage(data) {
             const errorCode = toNum(meta.error_code);
             const clientSeqVal = toNum(meta.client_seq);
 
-            const cb = pendingCallbacks.get(clientSeqVal);
-            if (cb) {
+            const entry = pendingCallbacks.get(clientSeqVal);
+            if (entry) {
                 pendingCallbacks.delete(clientSeqVal);
                 pendingStartedAt.delete(clientSeqVal);
-                if (errorCode !== 0) {
-                    cb(new Error(`${meta.service_name}.${meta.method_name} 错误: code=${errorCode} ${meta.error_message || ''}`));
-                } else {
-                    cb(null, msg.body, meta);
+                const fn = typeof entry === 'function' ? entry : (entry && entry.callback);
+                if (typeof fn === 'function') {
+                    if (errorCode !== 0) {
+                        fn(new Error(`${meta.service_name}.${meta.method_name} 错误: code=${errorCode} ${meta.error_message || ''}`));
+                    } else {
+                        fn(null, msg.body, meta);
+                    }
                 }
                 return;
             }
