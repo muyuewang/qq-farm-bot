@@ -822,7 +822,6 @@ async function runHelpTick(autoConfig) {
         CONFIG.helpCheckIntervalMin || 30000,
         CONFIG.helpCheckIntervalMax || 35000
     );
-    const lowFrequencyDelay = Math.max(10 * 60 * 1000, nextDelay);
 
     try {
         await runWithRequestPriority('friend', async () => {
@@ -838,7 +837,7 @@ async function runHelpTick(autoConfig) {
             });
         }
     } finally {
-        nextHelpRunAt = Date.now() + lowFrequencyDelay;
+        nextHelpRunAt = Date.now() + nextDelay;
         helpTaskRunning = false;
     }
 }
@@ -861,7 +860,11 @@ async function runStealTick(autoConfig) {
     }
     stealTaskRunning = true;
 
-    let nextDelay = 15 * 60 * 1000;
+    const defaultStealDelay = randomIntervalMs(
+        CONFIG.stealCheckIntervalMin || 25000,
+        CONFIG.stealCheckIntervalMax || 30000
+    );
+    let nextDelay = defaultStealDelay;
 
     try {
         nextDelay = await runWithRequestPriority('friend', () => runScheduledStealCheck());
@@ -874,7 +877,7 @@ async function runStealTick(autoConfig) {
             });
         }
     } finally {
-        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || 15 * 60 * 1000);
+        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || defaultStealDelay);
         stealTaskRunning = false;
     }
 }

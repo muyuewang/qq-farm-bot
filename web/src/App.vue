@@ -2,6 +2,7 @@
 import type { Theme } from '@/stores/app'
 import { onMounted } from 'vue'
 import { RouterView } from 'vue-router'
+import AnnouncementPopup from '@/components/AnnouncementPopup.vue'
 import ToastContainer from '@/components/ToastContainer.vue'
 import { useAppStore } from '@/stores/app'
 
@@ -22,6 +23,7 @@ onMounted(() => {
   <div class="h-screen w-screen overflow-hidden app-root" :style="{ color: 'var(--theme-text)' }">
     <RouterView />
     <ToastContainer />
+    <AnnouncementPopup />
   </div>
 </template>
 

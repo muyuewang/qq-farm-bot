@@ -207,6 +207,35 @@ const autoCodeRefreshSaving = ref(false)
 const systemSettingsSaving = ref(false)
 const anySystemSaving = computed(() => systemSettingsSaving.value || systemConfigSaving.value || captureConfigSaving.value || deviceProtocolSaving.value)
 
+const announcementContent = ref('')
+const announcementShowOnce = ref(true)
+const announcementSaving = ref(false)
+
+async function loadAnnouncement() {
+  try {
+    const { data } = await api.get('/api/announcement')
+    if (data.ok && data.data) {
+      announcementContent.value = data.data.content || ''
+      announcementShowOnce.value = data.data.showOnce !== false
+    }
+  } catch { /* ignore */ }
+}
+
+async function saveAnnouncement() {
+  announcementSaving.value = true
+  try {
+    await api.post('/api/admin/announcement', {
+      content: announcementContent.value,
+      showOnce: announcementShowOnce.value,
+    })
+    showAlert('公告已保存')
+  } catch (e: any) {
+    showAlert(`保存失败: ${e.message}`)
+  } finally {
+    announcementSaving.value = false
+  }
+}
+
 function buildCurrentAccountConfig() {
   return {
     ...settingStore.settings,
@@ -373,6 +402,7 @@ onMounted(async () => {
   await Promise.all([loadSystemConfig(), loadCaptureConfig()])
   await fetchAccounts()
   await fetchDeviceProtocol()
+  await loadAnnouncement()
   selectFirstAccountIfNeeded()
   if (currentAccountId.value) {
     await loadStrategyData()
@@ -526,6 +556,32 @@ onMounted(async () => {
             @reset-system="handleResetSystemConfig"
             @test-capture="handleTestCaptureConfig"
           />
+
+          <!-- 公告管理 -->
+          <div v-if="userIsAdmin" class="border border-gray-200 rounded-lg bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+            <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
+              <div class="i-carbon-notification text-lg" style="color: var(--theme-primary);" />
+              公告管理
+            </h4>
+            <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
+              设置系统公告，登录后会弹窗展示给所有用户。
+            </p>
+            <textarea
+              v-model="announcementContent"
+              rows="3"
+              placeholder="输入公告内容（留空则不展示）..."
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+            />
+            <div class="mt-2 flex items-center gap-3">
+              <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input v-model="announcementShowOnce" type="checkbox" class="h-4 w-4 rounded border-gray-300">
+                仅展示一次
+              </label>
+              <BaseButton size="sm" :loading="announcementSaving" @click="saveAnnouncement">
+                保存公告
+              </BaseButton>
+            </div>
+          </div>
 
           <DeviceProtocolCard
             v-model:form="deviceProtocolForm"

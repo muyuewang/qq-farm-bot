@@ -29,6 +29,11 @@ const emit = defineEmits<{
 const selectedFriend = ref<WeatherFriend | null>(null)
 const selectedLandId = ref<string>('')
 
+const hasFrogBottles = computed(() => (props.activity?.items.frogPrankBottles || 0) > 0)
+const hasCloudBottles = computed(() => (props.activity?.items.cloudPrankBottles || 0) > 0)
+const hasCollectionBottles = computed(() => (props.activity?.items.collectionBottles || 0) > 0)
+const hasSummonBottles = computed(() => (props.activity?.items.summonBottles || 0) > 0)
+
 const completedResearchCount = computed(() => props.activity?.research.stages.filter(stage => stage.completed).length || 0)
 const totalResearchCount = computed(() => props.activity?.research.stages.length || 0)
 const collectionLimit = computed(() => props.activity?.collection.dailyUseLimit || 0)
@@ -233,7 +238,7 @@ function handleUnlockResearch() {
               </div>
             </div>
             <div v-if="friend.rainstorm && !friend.expired && !friend.collected" class="flex gap-1.5">
-              <BaseButton size="sm" variant="success" :loading="frogPending" @click.stop="handleUseFrog(friend.gid)">
+              <BaseButton size="sm" variant="success" :loading="frogPending" :disabled="!hasFrogBottles || frogPending" @click.stop="handleUseFrog(friend.gid)">
                 青蛙使坏
               </BaseButton>
             </div>
@@ -247,7 +252,7 @@ function handleUnlockResearch() {
           <p class="mt-1 text-xs text-cyan-600 dark:text-cyan-400">
             {{ selectedFriend.name }} 的农场正在雷雨中，可以使用采集瓶
           </p>
-          <BaseButton size="sm" class="mt-2" variant="success" :loading="collectPending" :disabled="collectPending" @click="handleCollectWeather">
+          <BaseButton size="sm" class="mt-2" variant="success" :loading="collectPending" :disabled="!hasCollectionBottles || collectPending" @click="handleCollectWeather">
             使用采集瓶
           </BaseButton>
         </div>
@@ -270,7 +275,7 @@ function handleUnlockResearch() {
             <BaseButton
               size="sm"
               :loading="cloudPending"
-              :disabled="!selectedLandId || cloudPending"
+              :disabled="!hasCloudBottles || !selectedLandId || cloudPending"
               @click="handleUseCloud"
             >
               乌云使坏
@@ -317,7 +322,7 @@ function handleUnlockResearch() {
           <div class="mt-1 text-lg font-bold text-gray-700 dark:text-gray-300">{{ activity?.items.collectionBottles || 0 }}</div>
         </div>
       </div>
-      <BaseButton v-if="(activity?.items.summonBottles || 0) > 0" size="sm" class="mt-3" variant="success" :loading="summonPending" :disabled="summonPending" @click="handleUseSummon">
+      <BaseButton v-if="hasSummonBottles" size="sm" class="mt-3" variant="success" :loading="summonPending" :disabled="summonPending" @click="handleUseSummon">
         使用召唤瓶（在我的农场召唤雷雨）
       </BaseButton>
     </article>
