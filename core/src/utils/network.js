@@ -787,6 +787,16 @@ function startHeartbeat() {
             }
         }
 
+        // 硬超时：心跳失联超过 45s 强制重连，不依赖 miss 计数
+        if (timeSinceLastResponse > 45000) {
+            logWarn('心跳', `心跳失联超过 45s，强制重连...`);
+            try { if (ws) ws.close(); } catch { }
+            networkEvents.emit('disconnect', { code: 'heartbeat_hard_timeout' });
+            rejectAllPendingRequests('心跳硬超时，已清理');
+            reconnect(null);
+            return;
+        }
+
         const body = types.HeartbeatRequest.encode(types.HeartbeatRequest.create({
             gid: toLong(userState.gid),
             client_version: CONFIG.clientVersion,
