@@ -66,6 +66,13 @@ export const menuRoutes: MenuItem[] = [
     component: () => import('@/views/Analytics.vue'),
   },
   {
+    path: 'stats',
+    name: 'stats',
+    label: '统计榜',
+    icon: 'i-carbon-trophy',
+    component: () => import('@/views/Stats.vue'),
+  },
+  {
     path: 'settings',
     name: 'Settings',
     label: '设置',
