@@ -28,10 +28,31 @@ message SellReply {
 
 message UseRequest {
     corepb.Item item = 1;
+    UseTarget target = 2;
+}
+
+message UseTarget {
+    int64 host_gid = 1;
+    repeated int64 land_ids = 2 [packed = true];
+    int64 use_config_id = 3;
 }
 
 message UseReply {
     repeated corepb.Item used_items = 1;
+    repeated corepb.Item items = 2;
+    gamepb.plantpb.LandInfo land = 4;
+    UseLandReward land_reward = 5;
+    UseSocialReward social_reward = 6;
+}
+
+message UseLandReward {
+    int64 land_id = 1;
+    repeated corepb.Item items = 2;
+}
+
+// 青蛙使坏瓶等整座好友农场道具的奖励回包。
+message UseSocialReward {
+    int64 item_id = 1;
     repeated corepb.Item items = 2;
 }
 

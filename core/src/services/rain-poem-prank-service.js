@@ -1,10 +1,8 @@
-const protobuf = require('protobufjs');
-
 const { PlantPhase } = require('../config/config');
 const { getFriendBlacklist } = require('../models/store');
 const { getUserState, sendMsgAsync } = require('../utils/network');
 const { types } = require('../utils/proto');
-const { log, logWarn, randomDelay, toNum } = require('../utils/utils');
+const { log, logWarn, randomDelay, toNum, toLong } = require('../utils/utils');
 const {
   enterFriendFarm,
   extractReplyFriends,
@@ -66,20 +64,15 @@ function encodeRainPoemPrankRequest(gid, itemId, itemUid, landId = 0) {
   if (toNum(itemId) === RAIN_POEM_CLOUD_BOTTLE_ITEM_ID && toNum(landId) <= 0) {
     throw new Error(`乌云使坏瓶缺少目标地块: ${itemId}`);
   }
-  const writer = protobuf.Writer.create();
-  writer.uint32(10).fork()
-    .uint32(8).int64(toNum(itemId))
-    .uint32(16).int64(1)
-    .uint32(48).int64(toNum(itemUid))
-    .ldelim();
-  const target = writer.uint32(18).fork().uint32(8).int64(toNum(gid));
+  const item = { id: toLong(itemId), count: toLong(1), uid: toLong(itemUid) };
+  const target = {
+    host_gid: toLong(gid),
+    use_config_id: toLong(0),
+  };
   if (toNum(itemId) === RAIN_POEM_CLOUD_BOTTLE_ITEM_ID) {
-    target.uint32(18).fork().int64(toNum(landId)).ldelim();
-  } else {
-    target.uint32(24).int64(0);
+    target.land_ids = [toLong(landId)];
   }
-  target.ldelim();
-  return writer.finish();
+  return types.UseRequest.encode(types.UseRequest.create({ item, target })).finish();
 }
 
 async function putRainPoemPrankBottle(gid, itemId, itemUid, landId) {

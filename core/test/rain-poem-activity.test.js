@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { normalizeRainPoemActivity, normalizeWeatherStatus, describeRainPoemFriendWeather, getOwnWeatherStatus, isLightningMutantPlant, encodeRainPoemSummonUseRequest, mergeRainPoemTaskUsage } = require('../src/services/activity');
+const { normalizeRainPoemActivity, normalizeWeatherStatus, describeRainPoemFriendWeather, getOwnWeatherStatus, isLightningMutantPlant, buildBottleUseRequest, mergeRainPoemTaskUsage } = require('../src/services/activity');
 const { getMutantEffectsByIds } = require('../src/config/gameConfig');
 const { loadProto, types } = require('../src/utils/proto');
 
@@ -136,7 +136,7 @@ test('summon task displays persisted daily usage against the official limit', ()
 });
 
 test('rainstorm summon request matches successful capture', () => {
-  assert.equal(Buffer.from(encodeRainPoemSummonUseRequest(1245950635, 492)).toString('hex'), '0a08088a27100130ec03120808abe58ed2041800');
+  assert.equal(Buffer.from(buildBottleUseRequest(5002, 1, 492, 1245950635)).toString('hex'), '0a08088a27100130ec03120808abe58ed2041800');
 });
 
 test('farm panel can query the current official weather status', () => {

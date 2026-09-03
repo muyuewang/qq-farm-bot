@@ -11,7 +11,7 @@ const protobuf = require('protobufjs/minimal');
 const path = require('node:path');
 const { sendMsgAsync, getUserState, isConnected } = require('../utils/network');
 const { types } = require('../utils/proto');
-const { toNum } = require('../utils/utils');
+const { toNum, toLong } = require('../utils/utils');
 const { getItemImageById, getItemById } = require('../config/gameConfig');
 const { getDataDir } = require('../config/runtime-paths');
 const { createModuleLogger } = require('./logger');
@@ -669,14 +669,20 @@ async function buyRainPoemCollectionBottle() {
   return { ok: true, purchased: true, count: 1, activity: await getRainPoemActivity() };
 }
 
-function encodeRainPoemSummonUseRequest(gid, itemUid) {
-  const writer = protobuf.Writer.create();
-  writer.uint32(10).fork().uint32(8).int64(RAIN_POEM_SUMMON_ITEM_ID)
-    .uint32(16).int64(1).uint32(48).int64(toNum(itemUid)).ldelim();
-  writer.uint32(18).fork().uint32(8).int64(toNum(gid)).uint32(24).int64(0).ldelim();
-  return writer.finish();
+function buildBottleUseRequest(itemId, count, uid, hostGid, landIds) {
+  const item = { id: toLong(itemId), count: toLong(count) };
+  if (toNum(uid) > 0) item.uid = toLong(uid);
+  const payload = { item };
+  if (toNum(hostGid) > 0) {
+    const target = { host_gid: toLong(hostGid) };
+    if (Array.isArray(landIds) && landIds.length > 0) {
+      target.land_ids = landIds.map(lid => toLong(lid));
+    }
+    target.use_config_id = toLong(0);
+    payload.target = target;
+  }
+  return types.UseRequest.encode(types.UseRequest.create(payload)).finish();
 }
-
 
 async function useRainPoemSummonBottle() {
   const before = await getRainPoemActivity();
@@ -691,7 +697,7 @@ async function useRainPoemSummonBottle() {
   if (!bottle) throw new Error('雷雨召唤瓶不足');
   const gid = toNum(getUserState()?.gid);
   if (!gid) throw new Error('尚未获取当前账号 GID');
-  await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeRainPoemSummonUseRequest(gid, bottle.uid));
+  await sendMsgAsync('gamepb.itempb.ItemService', 'Use', buildBottleUseRequest(RAIN_POEM_SUMMON_ITEM_ID, 1, bottle.uid, gid));
   incrementRainPoemSummonUsedToday();
   return { ok: true, used: true, activity: await getRainPoemActivity() };
 }
@@ -818,22 +824,6 @@ async function scanWeatherFriends() {
   return { ok: true, friends: results, activity: await getRainPoemActivity() };
 }
 
-function encodeBottleUseRequest(itemId, count, uid, targetGid, landIds) {
-  const writer = protobuf.Writer.create();
-  writer.uint32(10).fork().uint32(8).int64(itemId)
-    .uint32(16).int64(count).uint32(48).int64(toNum(uid)).ldelim();
-  if (targetGid) {
-    writer.uint32(18).fork().uint32(8).int64(toNum(targetGid));
-    if (landIds && landIds.length > 0) {
-      for (const lid of landIds) {
-        writer.uint32(16).int64(toNum(lid));
-      }
-    }
-    writer.uint32(24).int64(0).ldelim();
-  }
-  return writer.finish();
-}
-
 async function useWeatherFrogBottle(friendGid) {
   const before = await getRainPoemActivity();
   if (!before.active) throw new Error('雨落成诗活动当前不在有效期内');
@@ -850,7 +840,7 @@ async function useWeatherFrogBottle(friendGid) {
   try {
     await enterFriendFarm(targetGid);
     entered = true;
-    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_FROG_PRANK_ITEM_ID, 1, bottle.uid, targetGid));
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', buildBottleUseRequest(RAIN_POEM_FROG_PRANK_ITEM_ID, 1, bottle.uid, targetGid));
   } finally {
     if (entered) {
       try { await leaveFriendFarm(targetGid); } catch {}
@@ -880,7 +870,7 @@ async function useWeatherCloudBottle(friendGid, landId) {
     if (!resolvedLandId) {
       throw new Error('好友当前没有可使用乌云使坏瓶的作物');
     }
-    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, [resolvedLandId]));
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', buildBottleUseRequest(RAIN_POEM_CLOUD_PRANK_ITEM_ID, 1, bottle.uid, targetGid, [resolvedLandId]));
     return { ok: true, friendGid: targetGid, landId: resolvedLandId, activity: await getRainPoemActivity() };
   } finally {
     if (entered) {
@@ -904,7 +894,7 @@ async function useRainPoemLightningAttractBottle(friendGid) {
   try {
     await enterFriendFarm(targetGid);
     entered = true;
-    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', encodeBottleUseRequest(RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID, 1, bottle.uid, targetGid, []));
+    await sendMsgAsync('gamepb.itempb.ItemService', 'Use', buildBottleUseRequest(RAIN_POEM_LIGHTNING_ATTRACT_ITEM_ID, 1, bottle.uid, targetGid));
   } finally {
     if (entered) {
       try { await leaveFriendFarm(targetGid); } catch {}
@@ -3209,6 +3199,7 @@ async function claimCharityFlowerPublicFund() {
 }
 
 module.exports = {
+  buildBottleUseRequest,
   NANGUA_ACTIVITY_UID,
   HELU_ACTIVITY_UID,
   STAR_ACTIVITY_UID,
@@ -3272,7 +3263,6 @@ module.exports = {
   normalizeWeatherStatus,
   describeRainPoemFriendWeather,
   getOwnWeatherStatus,
-  encodeRainPoemSummonUseRequest,
   isLightningMutantPlant,
   scanWeatherFriends,
   useWeatherFrogBottle,

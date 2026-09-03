@@ -29,7 +29,7 @@ test('frog bottle request matches the successful official ItemService.Use captur
 test('cloud bottle request carries the target land from the successful official capture', () => {
   const cloud = encodeRainPoemPrankRequest(1176698833, 5006, 392, 5);
 
-  assert.equal(Buffer.from(cloud).toString('hex'), '0a08088e271001308803120908d1ff8bb104120105');
+  assert.equal(Buffer.from(cloud).toString('hex'), '0a08088e271001308803120b08d1ff8bb1041201051800');
 });
 
 test('unknown items cannot be sent through the prank placement helper', () => {

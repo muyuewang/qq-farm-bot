@@ -249,6 +249,47 @@ function handleUseLightningAttract(friendGid: number) {
                 青蛙使坏
               </BaseButton>
             </div>
+            <BaseButton v-else size="sm" variant="secondary" :loading="frogPending" :disabled="!hasFrogBottles || frogPending" @click.stop="handleUseFrog(friend.gid)">
+              青蛙使坏
+            </BaseButton>
+          </div>
+        </div>
+
+        <div v-if="selectedFriend" class="rounded-lg bg-amber-50 p-4 dark:bg-amber-950/20">
+          <h4 class="text-sm font-medium text-amber-800 dark:text-amber-200">
+            青蛙使坏
+          </h4>
+          <p class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            向 {{ selectedFriend.name }} 的农场投放青蛙使坏瓶（无需好友雷雨）
+          </p>
+          <BaseButton size="sm" class="mt-2" variant="success" :loading="frogPending" :disabled="!hasFrogBottles || frogPending" @click="handleUseFrog(selectedFriend.gid)">
+            使用青蛙使坏瓶
+          </BaseButton>
+        </div>
+
+        <div v-if="selectedFriend" class="rounded-lg bg-purple-50 p-4 dark:bg-purple-950/20">
+          <h4 class="text-sm font-medium text-purple-800 dark:text-purple-200">
+            乌云使坏
+          </h4>
+          <p class="mt-1 text-xs text-purple-600 dark:text-purple-400">
+            向 {{ selectedFriend.name }} 的农场投放乌云使坏瓶（无需好友雷雨）
+          </p>
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              v-model="selectedLandId"
+              type="number"
+              min="0"
+              placeholder="留空自动挑选地块"
+              class="h-8 w-40 rounded-md border border-purple-300 px-2 text-sm dark:border-purple-700 dark:bg-gray-800"
+            >
+            <BaseButton
+              size="sm"
+              :loading="cloudPending"
+              :disabled="!hasCloudBottles || cloudPending"
+              @click="handleUseCloud"
+            >
+              乌云使坏
+            </BaseButton>
           </div>
         </div>
 
@@ -264,38 +305,12 @@ function handleUseLightningAttract(friendGid: number) {
           </BaseButton>
         </div>
 
-        <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-purple-50 p-4 dark:bg-purple-950/20">
-          <h4 class="text-sm font-medium text-purple-800 dark:text-purple-200">
-            乌云使坏
-          </h4>
-          <p class="mt-1 text-xs text-purple-600 dark:text-purple-400">
-            向 {{ selectedFriend.name }} 的农场投放乌云
-          </p>
-          <div class="mt-2 flex items-center gap-2">
-            <input
-              v-model="selectedLandId"
-              type="number"
-              min="0"
-              placeholder="地块 ID"
-              class="h-8 w-24 rounded-md border border-purple-300 px-2 text-sm dark:border-purple-700 dark:bg-gray-800"
-            >
-            <BaseButton
-              size="sm"
-              :loading="cloudPending"
-              :disabled="!hasCloudBottles || !selectedLandId || cloudPending"
-              @click="handleUseCloud"
-            >
-              乌云使坏
-            </BaseButton>
-          </div>
-        </div>
-
         <div v-if="selectedFriend && selectedFriend.rainstorm && !selectedFriend.expired && !selectedFriend.collected" class="rounded-lg bg-violet-50 p-4 dark:bg-violet-950/20">
           <h4 class="text-sm font-medium text-violet-800 dark:text-violet-200">
             闪电感应
           </h4>
           <p class="mt-1 text-xs text-violet-600 dark:text-violet-400">
-            向 {{ selectedFriend.name }} 的农场使用闪电感应瓶
+            向 {{ selectedFriend.name }} 的农场使用闪电感应瓶（需好友处于雷雨）
           </p>
           <BaseButton size="sm" class="mt-2" variant="success" :loading="lightningAttractPending" :disabled="!hasLightningAttractBottles || lightningAttractPending" @click="handleUseLightningAttract(selectedFriend.gid)">
             使用闪电感应瓶
