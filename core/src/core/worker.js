@@ -1969,10 +1969,7 @@ function syncStatus() {
     }
 
     const limits = require('../services/friend').getOperationLimits();
-    const statsSvc = require('../services/stats');
-    const stats = statsSvc.getStats(statusData, userState, connected, limits);
-    // 跨日聚合统计（用于统计榜）
-    const aggregate = statsSvc.scanPersistedOperations(String(process.env.FARM_ACCOUNT_ID || ''));
+    const stats = require('../services/stats').getStats(statusData, userState, connected, limits);
 
     const now = Date.now();
     const farmRemainSec = Math.max(0, Math.ceil((Number(nextFarmRunAt || 0) - now) / 1000));
@@ -1988,7 +1985,6 @@ function syncStatus() {
     stats.automation = getAutomation();
     stats.levelProgress = levelProgress;
     stats.configRevision = appliedConfigRevision;
-    stats.aggregateOperations = aggregate;
 
     const stableStats = { ...stats };
     delete stableStats.nextChecks;

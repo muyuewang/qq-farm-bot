@@ -1,24 +1,12 @@
 const process = require('node:process');
 const path = require('node:path');
-const fs = require('node:fs');
 const { readJsonFile, writeJsonFileAtomic } = require('./json-db');
 
 // ─── 持久化路径 ───
 
-function getStatsFilePath(accountId, dateKey = null) {
+function getStatsFilePath(accountId) {
   const baseDir = process.env.FARM_DATA_DIR || path.join(__dirname, '../../data');
-  if (!dateKey) dateKey = getTodayKey();
-  return path.join(baseDir, 'stats', `${accountId}-${dateKey}.json`);
-}
-
-function listStatsFiles(accountId) {
-  const baseDir = process.env.FARM_DATA_DIR || path.join(__dirname, '../../data');
-  const dir = path.join(baseDir, 'stats');
-  if (!fs.existsSync(dir)) return [];
-  const prefix = `${accountId}-`;
-  return fs.readdirSync(dir)
-    .filter(name => name.startsWith(prefix) && name.endsWith('.json'))
-    .sort();
+  return path.join(baseDir, 'stats', `${accountId  }.json`);
 }
 
 /** 获取 YYYY-MM-DD 格式的当天日期键 */
@@ -357,44 +345,6 @@ function saveStats() {
   doSave();
 }
 
-/**
- * 跨日聚合：扫描 data/stats/ 下所有 accountId 相关的每日 json 文件，合并 operations。
- * 同时加入会话内尚未持久化的当日内存值（若已跨天则仅扫描文件）。
- * @param {string} accountId
- */
-function scanPersistedOperations(accountId) {
-  const aggregated = {};
-  let earliest = null;
-  let latest = null;
-  let totalDays = 0;
-
-  const files = listStatsFiles(accountId);
-  for (const file of files) {
-    const data = readJsonFile(path.join(path.dirname(getStatsFilePath(accountId)), file), null);
-    if (!data || !data.date) continue;
-    totalDays++;
-    if (!earliest || data.date < earliest) earliest = data.date;
-    if (!latest || data.date > latest) latest = data.date;
-    const ops = data.operations || {};
-    for (const [key, value] of Object.entries(ops)) {
-      aggregated[key] = (aggregated[key] || 0) + (Number(value) || 0);
-    }
-  }
-
-  // 把会话内当日尚未写入的内存值补进去（如果今日文件还没写磁盘）
-  if (currentDateKey === getTodayKey()) {
-    for (const [key, value] of Object.entries(operations)) {
-      aggregated[key] = (aggregated[key] || 0) + (Number(value) || 0);
-    }
-  }
-
-  return {
-    totalDays,
-    dateRange: earliest && latest ? { start: earliest, end: latest } : null,
-    operations: aggregated,
-  };
-}
-
 module.exports = {
   recordOperation,
   recordTongQiGift,
@@ -410,7 +360,5 @@ module.exports = {
   saveStats,
   getTodayKey,
   loadPersistedStats,
-  checkAndResetDailyStats,
-  scanPersistedOperations,
-  listStatsFiles
+  checkAndResetDailyStats
 };
