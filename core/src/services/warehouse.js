@@ -453,15 +453,19 @@ async function getBagDetail() {
     const info = getItemById(id) || null;
     const seedPlant = getPlantBySeedId(id);
     let name = info && info.name ? String(info.name) : '';
+    const itemType = info ? Number(info.type) || 0 : 0;
     let category = 'item';
 
     if (id === 1001 || id === 500001) { name = '金币'; category = 'gold'; }
     else if (id === 1002 || id === 500002) { name = '经验'; category = 'exp'; }
-    else if (getPlantByFruitId(id)) {
-      if (!name) name = `${getFruitName(id)  }果实`;
+    else if (itemType === 17) {
+      if (!name) name = `${getFruitName(id)}果实`;
+      category = 'mutant';
+    } else if (itemType === 6 || getPlantByFruitId(id)) {
+      if (!name) name = `${getFruitName(id)}果实`;
       category = 'fruit';
-    } else if (seedPlant) {
-      if (!name) name = `${seedPlant.name || '未知'  }种子`;
+    } else if (itemType === 5 || seedPlant) {
+      if (!name) name = `${seedPlant?.name || '未知'}种子`;
       category = 'seed';
     }
 
@@ -483,7 +487,7 @@ async function getBagDetail() {
         name,
         image: getItemImageById(id),
         category,
-        itemType: info ? Number(info.type) || 0 : 0,
+        itemType,
         priceId: effectivePriceId,
         price: effectivePrice,
         priceUnit,
@@ -514,15 +518,15 @@ async function getBagDetail() {
   });
 
   // 排序：按物品类型排序，同类型按数量降序
-  const typeOrder = new Map([[1, 1], [2, 2], [4, 3]]);
+  const typePriority = new Map([[6, 0], [17, 1], [5, 2]]);
   resultItems.sort((a, b) => {
     if (a.category === 'seed' && b.category === 'seed')
       return compareBagSeedGameOrder(a, b);
 
     const typeA = Number(a.itemType || 0);
     const typeB = Number(b.itemType || 0);
-    const orderA = typeOrder.has(typeA) ? typeOrder.get(typeA) : (typeA > 0 ? 1000 + typeA : Number.MAX_SAFE_INTEGER);
-    const orderB = typeOrder.has(typeB) ? typeOrder.get(typeB) : (typeB > 0 ? 1000 + typeB : Number.MAX_SAFE_INTEGER);
+    const orderA = typePriority.has(typeA) ? typePriority.get(typeA) : (typeA > 0 ? 1000 + typeA : Number.MAX_SAFE_INTEGER);
+    const orderB = typePriority.has(typeB) ? typePriority.get(typeB) : (typeB > 0 ? 1000 + typeB : Number.MAX_SAFE_INTEGER);
     if (orderA !== orderB) return orderA - orderB;
     const countB = Number(b.count || 0);
     const countA = Number(a.count || 0);
