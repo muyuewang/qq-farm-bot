@@ -882,10 +882,9 @@ async function runStealTick(autoConfig) {
     }
     stealTaskRunning = true;
 
-    const defaultStealDelay = randomIntervalMs(
-        CONFIG.stealCheckIntervalMin || 25000,
-        CONFIG.stealCheckIntervalMax || 30000
-    );
+    const userMin = CONFIG.stealCheckIntervalMin || 25000;
+    const userMax = CONFIG.stealCheckIntervalMax || 30000;
+    const defaultStealDelay = randomIntervalMs(userMin, userMax);
     let nextDelay = defaultStealDelay;
 
     try {
@@ -899,7 +898,9 @@ async function runStealTick(autoConfig) {
             });
         }
     } finally {
-        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || defaultStealDelay);
+        // 将自适应延迟夹取到用户配置的区间内，防止成熟时间感知调度拉长间隔
+        const clamped = Math.min(Math.max(1000, Number(nextDelay) || defaultStealDelay), userMax);
+        nextStealRunAt = Date.now() + clamped;
         stealTaskRunning = false;
     }
 }
