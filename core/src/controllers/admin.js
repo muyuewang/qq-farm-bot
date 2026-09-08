@@ -612,6 +612,9 @@ function startAdminServer(dataProvider) {
     requireAdminRole,
     requireDangerConfirmation,
     adminLogger,
+    getAdminUserMutationError,
+    invalidateAdminSessions,
+    updateAdminSessions,
   });
   registerAdminProxyRoutes({ app, logger: adminLogger });
   registerSpaFallback(app, webDist);
