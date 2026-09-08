@@ -611,6 +611,7 @@ function startAdminServer(dataProvider) {
     userStore,
     requireAdminToken,
     requireAdminRole,
+    requireSuperAdminRole,
     requireDangerConfirmation,
     adminLogger,
     getAdminUserMutationError,
