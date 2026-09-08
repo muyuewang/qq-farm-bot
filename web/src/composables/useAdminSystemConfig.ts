@@ -6,6 +6,7 @@ export interface SystemConfig {
   clientVersion: string
   platform: string
   os: string
+  napcatLoginEnabled: boolean
 }
 
 export interface CaptureConfig {
@@ -36,6 +37,7 @@ const defaultSystemConfigValues: SystemConfig = {
   clientVersion: '1.13.0.5_20260723',
   platform: 'qq',
   os: 'iOS',
+  napcatLoginEnabled: false,
 }
 
 const defaultCaptureConfig: CaptureConfig = {

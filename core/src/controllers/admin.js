@@ -583,7 +583,12 @@ function startAdminServer(dataProvider) {
     updateRuntimeConfig,
   });
   registerAdminQrLoginRoutes({ app });
-  registerAdminNapcatLoginRoutes({ app });
+  registerAdminNapcatLoginRoutes({
+    app,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+  });
   registerAdminCardRoutes({
     app,
     requireAdminToken,
@@ -592,7 +597,14 @@ function startAdminServer(dataProvider) {
     userStore,
     adminLogger,
   });
-  registerAdminLoginLogRoutes({ app, store, requireAdminToken });
+  registerAdminLoginLogRoutes({
+    app,
+    userStore,
+    logger: adminLogger,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+  });
   registerAdminUserRoutes({
     app,
     userStore,

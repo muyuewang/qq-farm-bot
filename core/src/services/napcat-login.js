@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const QRCode = require('qrcode');
+const store = require('../models/store');
 
 const APP_ID = '1112386029';
 const TTL_MS = Math.max(30000, Number(process.env.NAPCAT_LOGIN_TTL_MS) || 120000);
@@ -25,8 +26,10 @@ function config() {
 
 function isConfigured() {
   const cfg = config();
-  return /^(?:1|true|yes|on)$/i.test(String(process.env.NAPCAT_LOGIN_ENABLED || ''))
-    && Boolean(cfg.webui && cfg.webuiToken && cfg.plugin && cfg.pluginToken);
+  const systemConfig = store.getSystemConfig();
+  const enabled = systemConfig?.napcatLoginEnabled
+    || /^(?:1|true|yes|on)$/i.test(String(process.env.NAPCAT_LOGIN_ENABLED || ''));
+  return enabled && Boolean(cfg.webui && cfg.webuiToken && cfg.plugin && cfg.pluginToken);
 }
 
 async function requestJson(url, { method = 'POST', body, token = '', timeout = 15000 } = {}) {

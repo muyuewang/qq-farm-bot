@@ -10,18 +10,20 @@ interface OptionItem {
 }
 
 const props = withDefaults(defineProps<{
-  section: 'system' | 'capture'
+  section: 'system' | 'capture' | 'qq-login'
   defaultSystemConfig: SystemConfig
   platformOptions: OptionItem[]
   osOptions: OptionItem[]
   systemConfigSaving: boolean
   captureConfigSaving: boolean
   captureConfigTesting: boolean
+  napcatLoginSaving?: boolean
   showHeading?: boolean
   showSave?: boolean
 }>(), {
   showHeading: true,
   showSave: true,
+  napcatLoginSaving: false,
 })
 
 defineEmits<{
@@ -29,6 +31,7 @@ defineEmits<{
   saveSystem: []
   testCapture: []
   saveCapture: []
+  saveNapcatLogin: []
 }>()
 
 const localSystemConfig = defineModel<SystemConfig>('localSystemConfig', { required: true })
@@ -243,6 +246,57 @@ const localCaptureConfig = defineModel<CaptureConfig>('localCaptureConfig', { re
             size="sm"
             :loading="captureConfigSaving"
             @click="$emit('saveCapture')"
+          >
+            保存
+          </BaseButton>
+        </div>
+      </div>
+
+      <div v-if="props.section === 'qq-login'" class="border border-gray-200 rounded-lg bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+        <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
+          <div class="i-carbon-qr-code" />
+          QQ 扫码登录
+        </h4>
+
+        <div class="grid mb-3 gap-3 md:grid-cols-2">
+          <div class="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+              QQ 扫码登录入口
+            </div>
+            <div class="mt-1 font-semibold">
+              {{ localSystemConfig.napcatLoginEnabled ? '已开放' : '已关闭' }}
+            </div>
+          </div>
+          <div class="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+            <div class="text-xs text-gray-500 dark:text-gray-400">
+              NapCat 容器
+            </div>
+            <div class="mt-1 font-semibold">
+              需要单独部署
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-2xl bg-blue-50 px-4 py-3 text-xs text-blue-800 dark:bg-blue-900/20 dark:text-blue-200 mb-3">
+          开启后，用户可在「新增账号 → QQ 扫码」中扫描二维码完成登录。需要先部署 NapCat 容器。
+        </div>
+
+        <div class="grid grid-cols-1 gap-3 text-sm">
+          <div>
+            <BaseSwitch
+              v-model="localSystemConfig.napcatLoginEnabled"
+              label="允许使用 QQ 扫码登录添加账号"
+            />
+          </div>
+        </div>
+
+        <div class="mt-3 flex justify-end gap-2">
+          <BaseButton
+            v-if="showSave"
+            variant="primary"
+            size="sm"
+            :loading="napcatLoginSaving"
+            @click="$emit('saveNapcatLogin')"
           >
             保存
           </BaseButton>

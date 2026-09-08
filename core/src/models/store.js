@@ -1782,7 +1782,8 @@ function setSystemConfig(config) {
         serverUrl: String(config.serverUrl || '').trim(),
         clientVersion: String(config.clientVersion || '').trim(),
         platform: String(config.platform || 'qq').trim(),
-        os: String(config.os || 'iOS').trim()
+        os: String(config.os || 'iOS').trim(),
+        napcatLoginEnabled: config.napcatLoginEnabled === true,
     };
     saveGlobalConfig();
     return { ...globalConfig.systemConfig };

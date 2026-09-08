@@ -1,10 +1,33 @@
 const napcatLogin = require('../services/napcat-login');
+const store = require('../models/store');
 
 function owner(req) { return String(req.currentUser?.username || ''); }
 function sendError(res, error) { res.status(400).json({ ok: false, error: error.message || 'NapCat 登录失败' }); }
 
-function registerAdminNapcatLoginRoutes({ app }) {
+function registerAdminNapcatLoginRoutes({ app, requireAdminToken, requireAdminRole, requireDangerConfirmation }) {
   app.get('/api/napcat-login/capability', (_req, res) => res.json({ ok: true, data: { enabled: napcatLogin.isConfigured() } }));
+
+  app.get('/api/admin/napcat-login/status', requireAdminToken, requireAdminRole, (_req, res) => {
+    try {
+      const systemConfig = store.getSystemConfig() || {};
+      res.json({ ok: true, data: { enabled: systemConfig.napcatLoginEnabled === true } });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  app.post('/api/admin/napcat-login/status', requireAdminToken, requireAdminRole, (req, res) => {
+    try {
+      if (!requireDangerConfirmation(req, res, 'UPDATE_NAPCAT_LOGIN_STATUS')) return;
+      const { enabled } = req.body || {};
+      const current = store.getSystemConfig() || {};
+      store.setSystemConfig({ ...current, napcatLoginEnabled: enabled === true });
+      res.json({ ok: true, data: { enabled: enabled === true } });
+    } catch (error) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   app.post('/api/napcat-login/tasks', async (req, res) => {
     try { res.json({ ok: true, data: await napcatLogin.create(owner(req), { refresh: req.body?.refresh === true }) }); } catch (error) { sendError(res, error); }
   });
