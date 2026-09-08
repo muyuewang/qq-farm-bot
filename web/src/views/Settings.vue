@@ -20,15 +20,16 @@ import { useSettingStore } from '@/stores/setting'
 const settingStore = useSettingStore()
 const route = useRoute()
 
-type SettingsTabKey = 'account' | 'account-config' | 'system' | 'notification'
+type SettingsTabKey = 'account' | 'account-config' | 'notification'
 
-const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'system', 'notification']
+const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification']
 const LEGACY_SETTINGS_TABS: Record<string, SettingsTabKey> = {
   'strategy': 'account-config',
   'automation': 'account-config',
   'default-plan': 'account-config',
   'user': 'notification',
-  'capture': 'system',
+  'capture': 'notification',
+  'system': 'notification',
 }
 
 function getInitialSettingsTab(): SettingsTabKey {
@@ -62,7 +63,6 @@ watch(activeTab, (newTab) => {
 const tabs = [
   { key: 'account', label: '账号管理', icon: 'i-carbon-user-settings' },
   { key: 'account-config', label: '账号设置', icon: 'i-carbon-settings-adjust' },
-  { key: 'system', label: '系统配置', icon: 'i-carbon-settings-services' },
   { key: 'notification', label: '通知设置', icon: 'i-carbon-notification' },
 ] as const
 
@@ -205,8 +205,7 @@ const {
 const accountSettingsSaving = ref(false)
 const autoCodeRefreshSaving = ref(false)
 const systemSettingsSaving = ref(false)
-const napcatLoginSaving = ref(false)
-const anySystemSaving = computed(() => systemSettingsSaving.value || systemConfigSaving.value || captureConfigSaving.value || deviceProtocolSaving.value || napcatLoginSaving.value)
+const anySystemSaving = computed(() => systemSettingsSaving.value || systemConfigSaving.value || captureConfigSaving.value || deviceProtocolSaving.value)
 
 const announcementContent = ref('')
 const announcementShowOnce = ref(true)
@@ -280,27 +279,6 @@ async function saveAutoCodeRefreshSettings() {
   }
   finally {
     autoCodeRefreshSaving.value = false
-  }
-}
-
-async function saveNapcatLoginSetting() {
-  if (napcatLoginSaving.value)
-    return
-  napcatLoginSaving.value = true
-  try {
-    const result = await api.post('/api/admin/napcat-login/status', {
-      enabled: localSystemConfig.value.napcatLoginEnabled,
-      confirmed: true,
-    })
-    if (!result.data?.ok)
-      throw new Error(result.data?.error || '保存失败')
-    showAlert('QQ 扫码登录设置已保存')
-  }
-  catch (error: any) {
-    showAlert(error.response?.data?.error || error.message || 'QQ 扫码登录设置保存失败', 'danger')
-  }
-  finally {
-    napcatLoginSaving.value = false
   }
 }
 
@@ -577,23 +555,6 @@ onMounted(async () => {
             :capture-config-testing="captureConfigTesting"
             @reset-system="handleResetSystemConfig"
             @test-capture="handleTestCaptureConfig"
-          />
-
-          <AdminSystemPanel
-            v-if="userIsAdmin"
-            v-model:local-system-config="localSystemConfig"
-            v-model:local-capture-config="localCaptureConfig"
-            section="qq-login"
-            :show-heading="false"
-            :show-save="false"
-            :default-system-config="defaultSystemConfig"
-            :platform-options="platformOptions"
-            :os-options="osOptions"
-            :system-config-saving="systemConfigSaving"
-            :capture-config-saving="captureConfigSaving"
-            :capture-config-testing="captureConfigTesting"
-            :napcat-login-saving="napcatLoginSaving"
-            @save-napcat-login="saveNapcatLoginSetting"
           />
 
           <!-- 公告管理 -->
