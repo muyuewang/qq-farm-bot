@@ -18,6 +18,7 @@ const {
   inFriendQuietHours,
   postToMaster,
   normalizeFriendGids,
+  syncKnownFriendGidsFromFriends,
   acceptFriends,
   getApplications,
   enterFriendFarm,
@@ -681,6 +682,7 @@ function refreshFriendCheckLoop(delayMs = 0) {
 // ===== Friend application handling =====
 
 function onFriendApplicationReceived(applications) {
+  syncKnownFriendGidsFromFriends(Array.isArray(applications) ? applications : []);
   if (!isAutomationOn('friend_auto_accept') || !isAutomationOn('friend') || !isConnected()) return;
 
   const names = applications

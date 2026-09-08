@@ -39,6 +39,7 @@ const {
     getFriendDogInfo,
     batchGetFriendDogInfo,
     syncFriendsFromGids,
+    bootstrapQqFriendGids,
     fetchFriendsDogInfo,
     delFriend
 } = require('../services/friend');
@@ -90,8 +91,7 @@ const {
     sellAllFruits,
     getBag,
     getBagItems,
-    openFertilizerGiftPacksSilently,
-    openCharitySettlementGiftPacksSilently
+    openFertilizerGiftPacksSilently
 } = require('../services/warehouse');
 const {
     connect,
@@ -254,8 +254,6 @@ async function runDailyRoutines(force = false, options = {}) {
     try {
         const automation = getAutomation() || {};
         await checkAndClaimEmails(force);
-        // 公益小红花结算礼包随结算邮件发放；挂在此处避免活动结束后等下一次登录才打开。
-        await openCharitySettlementGiftPacksSilently();
         if (automation.task && !options.skipTask) await checkAndClaimTasks();
         if (automation.fertilizer_gift) await openFertilizerGiftPacksSilently();
         await performDailyShare(force);
@@ -505,40 +503,23 @@ async function runStarActivityAutoClaims() {
             } = require('../services/activity');
             let charity = await getCharityFlowerActivity();
             if (charity?.active !== false) {
-                // 逐动作独立容错：单个动作失败不中断其余公益任务
-                if (claimCharityShareEnabled && charity?.seedReward?.claimable) {
-                    try {
-                        await claimCharityFlowerShareReward();
-                    } catch (err) {
-                        log('活动', `自动领取小红花种子失败: ${err.message}`, { module: 'activity', event: '公益种子领取', result: 'error' });
-                    }
+                if (claimCharityShareEnabled && charity?.share?.claimable) {
+                    await claimCharityFlowerShareReward();
                     charity = await getCharityFlowerActivity();
                 }
                 if (donateCharityLoveEnabled && charity?.love?.canDonate && Number(charity?.love?.count || 0) > 0) {
-                    try {
-                        await donateCharityFlowerLove();
-                    } catch (err) {
-                        log('活动', `自动捐赠爱心失败: ${err.message}`, { module: 'activity', event: '公益爱心捐赠', result: 'error' });
-                    }
+                    await donateCharityFlowerLove();
                     charity = await getCharityFlowerActivity();
                 }
                 if (claimCharityRewardsEnabled) {
                     for (const tier of charity?.personalRewards || []) {
-                        if (!tier.claimable) continue;
-                        try {
-                            await claimCharityFlowerReward(tier.needScore);
-                        } catch (err) {
-                            log('活动', `自动领取爱心档位奖励失败 (${tier.needScore}): ${err.message}`, { module: 'activity', event: '公益档位奖励', result: 'error' });
-                        }
+                        if (!tier.reached || tier.claimed) continue;
+                        await claimCharityFlowerReward(tier.needScore);
                     }
                     charity = await getCharityFlowerActivity();
                 }
                 if (claimCharityPublicFundEnabled && charity?.publicFund?.claimable && charity?.publicFund?.complianceAgreed) {
-                    try {
-                        await claimCharityFlowerPublicFund();
-                    } catch (err) {
-                        log('活动', `自动送出公益金失败: ${err.message}`, { module: 'activity', event: '公益金赠送', result: 'error' });
-                    }
+                    await claimCharityFlowerPublicFund();
                 }
             }
         }
@@ -816,8 +797,6 @@ async function runFarmTick(autoConfig) {
     try {
         await runWithRequestPriority('farm', async () => {
             if (autoConfig.farm) await checkFarm();
-            // 结算礼包服务自带 5 分钟冷却；随农场 tick 轮询可及时打开活动结算邮件里的礼包。
-            if (autoConfig.email !== false) await openCharitySettlementGiftPacksSilently();
         });
     } catch { } finally {
         nextFarmRunAt = Date.now() + nextDelay;
@@ -844,6 +823,7 @@ async function runHelpTick(autoConfig) {
         CONFIG.helpCheckIntervalMin || 30000,
         CONFIG.helpCheckIntervalMax || 35000
     );
+    const lowFrequencyDelay = Math.max(10 * 60 * 1000, nextDelay);
 
     try {
         await runWithRequestPriority('friend', async () => {
@@ -859,7 +839,7 @@ async function runHelpTick(autoConfig) {
             });
         }
     } finally {
-        nextHelpRunAt = Date.now() + nextDelay;
+        nextHelpRunAt = Date.now() + lowFrequencyDelay;
         helpTaskRunning = false;
     }
 }
@@ -882,10 +862,7 @@ async function runStealTick(autoConfig) {
     }
     stealTaskRunning = true;
 
-    const userMin = CONFIG.stealCheckIntervalMin || 25000;
-    const userMax = CONFIG.stealCheckIntervalMax || 30000;
-    const defaultStealDelay = randomIntervalMs(userMin, userMax);
-    let nextDelay = defaultStealDelay;
+    let nextDelay = 15 * 60 * 1000;
 
     try {
         nextDelay = await runWithRequestPriority('friend', () => runScheduledStealCheck());
@@ -898,9 +875,7 @@ async function runStealTick(autoConfig) {
             });
         }
     } finally {
-        // 将自适应延迟夹取到用户配置的区间内，防止成熟时间感知调度拉长间隔
-        const clamped = Math.min(Math.max(1000, Number(nextDelay) || defaultStealDelay), userMax);
-        nextStealRunAt = Date.now() + clamped;
+        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || 15 * 60 * 1000);
         stealTaskRunning = false;
     }
 }
@@ -1136,7 +1111,7 @@ async function startBot(config) {
     if (isRunning) return;
     isRunning = true;
 
-    const { code, platform } = config;
+    const { code, platform, loginType } = config;
     CONFIG.platform = platform || 'qq';
 
     await loadProto();
@@ -1237,7 +1212,6 @@ async function startBot(config) {
         };
         networkEvents.on('dogSkillGiftPending', onDogSkillGiftPending);
 
-        // ── 登录后串行执行初始化任务，避免并发洪泛连接 ──
         // 单次背包请求同步点券和金豆豆，避免登录阶段重复并发查询。
         try {
             const bag = await getBag();
@@ -1255,14 +1229,12 @@ async function startBot(config) {
         } catch { }
 
         // 支付服务会更新网关序列状态，等启动背包请求完成后再查询。
-        // 延迟到农场首次 tick 时执行，避免登录阶段请求堆积触发网关退避。
-        workerScheduler.setTimeoutTask('startup_diamond_query', 8000, () => {
-            require('../services/pay').getDiamondBalance()
-                .then(diamond => { getUserState().diamond = Math.max(0, Number(diamond) || 0); })
-                .catch(() => {});
-        });
+        try {
+            const diamond = await require('../services/pay').getDiamondBalance();
+            getUserState().diamond = Math.max(0, Number(diamond) || 0);
+        } catch { }
 
-        // 2. 初始化统计数据
+        // 初始化统计数据
         const userState = getUserState();
         const accountId = process.env.FARM_ACCOUNT_ID || '';
         initStatsWithPersistence(
@@ -1273,36 +1245,31 @@ async function startBot(config) {
         );
         resetSessionGains();
 
-        // 3. 处理邀请码
-        try { await processInviteCodes(); } catch { }
+        // NapCat only supplies Code/UIN. Bootstrap farm-side GIDs after the
+        // authenticated game connection is ready, without requiring openid.
+        if (loginType === 'qq_napcat') {
+            workerScheduler.setTimeoutTask('napcat_friend_gid_bootstrap', 2000, async () => {
+                if (!loginReady) return;
+                try {
+                    await bootstrapQqFriendGids();
+                } catch (err) {
+                    log('好友', `NapCat 扫码后的好友GID补充失败: ${err.message}`, {
+                        module: 'friend', event: 'QQ好友GID引导同步', result: 'error'
+                    });
+                }
+            });
+        }
 
-        // 4. 打开肥料礼包
+        // 处理邀请码
+        await processInviteCodes();
+
+        // 打开肥料礼包
         if (getAutomation().fertilizer_gift) {
-            try { await openFertilizerGiftPacksSilently(); } catch { }
+            await openFertilizerGiftPacksSilently().catch(() => 0);
         }
 
-        // 5. 启动检查循环（先注册监听器，延迟首次执行）
-        startFarmCheckLoop({ externalScheduler: true });
-        startFriendCheckLoop({ externalScheduler: true });
-
-        // 6. 启动统一调度器
-        if (unifiedSchedulerRunning) {
-            resetUnifiedSchedule();
-            scheduleUnifiedNextTick();
-        } else {
-            startUnifiedScheduler();
-        }
-
-        // 7. 启动每日定时器（延迟启动，避免与农场/好友检查重叠）
-        workerScheduler.setTimeoutTask('startup_daily_timers', 5000, () => {
-            initTaskSystem();
-            startDailyRoutineTimer();
-            startStarActivityClaimTimer();
-            startMysteryShopAutoBuyTimer();
-        });
-
-        // 8. 延迟执行放虫放草
-        workerScheduler.setTimeoutTask('bad_startup_once', 20000, async () => {
+        // 延迟执行放虫放草
+        workerScheduler.setTimeoutTask('bad_startup_once', 15000, async () => {
             try {
                 await runBadOnceOnStartup();
             } catch (err) {
@@ -1311,6 +1278,24 @@ async function startBot(config) {
                 });
             }
         });
+
+        // 启动各检查循环
+        startFarmCheckLoop({ externalScheduler: true });
+        startFriendCheckLoop({ externalScheduler: true });
+
+        // 启动统一调度器
+        if (unifiedSchedulerRunning) {
+            resetUnifiedSchedule();
+            scheduleUnifiedNextTick();
+        } else {
+            startUnifiedScheduler();
+        }
+
+        // 启动每日定时器
+        initTaskSystem();
+        startDailyRoutineTimer();
+        startStarActivityClaimTimer();
+        startMysteryShopAutoBuyTimer();
 
         syncStatus();
     };
@@ -1399,13 +1384,6 @@ async function handleApiCall(msg) {
     const { id, method, args } = msg;
     let result = null;
     let error = null;
-
-    // 网关心跳失联时，拒绝大部分 API 调用，避免在死连接上堆积
-    if (!loginReady && method !== 'setAutomation' && method !== 'getDiamondBalance') {
-        error = '网关未就绪，已跳过';
-        sendToMaster({ type: 'api_response', id, result, error });
-        return;
-    }
 
     // 好友同步操作期间暂停自动化
     const isFriendSync = method === 'getFriends' && args[0] === true
@@ -1680,56 +1658,6 @@ async function handleApiCall(msg) {
             case 'getCharityFlowerActivity': {
                 const { getCharityFlowerActivity } = require('../services/activity');
                 result = await getCharityFlowerActivity();
-                break;
-            }
-            case 'scanWeatherFriends': {
-                const { scanWeatherFriends } = require('../services/activity');
-                result = await scanWeatherFriends();
-                break;
-            }
-            case 'useWeatherFrogBottle': {
-                const { useWeatherFrogBottle } = require('../services/activity');
-                result = await useWeatherFrogBottle(args[0]);
-                break;
-            }
-            case 'useWeatherCloudBottle': {
-                const { useWeatherCloudBottle } = require('../services/activity');
-                result = await useWeatherCloudBottle(args[0], args[1]);
-                break;
-            }
-            case 'useRainPoemLightningAttractBottle': {
-                const { useRainPoemLightningAttractBottle } = require('../services/activity');
-                result = await useRainPoemLightningAttractBottle(args[0]);
-                break;
-            }
-            case 'sendCharityFlowerLove': {
-                const { donateCharityFlowerLove } = require('../services/activity');
-                result = await donateCharityFlowerLove();
-                break;
-            }
-            case 'sendCharityFlowerMoney': {
-                const { claimCharityFlowerPublicFund } = require('../services/activity');
-                result = await claimCharityFlowerPublicFund();
-                break;
-            }
-            case 'claimCharityFlowerReward': {
-                const { claimCharityFlowerReward } = require('../services/activity');
-                result = await claimCharityFlowerReward(args[0]);
-                break;
-            }
-            case 'claimCharityFlowerShare': {
-                const { claimCharityFlowerShareReward } = require('../services/activity');
-                result = await claimCharityFlowerShareReward();
-                break;
-            }
-            case 'claimCharityFlowerSeeds': {
-                const { claimCharityFlowerSeeds } = require('../services/activity');
-                result = await claimCharityFlowerSeeds();
-                break;
-            }
-            case 'claimCharityFlowerDailyGift': {
-                const { claimCharityFlowerPublicFund } = require('../services/activity');
-                result = await claimCharityFlowerPublicFund();
                 break;
             }
             case 'exchangeHeluShopItem': {

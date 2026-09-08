@@ -38,6 +38,7 @@ module.exports = {
   getFriendDogInfo,
   batchGetFriendDogInfo,
   syncFriendsFromGids,
+  bootstrapQqFriendGids: friendApi.bootstrapQqFriendGids,
   fetchFriendsDogInfo,
   delFriend: friendApi.delFriend,
 };

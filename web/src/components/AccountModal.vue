@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useIntervalFn } from '@vueuse/core'
+import { useEventListener, useIntervalFn } from '@vueuse/core'
 import { computed, reactive, ref, watch } from 'vue'
 import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
@@ -17,6 +17,7 @@ const emit = defineEmits(['close', 'saved'])
 
 const CODE_QUERY_RE = /[?&]code=([^&]+)/i
 const QR_AUTO_REFRESH_MS = 110_000
+const QQ_QR_AUTO_REFRESH_MS = 100_000
 const CAPTURE_SUCCESS_STORAGE_KEY = 'capture_login_succeeded'
 
 const wxLoginStore = useWxLoginStore()
@@ -42,11 +43,19 @@ interface CaptureFlowState {
   }
 }
 
-const activeTab = ref<'wx' | 'capture' | 'manual'>('manual')
+const activeTab = ref<'wx' | 'qq' | 'capture' | 'manual'>('manual')
 const loading = ref(false)
 const wxChecking = ref(false)
 const errorMessage = ref('')
 const wxAccountName = ref('')
+const qqEnabled = ref(false)
+const qqAccountName = ref('')
+const qqTaskId = ref('')
+const qqQrImage = ref('')
+const qqStatus = ref('点击获取二维码')
+const qqError = ref('')
+const qqLoading = ref(false)
+const qqQrCreatedAt = ref(0)
 const captureEnabled = ref(false)
 const captureLoading = ref(false)
 const captureChecking = ref(false)
@@ -115,10 +124,10 @@ const captureNextStep = computed(() => {
   return `即将自动${props.editData ? '更新' : '添加'}账号`
 })
 
-const { pause: stopWxCheck, resume: startWxCheck } = useIntervalFn(async () => {
-  if (activeTab.value !== 'wx' || wxLoginStore.isLoading || wxChecking.value)
+async function pollWxLogin(refreshExpired = true) {
+  if (!props.show || document.hidden || activeTab.value !== 'wx' || wxLoginStore.isLoading || wxChecking.value)
     return
-  if (shouldRefreshWxQr()) {
+  if (refreshExpired && shouldRefreshWxQr()) {
     await loadWxQRCode()
     return
   }
@@ -149,7 +158,15 @@ const { pause: stopWxCheck, resume: startWxCheck } = useIntervalFn(async () => {
   finally {
     wxChecking.value = false
   }
-}, 2000, { immediate: false })
+}
+
+const { pause: stopWxCheck, resume: startWxCheck } = useIntervalFn(pollWxLogin, 2000, { immediate: false })
+
+useEventListener(document, 'visibilitychange', () => {
+  // 先检查原二维码，避免切回时丢弃已在微信确认的登录。
+  if (!document.hidden)
+    void pollWxLogin(false)
+})
 
 const { pause: stopCaptureCheck, resume: startCaptureCheck } = useIntervalFn(async () => {
   if (activeTab.value !== 'capture' || !captureFlow.value || captureCompleting.value || captureChecking.value)
@@ -171,6 +188,78 @@ const { pause: stopCaptureCheck, resume: startCaptureCheck } = useIntervalFn(asy
     captureChecking.value = false
   }
 }, 1500, { immediate: false })
+
+const { pause: stopQqCheck, resume: startQqCheck } = useIntervalFn(async () => {
+  if (activeTab.value !== 'qq' || !qqTaskId.value || qqLoading.value)
+    return
+  if (qqQrCreatedAt.value && Date.now() - qqQrCreatedAt.value >= QQ_QR_AUTO_REFRESH_MS) {
+    await startQqLogin()
+    return
+  }
+  try {
+    const { data } = await api.post(`/api/napcat-login/tasks/${qqTaskId.value}/status`, undefined, { timeout: 20000, skipErrorToast: true } as any)
+    if (!data?.ok)
+      throw new Error(data?.error || '查询扫码状态失败')
+    qqStatus.value = data.data.status === 'scanned' ? '已扫码，请在 QQ 中确认' : '请使用 QQ 扫码登录'
+    if (data.data.status === 'confirmed') {
+      stopQqCheck()
+      qqLoading.value = true
+      qqStatus.value = '正在获取农场 Code 并清理 QQ 会话…'
+      const result = await api.post(`/api/napcat-login/tasks/${qqTaskId.value}/code`, undefined, { timeout: 120000, skipErrorToast: true } as any)
+      if (!result.data?.ok || !result.data.data?.code)
+        throw new Error(result.data?.error || '获取农场 Code 失败')
+      qqTaskId.value = ''
+      await addAccount({ id: props.editData?.id, name: props.editData?.name || qqAccountName.value.trim() || result.data.data.nickname || `QQ账号${result.data.data.uin || Date.now()}`, code: result.data.data.code, platform: 'qq', loginType: 'qq_napcat', qq: result.data.data.uin || '', uin: result.data.data.uin || '', startAfterSave: true })
+    }
+  }
+  catch (e: any) {
+    stopQqCheck()
+    qqError.value = e.response?.data?.error || e.message || 'QQ 扫码登录失败'
+  }
+  finally { qqLoading.value = false }
+}, 1500, { immediate: false })
+
+async function loadQqCapability() {
+  try {
+    const { data } = await api.get('/api/napcat-login/capability')
+    qqEnabled.value = data?.ok && data.data?.enabled === true
+  }
+  catch { qqEnabled.value = false }
+}
+
+async function cancelQqTask() {
+  stopQqCheck()
+  const id = qqTaskId.value
+  qqTaskId.value = ''
+  qqQrImage.value = ''
+  qqQrCreatedAt.value = 0
+  if (id) {
+    try {
+      await api.post(`/api/napcat-login/tasks/${id}/cancel`, undefined, { timeout: 30000, skipErrorToast: true } as any)
+    }
+    catch {}
+  }
+}
+
+async function startQqLogin(forceRefresh = Boolean(qqQrImage.value)) {
+  if (qqLoading.value)
+    return
+  qqLoading.value = true
+  qqError.value = ''
+  await cancelQqTask()
+  try {
+    const { data } = await api.post('/api/napcat-login/tasks', { refresh: forceRefresh }, { timeout: 30000, skipErrorToast: true } as any)
+    if (!data?.ok || !data.data?.taskId)
+      throw new Error(data?.error || '获取 QQ 二维码失败')
+    qqTaskId.value = data.data.taskId
+    qqQrImage.value = data.data.qrImage
+    qqQrCreatedAt.value = Date.now()
+    qqStatus.value = '请使用 QQ 扫码并确认登录'
+    startQqCheck()
+  }
+  catch (e: any) { qqError.value = e.response?.data?.error || e.message || '获取 QQ 二维码失败' }
+  finally { qqLoading.value = false }
+}
 
 async function loadCaptureConfig() {
   try {
@@ -397,6 +486,7 @@ const wxQrImageSrc = computed(() => {
 
 function close() {
   stopWxCheck()
+  void cancelQqTask()
   stopCaptureCheck()
   void cancelCaptureSession()
   wxLoginStore.resetState()
@@ -413,12 +503,14 @@ watch(() => props.show, (newVal) => {
     capturePlatform.value = props.editData?.platform === 'wx' ? 'wx' : 'qq'
     captureHelpMode.value = localStorage.getItem(CAPTURE_SUCCESS_STORAGE_KEY) === '1' ? 'daily' : 'first'
     void loadCaptureConfig()
+    void loadQqCapability()
     if (props.editData) {
       activeTab.value = 'manual'
       form.name = props.editData.name || ''
       form.code = props.editData.code || ''
       form.platform = props.editData.platform || 'qq'
       wxAccountName.value = props.editData.name || ''
+      qqAccountName.value = props.editData.name || ''
     }
     else {
       activeTab.value = 'manual'
@@ -426,10 +518,12 @@ watch(() => props.show, (newVal) => {
       form.code = ''
       form.platform = 'qq'
       wxAccountName.value = ''
+      qqAccountName.value = ''
     }
   }
   else {
     stopWxCheck()
+    void cancelQqTask()
     stopCaptureCheck()
     void cancelCaptureSession()
     wxLoginStore.resetState()
@@ -443,6 +537,10 @@ watch(activeTab, (tab) => {
   }
   if (tab === 'wx')
     loadWxQRCode()
+  if (tab === 'qq' && !qqTaskId.value)
+    void startQqLogin()
+  if (tab !== 'qq')
+    void cancelQqTask()
   if (tab !== 'capture')
     void cancelCaptureSession()
 })
@@ -466,6 +564,15 @@ watch(activeTab, (tab) => {
         </div>
 
         <div class="mb-4 flex border-b" :style="{ borderColor: 'color-mix(in srgb, var(--theme-text) 10%, transparent)' }">
+          <button
+            v-if="qqEnabled"
+            class="flex-1 py-2 text-center text-sm font-medium transition-colors"
+            :class="activeTab === 'qq' ? 'border-b-2' : 'opacity-60'"
+            :style="{ color: activeTab === 'qq' ? 'var(--theme-primary)' : 'var(--theme-text)', borderColor: 'var(--theme-primary)' }"
+            @click="activeTab = 'qq'"
+          >
+            QQ 扫码
+          </button>
           <button
             class="flex-1 py-2 text-center text-sm font-medium transition-colors"
             :class="activeTab === 'manual' ? 'border-b-2' : 'opacity-60'"
@@ -500,6 +607,38 @@ watch(activeTab, (tab) => {
           >
             抓包登录
           </button>
+        </div>
+
+        <div v-if="activeTab === 'qq'" class="space-y-4">
+          <BaseInput v-model="qqAccountName" label="账号备注（可选）" placeholder="留空则使用默认账号名" />
+          <div class="flex flex-col items-center justify-center py-4 space-y-4">
+            <div
+              v-if="qqQrImage"
+              class="border rounded-lg bg-white p-2 transition-opacity"
+              :class="qqLoading ? 'cursor-wait opacity-60' : 'cursor-pointer hover:opacity-80'"
+              title="点击刷新二维码"
+              role="button"
+              tabindex="0"
+              @click="!qqLoading && startQqLogin()"
+              @keydown.enter.prevent="!qqLoading && startQqLogin()"
+              @keydown.space.prevent="!qqLoading && startQqLogin()"
+            >
+              <img :src="qqQrImage" class="h-48 w-48">
+            </div>
+            <div v-else class="h-48 w-48 flex items-center justify-center rounded-lg" :style="{ background: 'color-mix(in srgb, var(--theme-bg) 90%, var(--theme-text))' }">
+              <div v-if="qqLoading" i-svg-spinners-90-ring-with-bg class="text-3xl" :style="{ color: 'var(--theme-primary)' }" />
+              <span v-else class="text-sm" :style="{ color: 'var(--theme-text)' }">正在获取二维码…</span>
+            </div>
+            <p class="text-center text-sm" :style="{ color: 'var(--theme-text)' }">
+              {{ qqStatus }}
+            </p>
+            <p v-if="qqError" class="text-center text-sm text-red-600">
+              {{ qqError }}
+            </p>
+          </div>
+          <div class="text-center text-xs opacity-60" :style="{ color: 'var(--theme-text)' }">
+            扫码成功后会自动获取 Code，并退出临时 NapCat QQ 会话
+          </div>
         </div>
 
         <div v-if="activeTab === 'wx'" class="space-y-4">

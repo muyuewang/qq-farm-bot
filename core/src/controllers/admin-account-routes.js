@@ -87,23 +87,18 @@ function registerAdminAccountRoutes({
   app.get("/api/accounts", (req, res) => {
     try {
       const currentUser = req.currentUser;
-      const filter = (req.query.filter || "").toString().trim();
       let data;
       if (currentUser) {
         const accounts = provider.getAccounts();
-        const isAdmin =
-          currentUser.role === "admin" || currentUser.role === "super_admin";
-        // 管理员默认显示全部；?filter=mine 时仅显示自己添加的
-        if (isAdmin && filter !== "mine") {
-          data = accounts;
-        } else {
-          data = {
-            ...accounts,
-            accounts: accounts.accounts.filter(
-              (account) => account.username === currentUser.username,
-            ),
-          };
-        }
+        data =
+          currentUser.role === "admin" || currentUser.role === "super_admin"
+            ? accounts
+            : {
+                ...accounts,
+                accounts: accounts.accounts.filter(
+                  (account) => account.username === currentUser.username,
+                ),
+              };
       } else {
         data = { accounts: [], nextId: 1 };
       }
@@ -218,6 +213,8 @@ function registerAdminAccountRoutes({
       }
       if (gateway) body.code = gateway.code;
       delete body.gatewayUrl;
+      const startAfterSave = body.startAfterSave === true;
+      delete body.startAfterSave;
       const currentUser = req.currentUser;
       const isUpdate = !!body.id;
       const isAdmin =
@@ -351,8 +348,21 @@ function registerAdminAccountRoutes({
             }
           });
         }
-      } else if (wasRunning && !onlyRenaming) {
-        provider.restartAccount(nextAccount.id);
+      } else if (!onlyRenaming && (wasRunning || startAfterSave)) {
+        startQueued = true;
+        const startOperation = wasRunning
+          ? provider.restartAccount(nextAccount.id)
+          : provider.startAccount(nextAccount.id);
+        Promise.resolve(startOperation).catch((error) => {
+          if (provider.addAccountLog) {
+            provider.addAccountLog(
+              "start_failed",
+              `账号 ${nextAccount.name || nextAccount.id} 后台启动失败: ${error.message || error}`,
+              nextAccount.id,
+              nextAccount.name || "",
+            );
+          }
+        });
       }
 
       // 使用 provider 的脱敏结果，避免把微信滚动凭证返回浏览器。

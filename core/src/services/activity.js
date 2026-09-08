@@ -3011,6 +3011,7 @@ const CHARITY_FLOWER_CLAIM_SHARE_CMD = 35;
 const CHARITY_FLOWER_DONATE_ALL_CMD = 36;
 const CHARITY_FLOWER_CLAIM_REWARD_CMD = 37;
 const CHARITY_FLOWER_CLAIM_XHH_CMD = 38;
+const CHARITY_PROGRESS_ALREADY_CLAIMED_CODE = 1034087;
 // flow_status 是每日小红花流程：1=今日小红花未收获，2=已收获待领每日礼包，3=每日礼包已领取。
 // 每日礼包（送出公益金）必须先收获当日小红花，否则官方返回 1034088/1034092。
 const CHARITY_FLOW_HARVESTED = 2;
@@ -3022,6 +3023,55 @@ const CHARITY_FLOWER_ERROR_MESSAGES = new Map([
   [1034091, '当前爱心不足，无法捐赠'],
   [1034092, '今天还没有收获小红花，暂时无法领取公益礼包'],
 ]);
+
+// 公益小红花进度奖励状态持久化（区分已领取 vs 可领取，对齐上游 03a3fe4）
+const charityProgressStatePath = () => path.join(getDataDir(), 'charity-progress-state.json');
+let charityProgressStateCache = null;
+const lastCharityProgressState = new Map();
+
+function loadCharityProgressState() {
+  if (charityProgressStateCache) return charityProgressStateCache;
+  try { charityProgressStateCache = readJsonFile(charityProgressStatePath()) || {}; } catch { charityProgressStateCache = {}; }
+  return charityProgressStateCache;
+}
+function persistCharityProgressState(state) {
+  try { charityProgressStateCache = state; writeJsonFileAtomic(charityProgressStatePath(), state); } catch {}
+  return state;
+}
+function getCharityProgressState(activityId) {
+  const state = loadCharityProgressState();
+  return state[activityId] || { activityId, initialized: false, claimedProgressTargets: [], pendingProgressTargets: [] };
+}
+function rememberClaimedCharityProgressTarget(target) {
+  const activityId = String(CHARITY_FLOWER_ACTIVITY_ID);
+  const current = getCharityProgressState(activityId);
+  const claimed = new Set(current.claimedProgressTargets);
+  const pending = new Set(current.pendingProgressTargets);
+  claimed.add(String(target));
+  pending.delete(String(target));
+  const next = { ...current, activityId, initialized: true, claimedProgressTargets: Array.from(claimed), pendingProgressTargets: Array.from(pending) };
+  lastCharityProgressState.set(activityId, next);
+  persistCharityProgressState(next);
+}
+function reconcileCharityProgressState(body, activityId) {
+  const current = getCharityProgressState(activityId);
+  const claimed = new Set(current.claimedProgressTargets);
+  const pending = new Set(current.pendingProgressTargets);
+  const reachedTargets = (body.personal_rewards || [])
+    .filter(item => toNum(item.target) > 0 && toNum(item.status) === 1)
+    .map(item => String(toNum(item.target)));
+  if (!current.initialized) {
+    reachedTargets.slice(0, -1).forEach(t => claimed.add(t));
+    reachedTargets.slice(-1).forEach(t => pending.add(t));
+  } else {
+    reachedTargets.forEach(t => { if (!claimed.has(t) && !pending.has(t)) pending.add(t); });
+  }
+  claimed.forEach(t => pending.delete(t));
+  const next = { ...current, activityId, initialized: true, claimedProgressTargets: Array.from(claimed), pendingProgressTargets: Array.from(pending) };
+  lastCharityProgressState.set(activityId, next);
+  persistCharityProgressState(next);
+  return next;
+}
 
 function isCharityFlowerActive(nowSeconds = Math.floor(Date.now() / 1000)) {
   return nowSeconds >= CHARITY_FLOWER_START_TIME && nowSeconds <= CHARITY_FLOWER_END_TIME;
@@ -3057,6 +3107,13 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
   const finalThreshold = toNum(body.final_pack_threshold);
   const personalReached = finalThreshold > 0 && personalScore >= finalThreshold;
   const globalReached = globalTarget > 0 && globalScore >= globalTarget;
+
+  // 进度奖励状态对齐上游：status=1 表示已达成（非已领取），已领取需本地持久化区分
+  const activityIdStr = String(toNum(activity.id) || CHARITY_FLOWER_ACTIVITY_ID);
+  const progressState = reconcileCharityProgressState(body, activityIdStr);
+  const claimedProgressTargets = new Set(progressState.claimedProgressTargets);
+  const pendingProgressTargets = new Set(progressState.pendingProgressTargets);
+
   return {
     uid: CHARITY_FLOWER_ACTIVITY_UID,
     title: String(activity.title || '公益小红花'),
@@ -3096,14 +3153,16 @@ function normalizeCharityFlowerActivity(node, nowSeconds = Math.floor(Date.now()
       const target = toNum(item.target);
       const status = toNum(item.status);
       const reached = target > 0 && personalScore >= target;
+      const targetStr = String(target);
+      const claimed = claimedProgressTargets.has(targetStr);
       return {
         needScore: target,
         target,
         status,
         reached,
-        // 抓包证实：领取成功后 status 从 0 变 1 —— 0=已达成可领取，1=已领取
-        claimable: reached && status === 0,
-        claimed: status >= 1,
+        claimed,
+        // 上游修正：status=1 表示已达成（非已领取），claimable 需本地持久化区分
+        claimable: reached && status === 1 && !claimed && pendingProgressTargets.has(targetStr),
         rewards: (item.reward || []).map(normalizeCoreItem),
       };
     }),
@@ -3174,14 +3233,33 @@ function translateCharityFlowerError(err) {
 async function claimCharityFlowerReward(needPersonalScore) {
   assertCharityFlowerActive('领取爱心档位奖励');
   const threshold = Math.max(1, toNum(needPersonalScore));
+  let reply = null;
+  let alreadyClaimed = false;
   try {
-    const reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_REWARD_CMD, {
+    reply = await operateActivityReply(CHARITY_FLOWER_ACTIVITY_ID, CHARITY_FLOWER_CLAIM_REWARD_CMD, {
       charityFlowerClaimReward: { needPersonalScore: threshold },
     });
-    return { ok: true, needScore: threshold, awards: (reply?.charity_flower_claim_reward?.awards || []).map(normalizeCoreItem) };
   } catch (err) {
-    throw translateCharityFlowerError(err);
+    if (err?.message?.includes(`code=${CHARITY_PROGRESS_ALREADY_CLAIMED_CODE}`)) {
+      alreadyClaimed = true;
+    } else {
+      throw translateCharityFlowerError(err);
+    }
   }
+  rememberClaimedCharityProgressTarget(threshold);
+  const result = reply?.charity_flower_claim_reward;
+  const rewards = result?.awards ? result.awards.map(normalizeCoreItem) : [];
+  return {
+    ok: true,
+    needScore: threshold,
+    claimed: true,
+    alreadyClaimed,
+    rewards,
+    message: alreadyClaimed
+      ? `公益进度奖励已领取（${threshold} 份爱心）`
+      : `公益进度奖励领取成功（${threshold} 份爱心）`,
+    activity: await getCharityFlowerActivity(),
+  };
 }
 
 async function claimCharityFlowerPublicFund() {

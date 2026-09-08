@@ -6,7 +6,7 @@
 
 🌱 一位會自己澆水、除草、收菜的 QQ 露天小幫手
 
-[能做什麼](#-能做什麼) · [微信掃碼](#-微信掃碼登入) · [開始種田](#-開始種田) · [Docker 部署](#-docker-部署) · [更新紀錄](docs/CHANGELOG.md) · [使用文件](#-使用文件) · [賽博義父](#-賽博義父)
+[能做什麼](#-能做什麼) · [微信掃碼](#-微信掃碼登入) · [QQ 掃碼](#-qq-掃碼登入) · [開始種田](#-開始種田) · [Docker 部署](#-docker-部署) · [更新紀錄](docs/CHANGELOG.md) · [使用文件](#-使用文件) · [賽博義父](#-賽博義父)
 
 </div>
 
@@ -20,7 +20,7 @@
 - 🖥️ **隨時看看田裡**：Web 控制面板、即時日誌和數據統計
 - 🌻 **認識每株作物**：作物圖鑑、土地狀態和變異效果展示
 - 🎉 **趕上限時活動**：活動功能持續更新，還有活動分析
-- 📱 **輕鬆新增帳號**：支援內建微信掃碼、手機抓包登入和 QQ 好友同步
+- 📱 **輕鬆新增帳號**：支援微信掃碼、QQ 掃碼、手機抓包登入和 QQ 好友同步
 - 📦 **多種方式開工**：支援原始碼、Docker 和桌面二進位構建
 
 > 🌱 想看看這片農場是怎麼一步步長大的嗎？前往[農場成長紀錄](docs/CHANGELOG.md)查看最新更新和完整歷史。
@@ -44,6 +44,62 @@
 
 > 這輪自癒只處理登入憑證重新整理、Worker 無回應和重登熔斷；尚未引入業務請求合併、心跳請求容量預留或資源包完整性校驗。
 
+## 🐧 QQ 掃碼登入
+
+QQ 玩家可透過 NapCat 容器實現掃碼登入，無需手動抓包或填寫 Code。在「新增帳號 → QQ 掃碼」中掃描二維碼即可完成。
+
+### 部署 NapCat
+
+啟動時需額外啟用 `napcat` Profile：
+
+```bash
+# 複製環境變數範本並編輯
+cp .env.compose.example .env
+# 取消註釋以下兩行
+# COMPOSE_PROFILES=napcat
+# NAPCAT_LOGIN_ENABLED=true
+
+# 使用 compose 腳本啟動（自動偵測主機名稱）
+./compose.sh up -d --build
+```
+
+或手動使用 docker compose：
+
+```bash
+NAPCAT_LOGIN_ENABLED=true COMPOSE_PROFILES=napcat docker compose up -d --build
+```
+
+首次啟動時，NapCat 容器會自動：
+
+1. 生成隨機 Token 並寫入 `data/napcat/auth/token`
+2. 解壓並配置 NapCat Shell
+3. 安裝 `qq-miniapp-openauth` 插件（用於獲取農場小程序授權 Code）
+4. 啟動 QQ 機器人服務（WebUI 於埠 `6099`）
+
+### 掃碼流程
+
+1. 確保 NapCat 容器正常運行（`./compose.sh ps`）。
+2. 進入「新增帳號 → QQ 掃碼」，點擊「取得二維碼」。
+3. 使用手機 QQ 掃描二維碼，並在 QQ 中確認授權。
+4. 確認後 Bot 自動獲取農場 Code、新增帳號並清理 QQ 會話。
+5. 帳號新增後，QQ 好友 GID 將在後台自動同步（約 15 秒）。
+
+### 配置項
+
+| 環境變數 | 預設值 | 說明 |
+| --- | --- | --- |
+| `NAPCAT_LOGIN_ENABLED` | `false` | 是否啟用 QQ 掃碼登入 |
+| `NAPCAT_IMAGE` | `mlikiowa/napcat-docker:v4.18.19` | NapCat Docker 鏡像版本 |
+| `NAPCAT_DEVICE_NAME` | 自動偵測 | NapCat 容器主機名稱 |
+| `NAPCAT_UID` / `NAPCAT_GID` | `1000` | NapCat 容器運行用戶 ID |
+
+### 注意事項
+
+- NapCat 容器僅綁定 `127.0.0.1:6099`，不對外暴露。
+- 每次掃碼完成後會自動登出 QQ 並重啟會話，避免殘留。
+- 若掃碼失敗，可嘗試重新取得二維碼（自動清除 stale 會話）。
+- 需要 Linux Docker 環境；macOS 和 Windows 請使用 Docker Desktop。
+
 ## 🧺 小推車裡裝了什麼
 
 | 模組 | 技術 |
@@ -65,7 +121,7 @@
 ### 把農場跑起來
 
 ```bash
-git clone https://github.com/xxxscarlxrd404/qq-farm-bot.git
+git clone https://github.com/muyuewang/qq-farm-bot.git
 cd qq-farm-bot
 
 corepack enable
@@ -94,10 +150,25 @@ pnpm dev:web
 
 ## 🐳 Docker 部署
 
+### 基礎部署（不含 QQ 掃碼）
+
 ```bash
-git clone https://github.com/xxxscarlxrd404/qq-farm-bot.git
+git clone https://github.com/muyuewang/qq-farm-bot.git
 cd qq-farm-bot
 docker compose up -d --build
+```
+
+### 完整部署（含 QQ 掃碼）
+
+```bash
+git clone https://github.com/muyuewang/qq-farm-bot.git
+cd qq-farm-bot
+
+# 複製並編輯環境變數
+cp .env.compose.example .env
+# 編輯 .env 啟用 NapCat
+
+./compose.sh up -d --build
 ```
 
 查看運行狀態和日誌：
@@ -120,6 +191,7 @@ docker compose up -d --build
 | --- | --- |
 | Web 管理面板 | `3007` |
 | 抓包代理埠 | `18000` |
+| NapCat WebUI | `127.0.0.1:6099` |
 | 持久化資料 | 倉庫上層目錄的 `data/` |
 
 原始碼運行、Docker 和二進位發布版的抓包服務均預設關閉；只有在
@@ -133,7 +205,7 @@ CAPTURE_ADVERTISE_IPS=192.168.1.100,100.64.0.2
 
 ## 🔑 登入方式
 
-專案支援微信掃碼、手動填碼和手機抓包三種帳號新增方式。
+專案支援微信掃碼、QQ 掃碼、手動填碼和手機抓包四種帳號新增方式。
 
 ### 微信掃碼
 
@@ -145,6 +217,15 @@ CAPTURE_ADVERTISE_IPS=192.168.1.100,100.64.0.2
 微信掃描會話與當前面板使用者繫結。若憑證已被微信撤銷、長時間停機後過期或手機重新授權導致舊會話失效，需要重新掃描。
 
 帳號建立 WebSocket 連線後，Bot 會讀取登入回包和心跳回包中的 `version_force` 或 `version_recommend`。偵測到符合格式的完整版本（例如 `1.13.1.6_20260723`）時，會自動更新「系統設定 → 客戶端版本」，後續連線直接使用該值。強制版本優先於推薦版本，日期部分來自服務端原始版本，不會按本機當天日期產生。
+
+### QQ 掃碼
+
+1. 確保 NapCat 容器已啟動（Docker 部署）。
+2. 進入「新增帳號 → QQ 掃碼」，點擊「取得二維碼」。
+3. 使用手機 QQ 掃描二維碼並確認授權。
+4. 確認後帳號自動新增，QQ 好友 GID 後台同步。
+
+詳細部署和配置請查看 [QQ 掃碼登入](#-qq-掃碼登入) 章節。
 
 ### 手機抓包
 
@@ -182,8 +263,11 @@ qq-farm-bot/
 │   ├── src/              # 設定、介面、模型和業務服務
 │   └── test/             # 後端測試
 ├── web/                  # Vue 管理面板
+├── napcat/               # NapCat Docker 配置（QQ 掃碼登入）
 ├── docs/images/          # README 圖片資源
 ├── docker-compose.yml
+├── compose.sh            # Docker Compose 啟動腳本
+├── .env.compose.example  # 環境變數範本
 └── package.json
 ```
 

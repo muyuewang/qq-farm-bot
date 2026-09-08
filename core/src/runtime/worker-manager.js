@@ -261,7 +261,7 @@ function createWorkerManager(deps) {
         // 发送启动配置
         proc.send({
             type: 'start',
-            config: { code: account.code, platform: account.platform }
+            config: { code: account.code, platform: account.platform, loginType: account.loginType || 'manual' }
         });
 
         // 发送配置快照

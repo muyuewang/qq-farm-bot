@@ -37,6 +37,8 @@ api.interceptors.response.use((response) => {
   if (axios.isCancel(error) || error?.code === 'ERR_CANCELED') {
     return Promise.reject(error)
   }
+  if (error?.config?.skipErrorToast === true)
+    return Promise.reject(error)
 
   const toast = useToastStore()
 
@@ -54,14 +56,6 @@ api.interceptors.response.use((response) => {
         return Promise.reject(error)
       }
       toast.error(`服务器错误 ${error.response.status} ${error.response.statusText}`)
-    }
-    else if (error.response.status === 400) {
-      const backendError = String(error.response.data?.error || '')
-      if (backendError) {
-        toast.error(backendError)
-        return Promise.resolve({ data: { ok: false, error: backendError } })
-      }
-      toast.error('请求失败，请联系管理员')
     }
     else {
       toast.error('请求失败，请联系管理员')

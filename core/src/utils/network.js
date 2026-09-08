@@ -20,7 +20,7 @@ const { recordOperation, recordTongQiGift, getTongQiGiftCount } = require('../se
 const { types } = require('./proto');
 const { toLong, toNum, syncServerTime, log, logWarn } = require('./utils');
 const cryptoWasm = require('./crypto-wasm');
-const { createGatewayToken } = require('./gateway-token');
+const { createGatewayToken, GatewayTokenProvider } = require('./gateway-token');
 const { evaluateGatewayHealth, getOldestPendingAgeMs } = require('./gateway-health');
 const {
     resolveRequestClass,
@@ -81,6 +81,7 @@ let tsdkRuntime = null;
 let aceService = null;
 let initialGamePackInfo = '';
 let loginReady = false;
+const gatewayTokens = new GatewayTokenProvider();
 
 const DEFAULT_DEVICE_FINGERPRINT = Object.freeze({
     os: 'iOS',
@@ -402,8 +403,7 @@ async function encodeMsg(serviceName, methodName, bodyBytes, clientSeqValue) {
     if (finalBody.length > 0) {
         finalBody = await cryptoWasm.encryptBuffer(finalBody);
     }
-    const gatewayToken = initialGamePackInfo || createGatewayToken();
-    initialGamePackInfo = '';
+    const gatewayToken = gatewayTokens.next();
     const msg = types.GateMessage.create({
         meta: {
             service_name: serviceName,
@@ -886,8 +886,10 @@ async function sendLogin(context, onLoginSuccess, deviceProtocol) {
                     userState.avatar = String(reply.basic.avatar_url || '').trim();
                     if (tsdkRuntime && userState.openId) {
                         tsdkRuntime.bindUser(userState.openId);
-                        initialGamePackInfo = tsdkRuntime.getEncryptedInitInfo();
-                        logAce('info', `ACE 用户身份已绑定：初始化凭据长度 ${initialGamePackInfo.length}`);
+                        const initTokenLength = gatewayTokens.stageInitToken(tsdkRuntime.getEncryptedInitInfo());
+                        if (initTokenLength > 0) {
+                            logAce('info', `ACE 用户身份已绑定：初始化凭据长度 ${initTokenLength}`);
+                        }
                     }
 
                     updateStatusFromLogin({
@@ -1223,6 +1225,7 @@ function stopNetwork(reason = '停止网络') {
     rejectAllPendingRequests(`请求已中断: ${reason}`);
     rejectAllQueuedRequests(`请求已中断: ${reason}`);
     networkScheduler.clearAll();
+    gatewayTokens.clear();
     closeCurrentWs({ terminate: true });
     userState.gid = 0;
 }

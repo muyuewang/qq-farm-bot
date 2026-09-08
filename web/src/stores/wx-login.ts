@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
+class ProtocolNetworkError extends Error {}
+
 export const useWxLoginStore = defineStore('wx-login', () => {
   // 扫码登录状态
   const isLoading = ref(false)
@@ -31,12 +33,27 @@ export const useWxLoginStore = defineStore('wx-login', () => {
   }
 
   async function requestProtocol(body: Record<string, any>) {
-    const response = await fetch('/api/wx-login/protocol', {
-      method: 'POST',
-      headers: buildProtocolHeaders(),
-      body: JSON.stringify(body),
-    })
-    return response.json()
+    let response: Response
+    try {
+      response = await fetch('/api/wx-login/protocol', {
+        method: 'POST',
+        headers: buildProtocolHeaders(),
+        body: JSON.stringify(body),
+      })
+    }
+    catch (error: any) {
+      throw new ProtocolNetworkError(error.message)
+    }
+    if (!response.ok)
+      throw new Error(`HTTP ${response.status}`)
+    try {
+      return await response.json()
+    }
+    catch (error: any) {
+      if (error instanceof TypeError || error?.name === 'AbortError')
+        throw new ProtocolNetworkError(error.message)
+      throw error
+    }
   }
 
   // 获取二维码
@@ -97,14 +114,19 @@ export const useWxLoginStore = defineStore('wx-login', () => {
       return { success: false }
     }
 
+    const checkedUuid = uuid.value
+    const previousStatus = status.value === 'confirming' ? 'confirming' : 'qr_ready'
+    errorMessage.value = ''
     status.value = 'scanning'
     statusMessage.value = '正在检查登录状态...'
 
     try {
       const result = await requestProtocol({
         action: 'checkqr',
-        uuid: uuid.value,
+        uuid: checkedUuid,
       })
+      if (uuid.value !== checkedUuid)
+        return { success: false }
       let data: any
       // 尝试从不同字段获取wxid
       const resultData = result.data || result.Data || {}
@@ -165,6 +187,13 @@ export const useWxLoginStore = defineStore('wx-login', () => {
       }
     }
     catch (e: any) {
+      if (uuid.value !== checkedUuid)
+        return { success: false }
+      if (e instanceof ProtocolNetworkError) {
+        status.value = previousStatus
+        statusMessage.value = '连接暂时中断，正在重试登录检查...'
+        return { success: false }
+      }
       status.value = 'error'
       errorMessage.value = `请求失败: ${e.message}`
       return { success: false }

@@ -13,6 +13,7 @@ services:
 
     volumes:
       - ../data:/app/core/data
+      - ../data/napcat/auth:/app/napcat-auth:ro
 
     environment:
       TZ: Asia/Shanghai
@@ -20,6 +21,9 @@ services:
       ADMIN_PORT: "3007"
       FARM_DATA_DIR: /app/core/data
       CAPTURE_ADVERTISE_IPS: "${CAPTURE_ADVERTISE_IPS:-auto}"
+      NAPCAT_LOGIN_ENABLED: "${NAPCAT_LOGIN_ENABLED:-false}"
+      NAPCAT_WEBUI_URL: http://napcat:6099/api
+      NAPCAT_OPENAUTH_URL: http://napcat:6099/plugin/qq-miniapp-openauth/api
       # 抓包服务默认关闭；在面板“系统配置 → Code/GID 抓取服务”开启后才会运行。
       # 代理端口固定使用 18000：
       # CAPTURE_PORTS: "18000"
@@ -33,6 +37,32 @@ services:
       retries: 3
       start_period: 20s
 
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  napcat:
+    profiles: ["napcat"]
+    build:
+      context: .
+      dockerfile: napcat/Dockerfile
+      args:
+        NAPCAT_IMAGE: "${NAPCAT_IMAGE:-mlikiowa/napcat-docker:v4.18.19}"
+    image: qq-farm-napcat:latest
+    container_name: qq-farm-napcat
+    hostname: "${NAPCAT_DEVICE_NAME:-QQ-Farm-NapCat}"
+    restart: unless-stopped
+    environment:
+      NAPCAT_UID: "${NAPCAT_UID:-1000}"
+      NAPCAT_GID: "${NAPCAT_GID:-1000}"
+    ports:
+      - "127.0.0.1:6099:6099"
+    volumes:
+      - ../data/napcat/config:/app/napcat/config
+      - ../data/napcat/QQ:/app/.config/QQ
+      - ../data/napcat/auth:/app/napcat-auth
     logging:
       driver: json-file
       options:
