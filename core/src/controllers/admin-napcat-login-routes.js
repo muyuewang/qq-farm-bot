@@ -5,7 +5,10 @@ function owner(req) { return String(req.currentUser?.username || ''); }
 function sendError(res, error) { res.status(400).json({ ok: false, error: error.message || 'NapCat 登录失败' }); }
 
 function registerAdminNapcatLoginRoutes({ app, requireAdminToken, requireAdminRole, requireDangerConfirmation }) {
-  app.get('/api/napcat-login/capability', (_req, res) => res.json({ ok: true, data: { enabled: napcatLogin.isConfigured() } }));
+  app.get('/api/napcat-login/capability', (_req, res) => {
+    const systemConfig = store.getSystemConfig() || {};
+    res.json({ ok: true, data: { enabled: systemConfig.napcatLoginEnabled === true } });
+  });
 
   app.get('/api/admin/napcat-login/status', requireAdminToken, requireAdminRole, (_req, res) => {
     try {
