@@ -20,16 +20,15 @@ import { useSettingStore } from '@/stores/setting'
 const settingStore = useSettingStore()
 const route = useRoute()
 
-type SettingsTabKey = 'account' | 'account-config' | 'notification'
+type SettingsTabKey = 'account' | 'account-config' | 'system' | 'notification'
 
-const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'notification']
+const SETTINGS_TAB_KEYS: SettingsTabKey[] = ['account', 'account-config', 'system', 'notification']
 const LEGACY_SETTINGS_TABS: Record<string, SettingsTabKey> = {
   'strategy': 'account-config',
   'automation': 'account-config',
   'default-plan': 'account-config',
   'user': 'notification',
-  'capture': 'notification',
-  'system': 'notification',
+  'capture': 'system',
 }
 
 function getInitialSettingsTab(): SettingsTabKey {
@@ -63,6 +62,7 @@ watch(activeTab, (newTab) => {
 const tabs = [
   { key: 'account', label: '账号管理', icon: 'i-carbon-user-settings' },
   { key: 'account-config', label: '账号设置', icon: 'i-carbon-settings-adjust' },
+  { key: 'system', label: '系统配置', icon: 'i-carbon-settings-services' },
   { key: 'notification', label: '通知设置', icon: 'i-carbon-notification' },
 ] as const
 
