@@ -34,6 +34,9 @@ const {
 } = require("./admin-account-runtime-routes");
 const { registerAdminAccountRoutes } = require("./admin-account-routes");
 const { registerAdminAnalyticsRoutes } = require("./admin-analytics-routes");
+const { registerAdminCardRoutes } = require("./admin-card-routes");
+const { registerAdminLoginLogRoutes } = require("./admin-login-log-routes");
+const { registerAdminUserRoutes } = require("./admin-user-routes");
 const { createAdminAccountAccess } = require("./admin-account-access");
 const { registerAdminAuthRoutes } = require("./admin-auth-routes");
 const { registerAdminBagRoutes } = require("./admin-bag-routes");
@@ -581,6 +584,23 @@ function startAdminServer(dataProvider) {
   });
   registerAdminQrLoginRoutes({ app });
   registerAdminNapcatLoginRoutes({ app });
+  registerAdminCardRoutes({
+    app,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+    userStore,
+    adminLogger,
+  });
+  registerAdminLoginLogRoutes({ app, store, requireAdminToken });
+  registerAdminUserRoutes({
+    app,
+    userStore,
+    requireAdminToken,
+    requireAdminRole,
+    requireDangerConfirmation,
+    adminLogger,
+  });
   registerAdminProxyRoutes({ app, logger: adminLogger });
   registerSpaFallback(app, webDist);
 
