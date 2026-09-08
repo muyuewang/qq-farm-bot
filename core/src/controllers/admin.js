@@ -383,6 +383,7 @@ function startAdminServer(dataProvider) {
     getProvider: () => provider,
   });
   const {
+    getAdminUserMutationError,
     requireAdminRole,
     requireDangerConfirmation,
     requireSuperAdminRole,
