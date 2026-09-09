@@ -41,6 +41,7 @@ export interface ShopDecorationItem {
   desc?: string
   effectDesc?: string
   price: number
+  owned?: boolean
   canBuy?: boolean
 }
 

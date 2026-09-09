@@ -2,19 +2,15 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
-import AdminSystemPanel from '@/components/admin/AdminSystemPanel.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import AccountFeatureSettings from '@/components/settings/AccountFeatureSettings.vue'
 import AccountSettingsTab from '@/components/settings/AccountSettingsTab.vue'
-import AutoCodeRefreshCard from '@/components/settings/AutoCodeRefreshCard.vue'
-import DeviceProtocolCard from '@/components/settings/DeviceProtocolCard.vue'
 import OfflineReminderCard from '@/components/settings/OfflineReminderCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { useAccountSettings } from '@/composables/settings/useAccountSettings'
 import { useAutomationSettings } from '@/composables/settings/useAutomationSettings'
 import { useStrategySettings } from '@/composables/settings/useStrategySettings'
 import { useUserSettings } from '@/composables/settings/useUserSettings'
-import { useAdminSystemConfig } from '@/composables/useAdminSystemConfig'
 import { useSettingStore } from '@/stores/setting'
 
 const settingStore = useSettingStore()
@@ -28,8 +24,8 @@ const LEGACY_SETTINGS_TABS: Record<string, SettingsTabKey> = {
   'automation': 'account-config',
   'default-plan': 'account-config',
   'user': 'notification',
-  'capture': 'notification',
-  'system': 'notification',
+  'system': 'account-config',
+  'capture': 'account-config',
 }
 
 function getInitialSettingsTab(): SettingsTabKey {
@@ -104,36 +100,12 @@ function showAlert(message: string, type: 'primary' | 'danger' = 'primary') {
 }
 
 const {
-  systemConfigSaving,
-  captureConfigSaving,
-  captureConfigTesting,
-  localSystemConfig,
-  defaultSystemConfig,
-  localCaptureConfig,
-  platformOptions,
-  osOptions,
-  loadCaptureConfig,
-  handleTestCaptureConfig,
-  loadSystemConfig,
-  handleResetSystemConfig,
-} = useAdminSystemConfig({ showAlert })
-
-const {
   offlineSaving,
   offlineTesting,
-  deviceProtocolLoading,
-  deviceProtocolSaving,
-  deviceProtocolPresetOptions,
-  selectedDevicePreset,
-  deviceProtocolForm,
   localOffline,
   channelOptions,
   currentChannelDocUrl,
   openChannelDocs,
-  fillRandomDeviceMac,
-  fillRandomDeviceId,
-  fillRandomImei,
-  applyDevicePreset,
   fetchDeviceProtocol,
   syncLocalOfflineSettings,
   handleSaveOffline,
@@ -158,6 +130,7 @@ const {
   isAddAccountDisabled,
   addAccountDisabledReason,
   isAccountOpsDisabled,
+  showAllAccounts,
   fetchAccounts,
   selectFirstAccountIfNeeded,
   openAddModal,
@@ -170,18 +143,14 @@ const {
   selectAccount,
   openClearStoppedConfirm,
   confirmClearStopped,
-  showAllAccounts,
   toggleAccountFilter,
 } = useAccountSettings(showAlert)
 
 const {
   localAutomationSettings,
-  localAutoCodeRefresh,
-  autoCodeRefreshing,
   fertilizerLandTypeOptions,
   fertilizerOptions,
   syncLocalAutomationSettings,
-  runAutoCodeRefreshNow,
 } = useAutomationSettings({
   currentAccountId,
   showAlert,
@@ -193,7 +162,6 @@ const {
   plantingStrategyOptions,
   bagFallbackStrategyOptions,
   strategyPreviewLabel,
-  availableSeeds,
   loadStrategyData,
   resetStrategyState,
 } = useStrategySettings({
@@ -203,45 +171,12 @@ const {
 })
 
 const accountSettingsSaving = ref(false)
-const autoCodeRefreshSaving = ref(false)
-const systemSettingsSaving = ref(false)
-const anySystemSaving = computed(() => systemSettingsSaving.value || systemConfigSaving.value || captureConfigSaving.value || deviceProtocolSaving.value)
-
-const announcementContent = ref('')
-const announcementShowOnce = ref(true)
-const announcementSaving = ref(false)
-
-async function loadAnnouncement() {
-  try {
-    const { data } = await api.get('/api/announcement')
-    if (data.ok && data.data) {
-      announcementContent.value = data.data.content || ''
-      announcementShowOnce.value = data.data.showOnce !== false
-    }
-  } catch { /* ignore */ }
-}
-
-async function saveAnnouncement() {
-  announcementSaving.value = true
-  try {
-    await api.post('/api/admin/announcement', {
-      content: announcementContent.value,
-      showOnce: announcementShowOnce.value,
-    })
-    showAlert('公告已保存')
-  } catch (e: any) {
-    showAlert(`保存失败: ${e.message}`)
-  } finally {
-    announcementSaving.value = false
-  }
-}
 
 function buildCurrentAccountConfig() {
   return {
     ...settingStore.settings,
     ...localStrategySettings.value,
     ...localAutomationSettings.value,
-    autoCodeRefresh: localAutoCodeRefresh.value,
   }
 }
 
@@ -264,59 +199,9 @@ async function saveCurrentAccountSettings(_module?: string, quiet = false) {
   }
 }
 
-async function saveAutoCodeRefreshSettings() {
-  if (!currentAccountId.value || autoCodeRefreshSaving.value)
-    return
-  autoCodeRefreshSaving.value = true
-  try {
-    const result = await settingStore.saveAutoCodeRefresh(String(currentAccountId.value), localAutoCodeRefresh.value)
-    if (!result.ok)
-      throw new Error(result.error || '保存失败')
-    showAlert('微信定时刷新重登设置已保存')
-  }
-  catch (error: any) {
-    showAlert(error.response?.data?.error || error.message || '刷新设置保存失败', 'danger')
-  }
-  finally {
-    autoCodeRefreshSaving.value = false
-  }
-}
-
 function openAccountSettings(account: any) {
   selectAccount(account)
   activeTab.value = 'account-config'
-}
-
-async function saveSystemSettings() {
-  if (anySystemSaving.value)
-    return
-  systemSettingsSaving.value = true
-  try {
-    const devicePayload = {
-      enabled: !!deviceProtocolForm.value.enabled,
-      userAgent: String(deviceProtocolForm.value.userAgent || '').trim(),
-      deviceBrand: String(deviceProtocolForm.value.deviceBrand || '').trim(),
-      deviceModel: String(deviceProtocolForm.value.deviceModel || '').trim(),
-      deviceMac: String(deviceProtocolForm.value.deviceMac || '').trim(),
-      deviceId: String(deviceProtocolForm.value.deviceId || '').trim(),
-      imei: String(deviceProtocolForm.value.imei || '').trim(),
-    }
-    const [systemResult, captureResult, deviceResult] = await Promise.all([
-      api.post('/api/admin/system-config', { ...localSystemConfig.value, confirmed: true }),
-      api.post('/api/admin/capture-config', { ...localCaptureConfig.value, confirmed: true }),
-      api.post('/api/user/device-protocol', devicePayload),
-    ])
-    if (!systemResult.data?.ok || !captureResult.data?.ok || !deviceResult.data?.ok)
-      throw new Error('部分系统配置保存失败')
-    await Promise.all([loadSystemConfig(), loadCaptureConfig(), fetchDeviceProtocol()])
-    showAlert('系统配置已统一保存并生效')
-  }
-  catch (error: any) {
-    showAlert(error.response?.data?.error || error.message || '系统配置保存失败', 'danger')
-  }
-  finally {
-    systemSettingsSaving.value = false
-  }
 }
 
 async function applyDefaultPlan(account: any) {
@@ -399,10 +284,8 @@ watch(currentAccountId, async () => {
 })
 
 onMounted(async () => {
-  await Promise.all([loadSystemConfig(), loadCaptureConfig()])
   await fetchAccounts()
   await fetchDeviceProtocol()
-  await loadAnnouncement()
   selectFirstAccountIfNeeded()
   if (currentAccountId.value) {
     await loadStrategyData()
@@ -494,7 +377,6 @@ onMounted(async () => {
           :planting-strategy-options="plantingStrategyOptions"
           :bag-fallback-strategy-options="bagFallbackStrategyOptions"
           :strategy-preview-label="strategyPreviewLabel"
-          :available-seeds="availableSeeds"
           :fertilizer-land-type-options="fertilizerLandTypeOptions"
           :fertilizer-options="fertilizerOptions"
           @save="saveCurrentAccountSettings"
@@ -523,103 +405,6 @@ onMounted(async () => {
             :show-save="false"
             @open-docs="openChannelDocs"
             @test="handleTestOffline"
-          />
-        </div>
-
-        <div v-else-if="activeTab === 'system'" class="space-y-5">
-          <div class="sticky top-0 z-10 flex items-center justify-between border border-gray-200 rounded-xl bg-white/95 p-4 shadow-sm backdrop-blur dark:border-gray-700 dark:bg-gray-800/95">
-            <div>
-              <h3 class="text-lg text-gray-900 font-bold dark:text-gray-100">
-                系统配置
-              </h3>
-              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                统一管理连接参数、设备协议和抓包服务。
-              </p>
-            </div>
-            <BaseButton size="sm" :loading="anySystemSaving" @click="saveSystemSettings">
-              保存系统配置
-            </BaseButton>
-          </div>
-
-          <AdminSystemPanel
-            v-model:local-system-config="localSystemConfig"
-            v-model:local-capture-config="localCaptureConfig"
-            section="system"
-            :show-heading="false"
-            :show-save="false"
-            :default-system-config="defaultSystemConfig"
-            :platform-options="platformOptions"
-            :os-options="osOptions"
-            :system-config-saving="systemConfigSaving"
-            :capture-config-saving="captureConfigSaving"
-            :capture-config-testing="captureConfigTesting"
-            @reset-system="handleResetSystemConfig"
-            @test-capture="handleTestCaptureConfig"
-          />
-
-          <!-- 公告管理 -->
-          <div v-if="userIsAdmin" class="border border-gray-200 rounded-lg bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
-            <h4 class="mb-3 flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
-              <div class="i-carbon-notification text-lg" style="color: var(--theme-primary);" />
-              公告管理
-            </h4>
-            <p class="mb-3 text-xs text-gray-500 dark:text-gray-400">
-              设置系统公告，登录后会弹窗展示给所有用户。
-            </p>
-            <textarea
-              v-model="announcementContent"
-              rows="3"
-              placeholder="输入公告内容（留空则不展示）..."
-              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-            />
-            <div class="mt-2 flex items-center gap-3">
-              <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <input v-model="announcementShowOnce" type="checkbox" class="h-4 w-4 rounded border-gray-300">
-                仅展示一次
-              </label>
-              <BaseButton size="sm" :loading="announcementSaving" @click="saveAnnouncement">
-                保存公告
-              </BaseButton>
-            </div>
-          </div>
-
-          <DeviceProtocolCard
-            v-model:form="deviceProtocolForm"
-            v-model:selected-preset="selectedDevicePreset"
-            :loading="deviceProtocolLoading"
-            :saving="deviceProtocolSaving"
-            :preset-options="deviceProtocolPresetOptions"
-            :show-save="false"
-            @apply-preset="applyDevicePreset"
-            @random-mac="fillRandomDeviceMac"
-            @random-device-id="fillRandomDeviceId"
-            @random-imei="fillRandomImei"
-          />
-
-          <AutoCodeRefreshCard
-            v-model:config="localAutoCodeRefresh"
-            :current-account-name="currentAccountName"
-            :current-account-id="currentAccountId"
-            :loading="settingsLoading"
-            :saving="autoCodeRefreshSaving"
-            :refreshing="autoCodeRefreshing"
-            @save="saveAutoCodeRefreshSettings"
-            @refresh="runAutoCodeRefreshNow"
-          />
-
-          <AdminSystemPanel
-            v-model:local-system-config="localSystemConfig"
-            v-model:local-capture-config="localCaptureConfig"
-            section="capture"
-            :show-heading="false"
-            :show-save="false"
-            :default-system-config="defaultSystemConfig"
-            :platform-options="platformOptions"
-            :os-options="osOptions"
-            :system-config-saving="systemConfigSaving"
-            :capture-config-saving="captureConfigSaving"
-            :capture-config-testing="captureConfigTesting"
-            @test-capture="handleTestCaptureConfig"
           />
         </div>
       </div>

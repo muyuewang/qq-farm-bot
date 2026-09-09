@@ -91,14 +91,6 @@ const {
   qixiDewLoading,
   rainPoemActivity,
   rainPoemLoading,
-  weatherFriends,
-  scanPending,
-  frogPending,
-  cloudPending,
-  buyPending,
-  collectPending,
-  summonPending,
-  researchPending,
   charityFlowerActivity,
   charityFlowerLoading,
 } = storeToRefs(activityStore)
@@ -110,7 +102,7 @@ let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 const charityFlowerActivityActive = computed(() => isWithinActivityWindowMs(CHARITY_FLOWER_ACTIVITY_WINDOW, nowMs.value))
 const selectedActivity = ref<string | null>(null)
-const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('active')
+const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
 const activeSection = ref<ActivitySectionKey>('journey')
 const activityDirectoryWindows = ref<Array<{ id: number, title: string, startTime: number, endTime: number, imageUrl?: string }>>([])
 interface ActivityDirectoryNode {
@@ -385,102 +377,6 @@ async function giftQixi(friendGid: number, count: number) {
   result?.ok ? toast.success(`已赠送 ${result.sentCount || count} 个鹊羽香囊`) : toast.error(result?.error || '香囊赠送失败')
 }
 
-async function scanWeatherFriends() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.scanWeatherFriends(String(currentAccountId.value))
-  if (result?.ok) toast.success(`扫描完成，发现 ${(result.friends || []).length} 位好友`)
-  else toast.error(result?.error || '扫描好友天气失败')
-}
-
-async function useWeatherFrogBottle(friendGid: number) {
-  if (!currentAccountId.value) return
-  const result = await activityStore.useWeatherFrogBottle(String(currentAccountId.value), friendGid)
-  result?.ok ? toast.success('青蛙使坏成功') : toast.error(result?.error || '青蛙使坏失败')
-}
-
-async function useWeatherCloudBottle(friendGid: number, landId: number) {
-  if (!currentAccountId.value) return
-  const result = await activityStore.useWeatherCloudBottle(String(currentAccountId.value), friendGid, landId)
-  result?.ok ? toast.success('乌云使坏成功') : toast.error(result?.error || '乌云使坏失败')
-}
-
-async function buyRainPoemBottle() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.buyRainPoemBottle(String(currentAccountId.value))
-  result?.ok ? toast.success('购买天气采集瓶成功') : toast.error(result?.error || '购买失败')
-}
-
-async function collectRainPoemWeather() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.collectRainPoemWeather(String(currentAccountId.value))
-  result?.ok ? toast.success(`采集完成，收集到 ${(result.friends || []).length} 个天气`) : toast.error(result?.error || '采集天气失败')
-}
-
-async function useSummonBottle() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.useSummonBottle(String(currentAccountId.value))
-  result?.ok ? toast.success('雷雨召唤成功') : toast.error(result?.error || '雷雨召唤失败')
-}
-
-async function unlockWeatherResearch() {
-  if (!currentAccountId.value) return
-  const result = await activityStore.unlockWeatherResearch(String(currentAccountId.value))
-  result?.ok ? toast.success('气象研究解锁成功') : toast.error(result?.error || '气象研究解锁失败')
-}
-
-const pendingCharitySeeds = ref(false)
-const pendingCharityDonate = ref(false)
-const pendingCharityDailyGift = ref(false)
-
-async function handleClaimCharitySeeds() {
-  if (!currentAccountId.value) return
-  pendingCharitySeeds.value = true
-  try {
-    const result = await activityStore.claimCharityFlowerSeeds(String(currentAccountId.value))
-    result?.ok ? toast.success('小红花种子领取成功') : toast.error(result?.error || '领取失败')
-  } finally { pendingCharitySeeds.value = false }
-}
-
-async function handleDonateCharityLove() {
-  if (!currentAccountId.value) return
-  pendingCharityDonate.value = true
-  try {
-    const result = await activityStore.sendCharityFlowerLove(String(currentAccountId.value))
-    result?.ok ? toast.success('爱心捐赠成功') : toast.error(result?.error || '捐赠失败')
-  } finally { pendingCharityDonate.value = false }
-}
-
-async function handleClaimCharityDailyGift() {
-  if (!currentAccountId.value) return
-  pendingCharityDailyGift.value = true
-  try {
-    const result = await activityStore.claimCharityFlowerDailyGift(String(currentAccountId.value))
-    result?.ok ? toast.success('每日公益礼包领取成功') : toast.error(result?.error || '领取失败')
-  } finally { pendingCharityDailyGift.value = false }
-}
-
-const pendingCharityReward = ref<number | null>(null)
-
-async function handleClaimCharityReward(needScore: number) {
-  if (!currentAccountId.value) return
-  pendingCharityReward.value = needScore
-  try {
-    const result = await activityStore.claimCharityFlowerReward(String(currentAccountId.value), needScore)
-    result?.ok ? toast.success(`爱心档位奖励领取成功（${needScore} 爱心）`) : toast.error(result?.error || '领取失败')
-  } finally { pendingCharityReward.value = null }
-}
-
-const pendingLightningAttract = ref(false)
-
-async function handleUseLightningAttractBottle(friendGid: number) {
-  if (!currentAccountId.value) return
-  pendingLightningAttract.value = true
-  try {
-    const result = await activityStore.useRainPoemLightningAttractBottle(String(currentAccountId.value), friendGid)
-    result?.ok ? toast.success('闪电感应使用成功') : toast.error(result?.error || '使用失败')
-  } finally { pendingLightningAttract.value = false }
-}
-
 async function claimRecords() {
   if (!currentAccountId.value)
     return
@@ -689,24 +585,7 @@ onUnmounted(() => {
         v-if="rainPoemActivityActive && currentAccountId"
         :activity="rainPoemActivity"
         :loading="rainPoemLoading"
-        :weather-friends="weatherFriends"
-        :scan-pending="scanPending"
-        :frog-pending="frogPending"
-        :cloud-pending="cloudPending"
-        :buy-pending="buyPending"
-        :collect-pending="collectPending"
-        :summon-pending="summonPending"
-        :research-pending="researchPending"
-        :lightning-attract-pending="pendingLightningAttract"
         @refresh="refreshAll"
-        @scan-friends="scanWeatherFriends"
-        @use-frog="useWeatherFrogBottle"
-        @use-cloud="useWeatherCloudBottle"
-        @buy-bottle="buyRainPoemBottle"
-        @collect-weather="collectRainPoemWeather"
-        @use-summon="useSummonBottle"
-        @unlock-research="unlockWeatherResearch"
-        @use-lightning-attract="handleUseLightningAttractBottle"
       />
       <div v-else-if="rainPoemActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
         {{ L.needAccount }}
@@ -714,7 +593,7 @@ onUnmounted(() => {
     </div>
     <div v-else-if="selectedActivityCard?.adaptedKey === 'charity-flower' && selectedActivityCard.status === 'active'" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null"><span class="i-carbon-arrow-left" />返回活动列表</button>
-      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" :pending-seeds="pendingCharitySeeds" :pending-donate="pendingCharityDonate" :pending-daily-gift="pendingCharityDailyGift" :pending-reward="pendingCharityReward" @refresh="refreshAll" @claim-seeds="handleClaimCharitySeeds" @donate-love="handleDonateCharityLove" @claim-daily-gift="handleClaimCharityDailyGift" @claim-reward="handleClaimCharityReward" />
+      <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" @refresh="refreshAll" />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">

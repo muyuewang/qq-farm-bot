@@ -167,6 +167,7 @@ function createDataProvider(deps) {
 
         // ========== Farm API ==========
         getLands: (ref) => callWorkerApi(resolveAccountId(ref), 'getLands'),
+        getDiamondBalance: (ref) => callWorkerApi(resolveAccountId(ref), 'getDiamondBalance'),
         getSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'getSeeds'),
         getBag,
         getBagSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'getBagSeeds'),
@@ -191,7 +192,6 @@ function createDataProvider(deps) {
         getFriends: (ref, force = false) => callWorkerApi(resolveAccountId(ref), 'getFriends', force,
             force ? FRIEND_TIMEOUT : undefined),
         clearFriendsCache: (ref) => callWorkerApi(resolveAccountId(ref), 'clearFriendsCache'),
-        getDiamondBalance: (ref) => callWorkerApi(resolveAccountId(ref), 'getDiamondBalance'),
         getInteractRecords: (ref) => callWorkerApi(resolveAccountId(ref), 'getInteractRecords'),
         getFriendLands: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'getFriendLands', gid),
         doFriendOp: (ref, gid, op) => callWorkerApi(resolveAccountId(ref), 'doFriendOp', gid, op),
@@ -235,16 +235,6 @@ function createDataProvider(deps) {
         collectRainPoemWeather: (ref) => callWorkerApi(resolveAccountId(ref), 'collectRainPoemWeather'),
         useRainPoemSummonBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'useRainPoemSummonBottle'),
         unlockRainPoemResearch: (ref) => callWorkerApi(resolveAccountId(ref), 'unlockRainPoemResearch'),
-        scanWeatherFriends: (ref) => callWorkerApi(resolveAccountId(ref), 'scanWeatherFriends'),
-        useWeatherFrogBottle: (ref, friendGid) => callWorkerApi(resolveAccountId(ref), 'useWeatherFrogBottle', friendGid),
-        useWeatherCloudBottle: (ref, friendGid, landId) => callWorkerApi(resolveAccountId(ref), 'useWeatherCloudBottle', friendGid, landId),
-        useRainPoemLightningAttractBottle: (ref, friendGid) => callWorkerApi(resolveAccountId(ref), 'useRainPoemLightningAttractBottle', friendGid),
-        sendCharityFlowerLove: (ref) => callWorkerApi(resolveAccountId(ref), 'sendCharityFlowerLove'),
-        sendCharityFlowerMoney: (ref) => callWorkerApi(resolveAccountId(ref), 'sendCharityFlowerMoney'),
-        claimCharityFlowerReward: (ref, tier) => callWorkerApi(resolveAccountId(ref), 'claimCharityFlowerReward', tier),
-        claimCharityFlowerShare: (ref) => callWorkerApi(resolveAccountId(ref), 'claimCharityFlowerShare'),
-        claimCharityFlowerSeeds: (ref) => callWorkerApi(resolveAccountId(ref), 'claimCharityFlowerSeeds'),
-        claimCharityFlowerDailyGift: (ref) => callWorkerApi(resolveAccountId(ref), 'claimCharityFlowerDailyGift'),
         getCharityFlowerActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getCharityFlowerActivity'),
         exchangeHeluShopItem: (ref, slotId, count) => callWorkerApi(resolveAccountId(ref), 'exchangeHeluShopItem', slotId, count),
         drawHeluGiftLotus: (ref, options) => callWorkerApi(resolveAccountId(ref), 'drawHeluGiftLotus', options || {}),
@@ -314,7 +304,6 @@ function createDataProvider(deps) {
                 autoAcceptFriendMinLevel: store.getAutoAcceptFriendMinLevel(id),
                 bagSeedPriority: store.getBagSeedPriority(id),
                 bagSeedFallbackStrategy: store.getBagSeedFallbackStrategy(id),
-                plantSeedPriority: store.getPlantSeedPriority(id),
                 configRevision: rev
             };
         },

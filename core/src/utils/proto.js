@@ -11,7 +11,6 @@ let root = null;
 const types = {};
 let protoReadyResolve = null;
 let protoReadyPromise = null;
-let protoReady = false;
 
 function getProtoReadyPromise() {
     if (!protoReadyPromise) {
@@ -24,7 +23,6 @@ function getProtoReadyPromise() {
 
 async function loadProto() {
     log('系统', '正在加载 Protobuf 定义...');
-    protoReady = false;
     root = new protobuf.Root();
     await root.load([
         getResourcePath('proto', 'game.proto'),
@@ -69,6 +67,8 @@ async function loadProto() {
     types.AntiDataReply = root.lookupType('gamepb.acepb.AntiDataReply');
     types.CareerInfoGetRequest = root.lookupType('gamepb.careerpb.CareerInfoGetRequest');
     types.CareerInfoGetReply = root.lookupType('gamepb.careerpb.CareerInfoGetReply');
+    types.GetRechargeInfoRequest = root.lookupType('gamepb.paypb.GetRechargeInfoRequest');
+    types.GetRechargeInfoReply = root.lookupType('gamepb.paypb.GetRechargeInfoReply');
 
     // 农场
     types.AllLandsRequest = root.lookupType('gamepb.plantpb.AllLandsRequest');
@@ -247,14 +247,11 @@ async function loadProto() {
     types.InteractRecordsReply = root.lookupType('gamepb.interactpb.InteractRecordsReply');
     types.ItemNotify = root.lookupType('gamepb.itempb.ItemNotify');
     types.RechargeInfoNotify = root.lookupType('gamepb.paypb.RechargeInfoNotify');
-    types.GetRechargeInfoRequest = root.lookupType('gamepb.paypb.GetRechargeInfoRequest');
-    types.GetRechargeInfoReply = root.lookupType('gamepb.paypb.GetRechargeInfoReply');
     types.GoodsUnlockNotify = root.lookupType('gamepb.shoppb.GoodsUnlockNotify');
     types.TaskInfoNotify = root.lookupType('gamepb.taskpb.TaskInfoNotify');
 
     // Proto 加载完成
     log('系统', 'Protobuf 定义加载完成');
-    protoReady = true;
     if (protoReadyResolve) protoReadyResolve(true);
 }
 
@@ -263,7 +260,7 @@ function getRoot() {
 }
 
 async function waitForProtoReady() {
-    if (protoReady) return true;
+    if (root) return true;
     await getProtoReadyPromise();
     return true;
 }

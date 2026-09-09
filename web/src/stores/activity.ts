@@ -172,37 +172,23 @@ export interface RainPoemActivityData {
   startTime: number
   endTime: number
   active: boolean
-  items: { collectionBottles: number, summonBottles: number, frogPrankBottles: number, cloudPrankBottles: number, lightningAttractBottles: number, badges: number }
+  items: { collectionBottles: number, summonBottles: number, frogPrankBottles: number, cloudPrankBottles: number, badges: number }
   shop: { purchasedToday: boolean, available: boolean, dailyLimit: number, cost: QixiItem, item: QixiItem }
   collection: { remainingUseCount: number, dailyUseLimit: number, reward: QixiItem }
   summon: { itemId: number, dailyUseLimit: number, durationSeconds: number, usedToday: number }
   weather?: { type: number, status: number, startTime?: number, endTime?: number, rainstorm: boolean, error?: string }
   tasks: Array<{ id: number, itemId: number, desc: string, target: number, progress: number, reward: QixiItem }>
   research: { currentStage: number, stages: Array<{ id: number, status: number, available: boolean, completed: boolean, claimed: boolean, cost: QixiItem, reward: QixiItem }> }
-  lightningSense?: { attackBonusPercent: number, defendBonusPercent: number, totalAttackPercent: number, totalDefendPercent: number }
-}
-
-export interface WeatherFriend {
-  gid: number
-  name: string
-  avatar?: string
-  weatherType: number
-  weatherStatus: number
-  rainstorm: boolean
-  collected: boolean
-  expired: boolean
-  statusLabel: string
 }
 
 export interface CharityFlowerActivityData {
   uid: string; title: string; activityId: number; startTime: number; endTime: number; active: boolean
   love: { itemId: number, count: number, personalScore: number, canDonate: boolean }
-  global: { score: number, target: number, reward: QixiItem[], amountYuan: number, targetYuan: number, reached: boolean }
-  seedReward: { statusCode: number, claimable: boolean, claimed: boolean, reward: QixiItem | null }
-  dailyGift: { statusCode: number, claimable: boolean, claimed: boolean, harvestedToday: boolean, reward: QixiItem | null }
-  personalRewards: Array<{ needScore: number, target: number, status: number, reached: boolean, claimable: boolean, claimed: boolean, rewards: QixiItem[] }>
-  finalReward: { threshold: number, settlementTime: number, settled: boolean, serverEligible: boolean, personalReached: boolean, globalReached: boolean, eligible: boolean, rewards: QixiItem[] }
-  publicFund: { orders: Array<{ date: number, orderId: string, token: string, status: number }>, successCount: number, claimedToday: boolean, claimable: boolean, complianceAgreed: boolean, flowStatus: number }
+  global: { score: number, target: number, amountYuan: number, targetYuan: number, reached: boolean }
+  share: { status: number, claimable: boolean, claimed: boolean, rewards: QixiItem[] }
+  personalRewards: Array<{ needScore: number, reached: boolean, claimed: boolean, rewards: QixiItem[] }>
+  finalReward: { threshold: number, settlementTime: number, settled: boolean, eligible: boolean, rewards: QixiItem[] }
+  publicFund: { status: number, claimable: boolean, claimed: boolean, complianceAgreed: boolean, rewards: QixiItem[], successCount: number }
 }
 
 export type HeluSubActivityKey = 'giftLotus' | 'shop' | 'journey' | 'notes'
@@ -315,14 +301,6 @@ export const useActivityStore = defineStore('activity', () => {
   const qixiActivity = ref<QixiActivityData | null>(null)
   const rainPoemActivity = ref<RainPoemActivityData | null>(null)
   const rainPoemLoading = ref(false)
-  const weatherFriends = ref<WeatherFriend[]>([])
-  const scanPending = ref(false)
-  const frogPending = ref(false)
-  const cloudPending = ref(false)
-  const buyPending = ref(false)
-  const collectPending = ref(false)
-  const summonPending = ref(false)
-  const researchPending = ref(false)
   const charityFlowerActivity = ref<CharityFlowerActivityData | null>(null)
   const charityFlowerLoading = ref(false)
   const qixiFriends = ref<QixiFriend[]>([])
@@ -384,76 +362,6 @@ export const useActivityStore = defineStore('activity', () => {
     finally { rainPoemLoading.value = false }
   }
 
-  async function scanWeatherFriends(accountId: string) {
-    scanPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/scan-friends', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId))) weatherFriends.value = data.friends || []
-      return data
-    }
-    finally { scanPending.value = false }
-  }
-
-  async function useWeatherFrogBottle(accountId: string, friendGid: number) {
-    frogPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/use-frog', { friendGid }, { headers: { 'x-account-id': accountId } })
-      if (data.ok) await fetchRainPoemActivity(accountId)
-      return data
-    }
-    finally { frogPending.value = false }
-  }
-
-  async function useWeatherCloudBottle(accountId: string, friendGid: number, landId: number) {
-    cloudPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/use-cloud', { friendGid, landId }, { headers: { 'x-account-id': accountId } })
-      if (data.ok) await fetchRainPoemActivity(accountId)
-      return data
-    }
-    finally { cloudPending.value = false }
-  }
-
-  async function buyRainPoemBottle(accountId: string) {
-    buyPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/buy-bottle', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
-      return data
-    }
-    finally { buyPending.value = false }
-  }
-
-  async function collectRainPoemWeather(accountId: string) {
-    collectPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/collect-weather', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId))) weatherFriends.value = data.friends || []
-      return data
-    }
-    finally { collectPending.value = false }
-  }
-
-  async function useSummonBottle(accountId: string) {
-    summonPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/use-summon', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
-      return data
-    }
-    finally { summonPending.value = false }
-  }
-
-  async function unlockWeatherResearch(accountId: string) {
-    researchPending.value = true
-    try {
-      const { data } = await api.post('/api/activity/rain-poem/research/unlock', {}, { headers: { 'x-account-id': accountId } })
-      if (data.ok && isCurrentAccount(String(accountId))) rainPoemActivity.value = data.activity || null
-      return data
-    }
-    finally { researchPending.value = false }
-  }
-
   async function fetchCharityFlowerActivity(accountId: string) {
     charityFlowerLoading.value = true
     try {
@@ -462,55 +370,6 @@ export const useActivityStore = defineStore('activity', () => {
       return data
     }
     finally { charityFlowerLoading.value = false }
-  }
-
-  async function sendCharityFlowerLove(accountId: string) {
-    const { data } = await api.post('/api/activity/charity-flower/send-love', {}, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function sendCharityFlowerMoney(accountId: string) {
-    const { data } = await api.post('/api/activity/charity-flower/send-money', {}, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function claimCharityFlowerReward(accountId: string, tier?: number) {
-    const { data } = await api.post('/api/activity/charity-flower/claim-reward', { tier }, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function claimCharityFlowerShare(accountId: string) {
-    const { data } = await api.post('/api/activity/charity-flower/share', {}, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function claimCharityFlowerSeeds(accountId: string) {
-    const { data } = await api.post('/api/activity/charity-flower/claim-seeds', {}, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function claimCharityFlowerDailyGift(accountId: string) {
-    const { data } = await api.post('/api/activity/charity-flower/claim-daily-gift', {}, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      charityFlowerActivity.value = data.activity
-    return data
-  }
-
-  async function useRainPoemLightningAttractBottle(accountId: string, friendGid: number) {
-    const { data } = await api.post('/api/activity/rain-poem/use-lightning-attract', { friendGid }, { headers: { 'x-account-id': accountId } })
-    if (data.ok && data.activity && isCurrentAccount(String(accountId)))
-      rainPoemActivity.value = data.activity
-    return data
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -743,29 +602,7 @@ export const useActivityStore = defineStore('activity', () => {
     fetchHeluActivity,
     fetchQixiActivity,
     fetchRainPoemActivity,
-    weatherFriends,
-    scanPending,
-    frogPending,
-    cloudPending,
-    buyPending,
-    collectPending,
-    summonPending,
-    researchPending,
-    scanWeatherFriends,
-    useWeatherFrogBottle,
-    useWeatherCloudBottle,
-    buyRainPoemBottle,
-    collectRainPoemWeather,
-    useSummonBottle,
-    unlockWeatherResearch,
     fetchCharityFlowerActivity,
-    sendCharityFlowerLove,
-    sendCharityFlowerMoney,
-    claimCharityFlowerReward,
-    claimCharityFlowerShare,
-    claimCharityFlowerSeeds,
-    claimCharityFlowerDailyGift,
-    useRainPoemLightningAttractBottle,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,

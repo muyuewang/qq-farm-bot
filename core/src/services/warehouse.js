@@ -64,7 +64,6 @@ const ORGANIC_FERTILIZER_ITEM_HOURS = new Map([
 
 let fertilizerGiftDoneDateKey = '';
 let fertilizerGiftLastOpenAt = 0;
-let charitySettlementGiftLastOpenAt = 0;
 
 // ---- 日期工具 ----
 
@@ -321,53 +320,6 @@ async function openFertilizerGiftPacksSilently() {
   return autoOpenFertilizerGiftPacks();
 }
 
-const CHARITY_SETTLEMENT_GIFT_ID = 101604;
-const CHARITY_SETTLEMENT_GIFT_COOLDOWN_MS = 5 * 60 * 1000;
-
-function isBagItemLocked(item) {
-  return item?.locked === true || item?.locked === 1 || item?.locked === '1';
-}
-
-/**
- * 静默打开公益小红花结算礼包（活动结束后随结算邮件发放，5 分钟冷却兜底轮询）。
- */
-async function openCharitySettlementGiftPacksSilently() {
-  const now = Date.now();
-  if (now - charitySettlementGiftLastOpenAt < CHARITY_SETTLEMENT_GIFT_COOLDOWN_MS) return 0;
-  charitySettlementGiftLastOpenAt = now;
-
-  try {
-    const bagReply = await getBag();
-    const giftItems = getBagItems(bagReply).filter(item =>
-      toNum(item && item.id) === CHARITY_SETTLEMENT_GIFT_ID
-      && !isBagItemLocked(item)
-      && toNum(item && item.count) > 0
-    );
-    if (giftItems.length === 0) return 0;
-
-    let opened = 0;
-    for (const item of giftItems) {
-      const count = Math.max(1, toNum(item && item.count));
-      try {
-        await useItem(CHARITY_SETTLEMENT_GIFT_ID, count, toNum(item && item.uid));
-        opened += count;
-      } catch { /* 背包变化或单次失败留给下个冷却周期重试 */ }
-    }
-
-    if (opened > 0) {
-      log('仓库', `自动打开公益小红花结算礼包 x${opened}`, {
-        module: 'warehouse', event: 'charity_settlement_gift_open', result: 'ok', count: opened,
-      });
-    }
-    return opened;
-  } catch (err) {
-    logWarn('仓库', `打开公益小红花结算礼包失败: ${err.message}`, {
-      module: 'warehouse', event: 'charity_settlement_gift_open', result: 'error',
-    });
-    return 0;
-  }
-}
-
 // ---- 金币计算 ----
 
 /**
@@ -453,19 +405,15 @@ async function getBagDetail() {
     const info = getItemById(id) || null;
     const seedPlant = getPlantBySeedId(id);
     let name = info && info.name ? String(info.name) : '';
-    const itemType = info ? Number(info.type) || 0 : 0;
     let category = 'item';
 
     if (id === 1001 || id === 500001) { name = '金币'; category = 'gold'; }
     else if (id === 1002 || id === 500002) { name = '经验'; category = 'exp'; }
-    else if (itemType === 17) {
-      if (!name) name = `${getFruitName(id)}果实`;
-      category = 'mutant';
-    } else if (itemType === 6 || getPlantByFruitId(id)) {
-      if (!name) name = `${getFruitName(id)}果实`;
+    else if (getPlantByFruitId(id)) {
+      if (!name) name = `${getFruitName(id)  }果实`;
       category = 'fruit';
-    } else if (itemType === 5 || seedPlant) {
-      if (!name) name = `${seedPlant?.name || '未知'}种子`;
+    } else if (seedPlant) {
+      if (!name) name = `${seedPlant.name || '未知'  }种子`;
       category = 'seed';
     }
 
@@ -487,7 +435,7 @@ async function getBagDetail() {
         name,
         image: getItemImageById(id),
         category,
-        itemType,
+        itemType: info ? Number(info.type) || 0 : 0,
         priceId: effectivePriceId,
         price: effectivePrice,
         priceUnit,
@@ -518,15 +466,15 @@ async function getBagDetail() {
   });
 
   // 排序：按物品类型排序，同类型按数量降序
-  const typePriority = new Map([[6, 0], [17, 1], [5, 2]]);
+  const typeOrder = new Map([[1, 1], [2, 2], [4, 3]]);
   resultItems.sort((a, b) => {
     if (a.category === 'seed' && b.category === 'seed')
       return compareBagSeedGameOrder(a, b);
 
     const typeA = Number(a.itemType || 0);
     const typeB = Number(b.itemType || 0);
-    const orderA = typePriority.has(typeA) ? typePriority.get(typeA) : (typeA > 0 ? 1000 + typeA : Number.MAX_SAFE_INTEGER);
-    const orderB = typePriority.has(typeB) ? typePriority.get(typeB) : (typeB > 0 ? 1000 + typeB : Number.MAX_SAFE_INTEGER);
+    const orderA = typeOrder.has(typeA) ? typeOrder.get(typeA) : (typeA > 0 ? 1000 + typeA : Number.MAX_SAFE_INTEGER);
+    const orderB = typeOrder.has(typeB) ? typeOrder.get(typeB) : (typeB > 0 ? 1000 + typeB : Number.MAX_SAFE_INTEGER);
     if (orderA !== orderB) return orderA - orderB;
     const countB = Number(b.count || 0);
     const countA = Number(a.count || 0);
@@ -758,7 +706,6 @@ module.exports = {
   useItem,
   batchUseItems,
   openFertilizerGiftPacksSilently,
-  openCharitySettlementGiftPacksSilently,
   getFertilizerGiftDailyState: () => ({
     key: 'fertilizer_gift_open',
     doneToday: fertilizerGiftDoneDateKey === getDateKey(),

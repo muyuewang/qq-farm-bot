@@ -18,6 +18,7 @@ const L = {
   canBuyHint: '\u6761\u4EF6\u6EE1\u8DB3\uFF0C\u53EF\u76F4\u63A5\u8D2D\u4E70\u3002',
   unavailable: '\u5F53\u524D\u4E0D\u5F00\u653E\u8D2D\u4E70\u3002',
   decorationHint: '\u53EF\u7ACB\u5373\u8D2D\u4E70\u5E76\u751F\u6548\u3002',
+  decorationOwnedHint: '\u8BE5\u5934\u50CF\u6846\u5DF2\u62E5\u6709\uFF0C\u65E0\u9700\u91CD\u590D\u8D2D\u4E70\u3002',
   freeHint: '\u53EF\u76F4\u63A5\u514D\u8D39\u9886\u53D6\u3002',
   locked: '\u672A\u89E3\u9501',
   soldOut: '\u5DF2\u552E\u7F44',
@@ -30,6 +31,7 @@ const L = {
   notOpen: '\u6682\u672A\u5F00\u653E',
   notBuyable: '\u6682\u4E0D\u53EF\u4E70',
   canClaimFree: '\u53EF\u514D\u8D39\u9886',
+  owned: '\u5DF2\u62E5\u6709',
 }
 
 function priceOf(item: any) {
@@ -80,6 +82,8 @@ export function createShopAvailability(context: ShopAvailabilityContext) {
   }
 
   function getDecorationHint(item: any) {
+    if (item.owned)
+      return L.decorationOwnedHint
     if (!item.canBuy)
       return L.unavailable
     if (!canAffordDecoration(item))
@@ -128,6 +132,8 @@ export function createShopAvailability(context: ShopAvailabilityContext) {
   }
 
   function getDecorationStatusLabel(item: any) {
+    if (item.owned)
+      return L.owned
     if (!item.canBuy)
       return L.notOpen
     if (!canAffordDecoration(item))

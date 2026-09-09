@@ -14,6 +14,7 @@ coverage/
 .turbo/
 
 core/data/
+core/docs/
 logs/
 log/
 tmp/
@@ -22,5 +23,6 @@ temp/
 
 .env
 .env.*
+!.env.compose.example
 *.log
 /.pnpm-store/

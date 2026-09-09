@@ -7,24 +7,10 @@ const { getSchedulerRegistrySnapshot } = require("../services/scheduler");
 const CHANGELOG_URL = "https://gitee.com/xlzcandy/qq-classic-farm-update-log/raw/master/README.md";
 const SCHEDULER_UNSUPPORTED_MESSAGE = "DataProvider does not support scheduler status";
 
-function getPublicAntiResaleConfig(config) {
-  return {
-    enabled: config.enabled,
-    title: config.title,
-    author: config.author,
-    qq: config.qq,
-    content: config.content,
-    userThreshold: config.userThreshold,
-    intervalSeconds: config.intervalSeconds,
-    countdownSeconds: config.countdownSeconds,
-  };
-}
-
 function registerAdminPublicInfoRoutes({
   app,
   provider,
   store,
-  userStore,
   getAccountIdFromRequest,
   canAccessAccount,
   sendProviderError,
@@ -39,27 +25,6 @@ function registerAdminPublicInfoRoutes({
   app.get("/api/game-version", (req, res) => {
     const runtimeConfig = getRuntimeConfig();
     res.json({ ok: true, clientVersion: runtimeConfig.clientVersion });
-  });
-
-  app.get("/api/user-count", (req, res) => {
-    try {
-      const count = userStore.getUserCount();
-      res.json({ ok: true, count });
-    }
-    catch (error) {
-      res.status(500).json({ ok: false, error: error.message });
-    }
-  });
-
-  app.get("/api/anti-resale-config", (req, res) => {
-    try {
-      const config = getPublicAntiResaleConfig(store.getAntiResaleConfig());
-      const userCount = userStore.getUserCount();
-      res.json({ ok: true, config, userCount });
-    }
-    catch (error) {
-      res.status(500).json({ ok: false, error: error.message });
-    }
   });
 
   app.get("/api/changelog", async (req, res) => {

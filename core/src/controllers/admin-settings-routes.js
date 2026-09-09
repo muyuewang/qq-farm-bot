@@ -138,10 +138,6 @@ function buildSettingsPayload(store, accountId, currentUser) {
       accountId && typeof store.getBagSeedFallbackStrategy === "function"
         ? store.getBagSeedFallbackStrategy(accountId)
         : "level",
-    plantSeedPriority:
-      accountId && typeof store.getPlantSeedPriority === "function"
-        ? store.getPlantSeedPriority(accountId)
-        : [],
     ui: store.getUI(),
     offlineReminder:
       store.getOfflineReminder && currentUser

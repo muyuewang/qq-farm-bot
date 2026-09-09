@@ -30,10 +30,10 @@ const emit = defineEmits<{
   add: []
   clearStopped: []
   refreshWxCodes: []
-  toggleAccountFilter: []
   select: [account: any]
   toggle: [account: any]
   settings: [account: any]
+  toggleAccountFilter: []
   setDefaultPlan: [account: any]
   applyDefaultPlan: [account: any]
   edit: [account: any]
@@ -76,6 +76,15 @@ function accountAvatar(acc: any) {
           <span class="sm:hidden">刷新Code</span>
         </BaseButton>
         <BaseButton
+          variant="outline"
+          size="sm"
+          @click="emit('toggleAccountFilter')"
+        >
+          <div class="i-carbon-filter mr-2" />
+          <span class="hidden sm:inline">{{ showAllAccounts ? '显示运行中' : '显示全部' }}</span>
+          <span class="sm:hidden">筛选</span>
+        </BaseButton>
+        <BaseButton
           v-if="userIsAdmin"
           variant="secondary"
           size="sm"
@@ -96,15 +105,6 @@ function accountAvatar(acc: any) {
         >
           <div class="i-carbon-add mr-2" />
           添加账号
-        </BaseButton>
-        <BaseButton
-          v-if="userIsAdmin"
-          variant="secondary"
-          size="sm"
-          @click="emit('toggleAccountFilter')"
-        >
-          <div class="mr-2" :class="showAllAccounts ? 'i-carbon-eye' : 'i-carbon-view'" />
-          {{ showAllAccounts ? '显示全部' : '仅我的' }}
         </BaseButton>
       </div>
     </div>

@@ -19,19 +19,6 @@ function isQingmeiWineBusinessError(err) {
     || message.includes("ShareService");
 }
 
-function isBusinessError(err) {
-  const message = String(err?.message || err || "");
-  return message.includes("不足")
-    || message.includes("无效")
-    || message.includes("未解锁")
-    || message.includes("不存在")
-    || message.includes("冷却")
-    || message.includes("已满")
-    || message.includes("已达上限")
-    || message.includes("无法使用")
-    || message.includes("没有可");
-}
-
 function registerAdminHeluActivityRoutes({
   app,
   provider,
@@ -53,103 +40,6 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
-  app.post('/api/activity/rain-poem/buy-bottle', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '购买天气采集瓶失败: 账号未运行')) return;
-      res.json(await provider.buyRainPoemCollectionBottle(accountId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/collect-weather', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '采集好友雷雨失败: 账号未运行')) return;
-      res.json(await provider.collectRainPoemWeather(accountId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/research/unlock', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '解锁气象研究失败: 账号未运行')) return;
-      res.json(await provider.unlockRainPoemResearch(accountId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/use-summon', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '使用雷雨召唤瓶失败: 账号未运行')) return;
-      res.json(await provider.useRainPoemSummonBottle(accountId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/scan-friends', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '扫描好友天气失败: 账号未运行')) return;
-      res.json(await provider.scanWeatherFriends(accountId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/use-frog', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '使用青蛙使坏瓶失败: 账号未运行')) return;
-      res.json(await provider.useWeatherFrogBottle(accountId, req.body?.friendGid));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/use-cloud', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '使用乌云使坏瓶失败: 账号未运行')) return;
-      res.json(await provider.useWeatherCloudBottle(accountId, req.body?.friendGid, req.body?.landId));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  app.post('/api/activity/rain-poem/use-lightning-attract', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '使用闪电感应失败: 账号未运行')) return;
-      res.json(await provider.useRainPoemLightningAttractBottle(accountId, req.body?.friendGid));
-    } catch (err) {
-      if (isBusinessError(err)) return res.status(400).json({ ok: false, error: err.message });
-      sendProviderError(res, err);
-    }
-  });
-
-  // ─── 公益小红花 ───
   app.get('/api/activity/charity-flower', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
@@ -159,57 +49,39 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
-  app.post('/api/activity/charity-flower/send-love', async (req, res) => {
+  app.post('/api/activity/rain-poem/bottle/buy', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
     try {
-      if (!requireConnectedAccount(res, provider, accountId, '送出爱心失败: 账号未运行')) return;
-      res.json(await provider.sendCharityFlowerLove(accountId));
+      if (!requireConnectedAccount(res, provider, accountId, '购买天气采集瓶失败: 账号未运行')) return;
+      res.json(await provider.buyRainPoemCollectionBottle(accountId));
     } catch (err) { sendProviderError(res, err); }
   });
 
-  app.post('/api/activity/charity-flower/send-money', async (req, res) => {
+  app.post('/api/activity/rain-poem/collect', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
     try {
-      if (!requireConnectedAccount(res, provider, accountId, '送出公益金失败: 账号未运行')) return;
-      res.json(await provider.sendCharityFlowerMoney(accountId));
+      if (!requireConnectedAccount(res, provider, accountId, '采集好友雷雨失败: 账号未运行')) return;
+      res.json(await provider.collectRainPoemWeather(accountId));
     } catch (err) { sendProviderError(res, err); }
   });
 
-  app.post('/api/activity/charity-flower/claim-reward', async (req, res) => {
+  app.post('/api/activity/rain-poem/research/unlock', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
     try {
-      if (!requireConnectedAccount(res, provider, accountId, '领取档位奖励失败: 账号未运行')) return;
-      res.json(await provider.claimCharityFlowerReward(accountId, req.body?.tier));
+      if (!requireConnectedAccount(res, provider, accountId, '解锁气象研究失败: 账号未运行')) return;
+      res.json(await provider.unlockRainPoemResearch(accountId));
     } catch (err) { sendProviderError(res, err); }
   });
 
-  app.post('/api/activity/charity-flower/share', async (req, res) => {
+  app.post('/api/activity/rain-poem/summon/use', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
     try {
-      if (!requireConnectedAccount(res, provider, accountId, '领取分享奖励失败: 账号未运行')) return;
-      res.json(await provider.claimCharityFlowerShare(accountId));
-    } catch (err) { sendProviderError(res, err); }
-  });
-
-  app.post('/api/activity/charity-flower/claim-seeds', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '领取小红花种子失败: 账号未运行')) return;
-      res.json(await provider.claimCharityFlowerSeeds(accountId));
-    } catch (err) { sendProviderError(res, err); }
-  });
-
-  app.post('/api/activity/charity-flower/claim-daily-gift', async (req, res) => {
-    const accountId = getAuthorizedAccountId(req, res, routeContext);
-    if (!accountId) return;
-    try {
-      if (!requireConnectedAccount(res, provider, accountId, '领取每日公益礼包失败: 账号未运行')) return;
-      res.json(await provider.claimCharityFlowerDailyGift(accountId));
+      if (!requireConnectedAccount(res, provider, accountId, '使用雷雨召唤瓶失败: 账号未运行')) return;
+      res.json(await provider.useRainPoemSummonBottle(accountId));
     } catch (err) { sendProviderError(res, err); }
   });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import LandCard from '@/components/LandCard.vue'
+import FarmScene from '@/components/FarmScene.vue'
 
 type FriendActionType = 'steal' | 'water' | 'weed' | 'bug' | 'bad'
 
@@ -153,14 +153,7 @@ function goToPage(page: number) {
       <div v-else-if="!friendLands[friend.gid] || friendLands[friend.gid]?.length === 0" class="py-4 text-center text-gray-500">
         当前没有返回土地数据，可稍后重试或先确认该好友农场是否可访问。
       </div>
-      <div v-else class="grid grid-cols-2 gap-2 lg:grid-cols-8 md:grid-cols-5 sm:grid-cols-4">
-        <LandCard
-          v-for="land in friendLands[friend.gid]"
-          :key="land.id"
-          :land="land"
-          :show-actions="false"
-        />
-      </div>
+      <FarmScene v-else :lands="friendLands[friend.gid] || []" />
     </div>
   </div>
 

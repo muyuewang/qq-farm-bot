@@ -87,6 +87,7 @@ test('seed levels come from seed item configuration', () => {
   assert.equal(seedLevels.get(20003), 2, 'carrot seed level');
   assert.equal(seedLevels.get(20129), 81, 'forget-me-not seed level');
   assert.equal(seedLevels.get(26032), 1, 'evening primrose seed level');
+  assert.equal(seedLevels.get(20416), 1, 'haha pumpkin seed level');
 });
 
 test('qixi activity items resolve official static icons', () => {

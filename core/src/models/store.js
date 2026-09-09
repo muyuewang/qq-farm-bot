@@ -215,7 +215,7 @@ const PUSHOO_CHANNELS = new Set([
     'webhook', 'qmsg', 'serverchan', 'pushplus', 'pushplushxtrip',
     'dingtalk', 'wecom', 'bark', 'gocqhttp', 'onebot', 'atri',
     'pushdeer', 'igot', 'telegram', 'feishu', 'ifttt', 'wecombot',
-    'discord', 'wxpusher', 'meow',
+    'discord', 'wxpusher',
 ]);
 
 // ==================== 默认配置 ====================
@@ -827,6 +827,9 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
     if (input.bagSeedPriority !== undefined && input.bagSeedPriority !== null) {
         cfg.bagSeedPriority = normalizeBagSeedPriority(input.bagSeedPriority);
     }
+    if (input.plantSeedPriority !== undefined && input.plantSeedPriority !== null) {
+        cfg.plantSeedPriority = normalizeBagSeedPriority(input.plantSeedPriority);
+    }
     if (input.bagSeedKnownIds !== undefined && input.bagSeedKnownIds !== null) {
         cfg.bagSeedKnownIds = normalizeBagSeedPriority(input.bagSeedKnownIds);
     }
@@ -1298,6 +1301,9 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     }
     if (patch.bagSeedPriority !== undefined && patch.bagSeedPriority !== null) {
         cfg.bagSeedPriority = normalizeBagSeedPriority(patch.bagSeedPriority);
+    }
+    if (patch.plantSeedPriority !== undefined && patch.plantSeedPriority !== null) {
+        cfg.plantSeedPriority = normalizeBagSeedPriority(patch.plantSeedPriority);
     }
     if (patch.bagSeedKnownIds !== undefined && patch.bagSeedKnownIds !== null) {
         cfg.bagSeedKnownIds = normalizeBagSeedPriority(patch.bagSeedKnownIds);

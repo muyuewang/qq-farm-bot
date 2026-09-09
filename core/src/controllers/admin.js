@@ -34,9 +34,6 @@ const {
 } = require("./admin-account-runtime-routes");
 const { registerAdminAccountRoutes } = require("./admin-account-routes");
 const { registerAdminAnalyticsRoutes } = require("./admin-analytics-routes");
-const { registerAdminCardRoutes } = require("./admin-card-routes");
-const { registerAdminLoginLogRoutes } = require("./admin-login-log-routes");
-const { registerAdminUserRoutes } = require("./admin-user-routes");
 const { createAdminAccountAccess } = require("./admin-account-access");
 const { registerAdminAuthRoutes } = require("./admin-auth-routes");
 const { registerAdminBagRoutes } = require("./admin-bag-routes");
@@ -60,6 +57,10 @@ const { registerAdminProxyRoutes } = require("./admin-proxy-routes");
 const { registerAdminPublicInfoRoutes } = require("./admin-public-info-routes");
 const { registerAdminQrLoginRoutes } = require("./admin-qr-login-routes");
 const { registerAdminNapcatLoginRoutes } = require("./admin-napcat-login-routes");
+const { registerAdminCardRoutes } = require("./admin-card-routes");
+const { registerAdminLoginLogRoutes } = require("./admin-login-log-routes");
+const { registerAdminUserRoutes } = require("./admin-user-routes");
+const { registerAdminSuperAdminRoutes } = require("./admin-super-admin-routes");
 const { createAdminRouteHelpers } = require("./admin-route-helpers");
 const { registerAdminSettingsRoutes } = require("./admin-settings-routes");
 const { registerAdminShopRoutes } = require("./admin-shop-routes");
@@ -383,6 +384,7 @@ function startAdminServer(dataProvider) {
     getProvider: () => provider,
   });
   const {
+    checkAccountLimit,
     getAdminUserMutationError,
     requireAdminRole,
     requireDangerConfirmation,
@@ -584,12 +586,7 @@ function startAdminServer(dataProvider) {
     updateRuntimeConfig,
   });
   registerAdminQrLoginRoutes({ app });
-  registerAdminNapcatLoginRoutes({
-    app,
-    requireAdminToken,
-    requireAdminRole,
-    requireDangerConfirmation,
-  });
+  registerAdminNapcatLoginRoutes({ app, requireAdminToken, requireAdminRole, requireDangerConfirmation });
   registerAdminCardRoutes({
     app,
     requireAdminToken,
@@ -617,6 +614,16 @@ function startAdminServer(dataProvider) {
     getAdminUserMutationError,
     invalidateAdminSessions,
     updateAdminSessions,
+  });
+  registerAdminSuperAdminRoutes({
+    app,
+    store,
+    userStore,
+    logger: adminLogger,
+    requireAdminToken,
+    requireSuperAdminRole,
+    requireDangerConfirmation,
+    checkAccountLimit,
   });
   registerAdminProxyRoutes({ app, logger: adminLogger });
   registerSpaFallback(app, webDist);

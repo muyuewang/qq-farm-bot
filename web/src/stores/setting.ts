@@ -105,7 +105,6 @@ export interface SettingsState {
   bagSeedPriority: number[]
   bagSeedKnownIds: number[]
   bagSeedFallbackStrategy: string
-  plantSeedPriority: number[]
   autoAcceptFriendMinLevel: number
   intervals: IntervalsConfig
   friendQuietHours: FriendQuietHoursConfig
@@ -163,7 +162,6 @@ export const useSettingStore = defineStore('setting', () => {
     bagSeedPriority: [],
     bagSeedKnownIds: [],
     bagSeedFallbackStrategy: 'level',
-    plantSeedPriority: [],
     autoAcceptFriendMinLevel: 0,
     intervals: {},
     friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
@@ -196,7 +194,6 @@ export const useSettingStore = defineStore('setting', () => {
       bagSeedPriority: [],
       bagSeedKnownIds: [],
       bagSeedFallbackStrategy: 'level',
-      plantSeedPriority: [],
       autoAcceptFriendMinLevel: 0,
       intervals: {},
       friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },

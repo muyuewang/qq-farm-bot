@@ -1,6 +1,8 @@
 const { getItemById, getSeedImageBySeedId } = require("../config/gameConfig");
+const { toNum } = require("../utils/utils");
 
 const DECORATION_ITEM_IDS = [2130, 2131];
+const DECORATION_SHOP_ID = 4;
 
 function getAuthorizedAccountId({
   req,
@@ -20,21 +22,48 @@ function getAuthorizedAccountId({
   return accountId;
 }
 
-function buildDecorationItem(itemId, userGoldBean) {
+function getOwnedDecorationIds(bag) {
+  const items = Array.isArray(bag?.originalItems)
+    ? bag.originalItems
+    : Array.isArray(bag?.items) ? bag.items : [];
+  return new Set(items
+    .filter((item) => Number(item?.count) > 0)
+    .map((item) => Number(item?.id) || 0));
+}
+
+function getDecorationGoods(shopReply) {
+  const goodsByItemId = new Map();
+  for (const goods of shopReply?.goods_list || []) {
+    const itemId = toNum(goods?.item_id) || 0;
+    if (DECORATION_ITEM_IDS.includes(itemId)) goodsByItemId.set(itemId, goods);
+  }
+  return goodsByItemId;
+}
+
+function buildDecorationItem(itemId, userGoldBean, ownedDecorationIds = new Set(), goods) {
   const itemConfig = getItemById(itemId);
   if (!itemConfig) return null;
 
-  const price = Number(itemConfig.price) || 0;
+  const price = toNum(goods?.price) || Number(itemConfig.price) || 0;
+  const limitCount = toNum(goods?.limit_count) || 0;
+  const boughtNum = toNum(goods?.bought_num) || 0;
+  const soldOut = limitCount > 0 && boughtNum >= limitCount;
+  // Used avatar-frame items disappear from the bag, so the shop purchase
+  // record is the authoritative ownership source.
+  const owned = soldOut || ownedDecorationIds.has(itemId);
   return {
-    id: itemId,
+    id: toNum(goods?.id) || itemId,
     itemId,
-    itemCount: 1,
+    itemCount: toNum(goods?.item_count) || 1,
     price,
+    limitCount,
+    boughtNum,
     name: itemConfig.name || `装扮${  itemId}`,
     image: getSeedImageBySeedId(itemId),
     desc: itemConfig.desc || "",
     effectDesc: itemConfig.effectDesc || "",
-    canBuy: userGoldBean >= price,
+    owned,
+    canBuy: !owned && goods?.unlocked !== false && userGoldBean >= price,
   };
 }
 
@@ -65,8 +94,14 @@ function registerAdminDecorationShopRoutes({
       }
 
       const userGoldBean = status?.status?.goldBean || 0;
+      const [bag, shopReply] = await Promise.all([
+        provider.getBag(accountId),
+        provider.getShopInfo(accountId, DECORATION_SHOP_ID),
+      ]);
+      const ownedDecorationIds = getOwnedDecorationIds(bag);
+      const decorationGoods = getDecorationGoods(shopReply);
       const decorations = DECORATION_ITEM_IDS.map((itemId) =>
-        buildDecorationItem(itemId, userGoldBean),
+        buildDecorationItem(itemId, userGoldBean, ownedDecorationIds, decorationGoods.get(itemId)),
       ).filter(Boolean);
 
       res.json({ ok: true, data: decorations, userGoldBean });
@@ -80,4 +115,9 @@ function registerAdminDecorationShopRoutes({
   });
 }
 
-module.exports = { registerAdminDecorationShopRoutes };
+module.exports = {
+  buildDecorationItem,
+  getDecorationGoods,
+  getOwnedDecorationIds,
+  registerAdminDecorationShopRoutes,
+};

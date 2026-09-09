@@ -85,10 +85,7 @@ export const useAccountStore = defineStore('account', () => {
     loading.value = true
     try {
       // api interceptor adds x-admin-token
-      const params: Record<string, string> = {}
-      if (!showAllAccounts.value)
-        params.filter = 'mine'
-      const res = await api.get('/api/accounts', { params })
+      const res = await api.get('/api/accounts')
       if (res.data.ok && res.data.data && res.data.data.accounts) {
         applyAccounts(Array.isArray(res.data.data.accounts) ? res.data.data.accounts : [])
       }
@@ -107,11 +104,6 @@ export const useAccountStore = defineStore('account', () => {
 
   function selectAccount(id: string) {
     currentAccountId.value = id
-  }
-
-  function toggleAccountFilter() {
-    showAllAccounts.value = !showAllAccounts.value
-    fetchAccounts()
   }
 
   function setCurrentAccount(acc: Account) {
@@ -181,12 +173,11 @@ export const useAccountStore = defineStore('account', () => {
     accounts,
     currentAccountId,
     currentAccount,
+    showAllAccounts,
     loading,
     logs,
-    showAllAccounts,
     fetchAccounts,
     selectAccount,
-    toggleAccountFilter,
     startAccount,
     stopAccount,
     refreshWxCodes,
@@ -195,5 +186,6 @@ export const useAccountStore = defineStore('account', () => {
     addAccount,
     updateAccount,
     setCurrentAccount,
+    toggleAccountFilter: () => { showAllAccounts.value = !showAllAccounts.value },
   }
 })

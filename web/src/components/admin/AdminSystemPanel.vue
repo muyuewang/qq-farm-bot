@@ -264,7 +264,7 @@ const localCaptureConfig = defineModel<CaptureConfig>('localCaptureConfig', { re
               QQ 扫码登录入口
             </div>
             <div class="mt-1 font-semibold">
-              {{ localSystemConfig.napcatLoginEnabled ? '已开放' : '已关闭' }}
+              {{ localSystemConfig.napcatLoginEnabled ? '已开启' : '已关闭' }}
             </div>
           </div>
           <div class="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-700 dark:bg-gray-900/40 dark:text-gray-200">

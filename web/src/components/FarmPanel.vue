@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useIntervalFn } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
-import LandCard from '@/components/LandCard.vue'
+import FarmScene from '@/components/FarmScene.vue'
 import { useAccountStore } from '@/stores/account'
 import { useFarmStore } from '@/stores/farm'
 import { useStatusStore } from '@/stores/status'
@@ -18,22 +18,10 @@ const { status, loading: statusLoading, realtimeConnected, currentStatusReady } 
 const operating = ref(false)
 const farmLoaded = ref(false)
 const confirmVisible = ref(false)
-const selectedLandId = ref<number | null>(null)
-const farmCanvas = ref<HTMLCanvasElement | null>(null)
 const farmViewport = ref<HTMLElement | null>(null)
 const farmStageWidth = ref<number | null>(null)
 const FARM_CANVAS_WIDTH = 1200
 const FARM_CANVAS_HEIGHT = 650
-const SINGLE_LAND_WIDTH = 210
-const SINGLE_LAND_HEIGHT = 125
-const LAND_STEP_X = 115
-const LAND_STEP_Y = 59
-const MERGED_LAND_WIDTH = SINGLE_LAND_WIDTH + LAND_STEP_X * 2
-const MERGED_LAND_HEIGHT = SINGLE_LAND_HEIGHT + LAND_STEP_Y * 2
-const FIELD_BACKGROUND_SCALE = 1.16
-const FIELD_BACKGROUND_OFFSET_X = 10
-const FIELD_BACKGROUND_OFFSET_Y = 8
-const imageCache = new Map<string, HTMLImageElement>()
 type PendingLandAction = 'fertilize' | 'remove'
 
 const confirmConfig = ref({
@@ -192,52 +180,6 @@ const showInitialLoading = computed(() =>
   !farmLoaded.value && (loading.value || statusLoading.value),
 )
 
-function selectLand(land: any) {
-  const id = Number(land?.id) || null
-  selectedLandId.value = selectedLandId.value === id ? null : id
-}
-
-function handleDocumentPointerDown(event: PointerEvent) {
-  if (selectedLandId.value === null)
-    return
-  const target = event.target
-  if (target instanceof Element && target.closest('.land-card, .land-bubble'))
-    return
-  selectedLandId.value = null
-}
-
-function handleDocumentKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape')
-    selectedLandId.value = null
-}
-
-function getLandAnchorId(land: any) {
-  const occupiedIds = Array.isArray(land?.occupiedLandIds)
-    ? land.occupiedLandIds.map(Number).filter((id: number) => id > 0)
-    : []
-  return occupiedIds.length > 1 ? Math.min(...occupiedIds) : Number(land?.id) || 0
-}
-
-function getCanvasPosition(land: any) {
-  const occupiedIds = Array.isArray(land?.occupiedLandIds)
-    ? land.occupiedLandIds.map(Number).filter((id: number) => id > 0)
-    : []
-  const ids = occupiedIds.length > 1 ? occupiedIds : [getLandAnchorId(land)]
-  const points = ids.map((id: number) => {
-    const column = (id - 1) % 4
-    const row = Math.floor((id - 1) / 4)
-    return { x: 700 + column * LAND_STEP_X - row * LAND_STEP_X, y: 86 + (column + row) * LAND_STEP_Y }
-  })
-  return {
-    x: points.reduce((sum: number, point: { x: number }) => sum + point.x, 0) / points.length,
-    y: points.reduce((sum: number, point: { y: number }) => sum + point.y, 0) / points.length,
-  }
-}
-
-const displayLands = computed(() =>
-  (Array.isArray(lands.value) ? lands.value : []).filter(land => !land?.occupiedByMaster),
-)
-
 const farmStageStyle = computed(() => farmStageWidth.value
   ? { width: `${farmStageWidth.value}px` }
   : undefined)
@@ -255,122 +197,17 @@ function updateFarmStageSize() {
   farmStageWidth.value = Math.min(availableWidth, FARM_CANVAS_WIDTH, availableHeight * FARM_CANVAS_WIDTH / FARM_CANVAS_HEIGHT)
 }
 
-function getLandTextureUrl(land: any) {
-  const level = Math.min(5, Math.max(1, Number(land?.level) || 1))
-  if (Number(land?.plantSize) > 1)
-    return `/game-config/land_images/land_valid${level}_2x2.png`
-  if (land?.status === 'locked')
-    return '/game-config/land_images/land_locked.png'
-  return `/game-config/land_images/${land?.needWater ? `land_dry${level}` : `land_valid${level}`}.png`
-}
-
-function shouldRotateLandTexture(land: any) {
-  const level = Number(land?.level) || 1
-  // 单格紫土地贴图需要翻转；2x2 紫土地资源本身已经是农场视角的正确朝向。
-  return level === 5 && Number(land?.plantSize) <= 1
-}
-
-function loadCanvasImage(src: string) {
-  const cached = imageCache.get(src)
-  if (cached)
-    return Promise.resolve(cached)
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
-    image.onload = () => {
-      imageCache.set(src, image)
-      resolve(image)
-    }
-    image.onerror = reject
-    image.src = src
-  })
-}
-
-async function drawFarmCanvas() {
-  await nextTick()
-  const context = farmCanvas.value?.getContext('2d')
-  if (!context)
-    return
-  context.clearRect(0, 0, FARM_CANVAS_WIDTH, FARM_CANVAS_HEIGHT)
-  const field = await loadCanvasImage('/game-config/scene_images/farm-field-base.png').catch(() => null)
-  if (field) {
-    const fieldWidth = FARM_CANVAS_WIDTH * FIELD_BACKGROUND_SCALE
-    const fieldHeight = FARM_CANVAS_HEIGHT * FIELD_BACKGROUND_SCALE
-    context.drawImage(
-      field,
-      (FARM_CANVAS_WIDTH - fieldWidth) / 2 + FIELD_BACKGROUND_OFFSET_X,
-      (FARM_CANVAS_HEIGHT - fieldHeight) / 2 + FIELD_BACKGROUND_OFFSET_Y,
-      fieldWidth,
-      fieldHeight,
-    )
-  }
-
-  const visibleLands = displayLands.value
-    .sort((a, b) => getCanvasPosition(a).y - getCanvasPosition(b).y)
-  const textures = await Promise.all(visibleLands.map(land => loadCanvasImage(getLandTextureUrl(land)).catch(() => null)))
-  visibleLands.forEach((land, index) => {
-    if (selectedLandId.value === Number(land?.id))
-      return
-    const texture = textures[index]
-    if (!texture)
-      return
-    const { x, y } = getCanvasPosition(land)
-    const large = Number(land?.plantSize) > 1
-    const width = large ? MERGED_LAND_WIDTH : SINGLE_LAND_WIDTH
-    const height = large ? MERGED_LAND_HEIGHT : SINGLE_LAND_HEIGHT
-    if (shouldRotateLandTexture(land)) {
-      context.save()
-      context.translate(x, y)
-      context.rotate(Math.PI)
-      context.drawImage(texture, -width / 2, -height / 2, width, height)
-      context.restore()
-    }
-    else {
-      context.drawImage(texture, x - width / 2, y - height / 2, width, height)
-    }
-  })
-}
-
-function getIsometricStyle(land: any) {
-  const { x, y } = getCanvasPosition(land)
-  const size = Math.max(1, Number(land?.plantSize) || 1)
-  const width = size > 1 ? MERGED_LAND_WIDTH : SINGLE_LAND_WIDTH
-  const height = size > 1 ? MERGED_LAND_HEIGHT : SINGLE_LAND_HEIGHT
-
-  return {
-    left: `${x / FARM_CANVAS_WIDTH * 100}%`,
-    top: `${(y - height / 2) / FARM_CANVAS_HEIGHT * 100}%`,
-    width: `${width / FARM_CANVAS_WIDTH * 100}%`,
-    height: `${height / FARM_CANVAS_HEIGHT * 100}%`,
-    zIndex: Math.round(y) + size,
-  }
-}
-
-watch(lands, () => {
-  drawFarmCanvas()
-  nextTick(updateFarmStageSize)
-}, { deep: true, flush: 'post' })
-
-watch(selectedLandId, () => {
-  drawFarmCanvas()
-})
-
 watch(currentAccountId, (newId, oldId) => {
   if (oldId !== undefined && newId !== oldId) {
     farmLoaded.value = false
     farmStore.clearFarmData()
     statusStore.clearAccountScopedData()
-    selectedLandId.value = null
   }
   refresh()
 }, { immediate: true })
 
 watch(() => currentAccount.value?.running, () => {
   refresh()
-})
-
-watch(confirmVisible, (visible) => {
-  if (visible)
-    selectedLandId.value = null
 })
 
 const { pause, resume } = useIntervalFn(() => {
@@ -386,17 +223,12 @@ const { pause: pauseRefresh, resume: resumeRefresh } = useIntervalFn(refresh, 60
 resume()
 resumeRefresh()
 onMounted(() => {
-  document.addEventListener('pointerdown', handleDocumentPointerDown)
-  document.addEventListener('keydown', handleDocumentKeydown)
   window.addEventListener('resize', updateFarmStageSize)
   updateFarmStageSize()
-  drawFarmCanvas()
 })
 onUnmounted(() => {
   pause()
   pauseRefresh()
-  document.removeEventListener('pointerdown', handleDocumentPointerDown)
-  document.removeEventListener('keydown', handleDocumentKeydown)
   window.removeEventListener('resize', updateFarmStageSize)
 })
 </script>
@@ -404,10 +236,7 @@ onUnmounted(() => {
 <template>
   <div
     class="space-y-4"
-    :class="{
-      'farm-panel-modal-open': confirmVisible,
-      'farm-has-selected-land': selectedLandId !== null,
-    }"
+    :class="{ 'farm-panel-modal-open': confirmVisible }"
   >
     <div class="rounded-lg bg-white shadow dark:bg-gray-800">
       <!-- Header with Title and Actions -->
@@ -515,35 +344,14 @@ onUnmounted(() => {
         </div>
 
         <div v-else>
-          <div ref="farmViewport" class="farm-land-viewport rounded-2xl" :style="farmStageStyle">
-            <div class="iso-farm-stage">
-              <canvas
-                ref="farmCanvas"
-                class="farm-scene-canvas"
-                :width="FARM_CANVAS_WIDTH"
-                :height="FARM_CANVAS_HEIGHT"
-                aria-hidden="true"
-              />
-              <div v-if="weather?.rainstorm" class="farm-rainstorm-effect" aria-hidden="true">
-                <img class="farm-rain-fog" src="/game-config/effect_images/rain-poem/rain-fog.png" alt="">
-                <div class="farm-rain-streaks farm-rain-streaks-a" />
-                <div class="farm-rain-streaks farm-rain-streaks-b" />
-                <div class="farm-thunder-flash" />
-              </div>
-              <LandCard
-                v-for="land in displayLands"
-                :key="land.id"
-                :land="land"
-                isometric
-                :style="getIsometricStyle(land)"
-                :selected="selectedLandId === Number(land.id)"
-                :selection-active="selectedLandId !== null"
-                :show-actions="false"
-                @select="selectLand"
-                @fertilize="handleLandFertilize"
-                @remove="handleLandRemove"
-              />
-            </div>
+          <div ref="farmViewport">
+            <FarmScene
+              :lands="lands"
+              :weather="weather"
+              :style="farmStageStyle"
+              @fertilize="handleLandFertilize"
+              @remove="handleLandRemove"
+            />
           </div>
         </div>
       </div>
@@ -560,268 +368,3 @@ onUnmounted(() => {
     />
   </div>
 </template>
-
-<style scoped>
-.farm-land-viewport {
-  container-type: inline-size;
-  overflow: hidden;
-  margin-inline: auto;
-  background: #a8d85d;
-  box-shadow: inset 0 0 0 1px rgb(53 101 37 / 0.18);
-}
-
-.farm-panel-modal-open :deep(.land-bubble) {
-  display: none !important;
-}
-
-.farm-panel-modal-open :deep(.land-card) {
-  z-index: 0 !important;
-}
-
-.farm-has-selected-land :deep(.land-card:not(.land-card-selected) .land-bubble) {
-  display: none !important;
-}
-
-.iso-farm-stage {
-  position: relative;
-  isolation: isolate;
-  width: 100%;
-  aspect-ratio: 1200 / 650;
-  margin: 0 auto;
-}
-
-.farm-scene-canvas {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.farm-rainstorm-effect {
-  position: absolute;
-  z-index: 1000;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  background: rgb(15 32 55 / 0.18);
-}
-
-.farm-rain-fog,
-.farm-rain-streaks,
-.farm-thunder-flash {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.farm-rain-fog {
-  object-fit: cover;
-  opacity: 0.18;
-  mix-blend-mode: screen;
-  animation: farm-rain-fog-drift 8s ease-in-out infinite alternate;
-}
-
-.farm-rain-streaks {
-  inset: -24%;
-  width: 148%;
-  height: 148%;
-  background-image: url('/game-config/effect_images/rain-poem/rain-streaks.png');
-  background-repeat: repeat;
-  background-size: 36% auto;
-  opacity: 0.52;
-  filter: drop-shadow(1px 2px 1px rgb(155 211 255 / 0.42));
-  transform: rotate(4deg);
-  animation: farm-rain-fall 0.78s linear infinite;
-}
-
-.farm-rain-streaks-b {
-  background-size: 25% auto;
-  opacity: 0.28;
-  transform: rotate(7deg) scaleX(-1);
-  animation-delay: -0.4s;
-  animation-duration: 1.08s;
-}
-
-.farm-thunder-flash {
-  background: rgb(208 235 255 / 0.72);
-  opacity: 0;
-  animation: farm-thunder-flash 7.5s steps(1, end) infinite;
-}
-
-@keyframes farm-rain-fall {
-  from {
-    background-position: 0 -45%;
-  }
-  to {
-    background-position: -5% 0;
-  }
-}
-
-@keyframes farm-rain-fog-drift {
-  from {
-    transform: translateX(-4%) scale(1.08);
-  }
-  to {
-    transform: translateX(4%) scale(1.12);
-  }
-}
-
-@keyframes farm-thunder-flash {
-  0%,
-  3%,
-  5%,
-  48%,
-  51%,
-  100% {
-    opacity: 0;
-  }
-  2%,
-  4% {
-    opacity: 0.75;
-  }
-  49% {
-    opacity: 0.42;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .farm-rain-fog,
-  .farm-rain-streaks,
-  .farm-thunder-flash {
-    animation: none;
-  }
-
-  .farm-rain-streaks-b,
-  .farm-thunder-flash {
-    display: none;
-  }
-}
-
-.iso-farm-stage :deep(.land-card) {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.iso-farm-stage :deep(.land-card-image) {
-  position: absolute;
-  left: 50%;
-  top: 35%;
-  width: 42%;
-  height: 68%;
-  margin: 0;
-  transform: translate(-50%, -50%);
-}
-
-/* 通用种子贴图的内容锚点在图片中央，单格种子应落在土地几何中心。 */
-.iso-farm-stage :deep(.land-card-image-seed-single) {
-  top: 50%;
-}
-
-/* SpriteFrame 已裁掉透明画布；保持它在原 150px 画布中的官方视觉尺寸。 */
-.iso-farm-stage :deep(.land-card-image-seed img) {
-  width: 23%;
-  max-width: none;
-}
-
-.iso-farm-stage :deep(.land-isometric-size-2 .land-card-image) {
-  left: 50%;
-  /* 2x2 作物通常是高图，客户端按根部/花盆底部落在四格土地中心，而不是按图片中心。 */
-  top: auto;
-  bottom: 42%;
-  width: 56%;
-  /* 顶排四格土地距离场景上沿较近，必须给高株成熟图保留完整显示空间。 */
-  height: 54%;
-  align-items: flex-end;
-  transform: translateX(-50%);
-}
-
-.iso-farm-stage :deep(.land-isometric-size-2 .land-card-image-seed) {
-  top: 50%;
-  bottom: auto;
-  align-items: center;
-  transform: translate(-50%, -50%);
-}
-
-.iso-farm-stage :deep(.land-isometric-size-2 .land-card-image-seed img) {
-  width: 13%;
-}
-
-.iso-farm-stage :deep(.land-card-name),
-.iso-farm-stage :deep(.land-card-meta),
-.iso-farm-stage :deep(.land-card-season) {
-  display: none;
-}
-
-.iso-farm-stage :deep(.land-card-flags),
-.iso-farm-stage :deep(.land-mutant-effects) {
-  display: none;
-}
-
-.iso-farm-stage :deep(.land-ground-single),
-.iso-farm-stage :deep(.land-ground-merged) {
-  display: none;
-}
-
-.iso-farm-stage :deep(.land-card-selected .land-ground-single),
-.iso-farm-stage :deep(.land-card-selected .land-ground-merged) {
-  display: block;
-  left: 50%;
-  top: 50%;
-  width: 100%;
-  height: 100%;
-  max-height: none;
-  object-fit: fill;
-  opacity: 1;
-  transform: translate(-50%, -50%);
-  filter: saturate(1.08) brightness(1.06) drop-shadow(0 10px 7px rgb(62 46 27 / 0.35));
-}
-
-.iso-farm-stage :deep(.land-card-selected .land-ground-single.land-ground-rotated),
-.iso-farm-stage :deep(.land-card-selected .land-ground-merged.land-ground-rotated) {
-  transform: translate(-50%, -50%) rotate(180deg);
-}
-
-.iso-farm-stage :deep(.land-card-selected .land-ground-layer) {
-  inset: 0;
-}
-
-.iso-farm-stage :deep(.land-isometric-size-2 .land-ground-merged) {
-  width: 100%;
-  max-height: none;
-}
-
-.iso-farm-stage :deep(.land-isometric-size-2 .land-ground-layer) {
-  inset: 0;
-}
-
-@media (max-width: 639px) {
-  .iso-farm-stage {
-    width: 100%;
-  }
-
-  .iso-farm-stage :deep(.land-card) {
-    padding: 1px;
-  }
-
-  .iso-farm-stage :deep(.land-card-image) {
-    width: 42%;
-    height: 68%;
-    margin: 0;
-  }
-
-  .iso-farm-stage :deep(.land-isometric-size-2 .land-card-image) {
-    width: 56%;
-    height: 54%;
-    margin: 0;
-  }
-
-  .iso-farm-stage :deep(.land-card-id) {
-    font-size: 8px;
-  }
-}
-</style>

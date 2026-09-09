@@ -246,26 +246,38 @@ message ActivityNode {
     ActivityBodyCharityFlower charity_flower = 116;
 }
 
-// 以下字段语义按官方生成协议恢复并经真实抓包交叉验证
-// （seed 回包 reward id 20883、公益基金回包 order_id/token、进度奖励回包 target/reward）。
+enum CharityFlowerShareStatus {
+    CHARITY_FLOWER_SHARE_STATUS_UNKNOWN = 0;
+    CHARITY_FLOWER_SHARE_NOT_COMPLETED = 1;
+    CHARITY_FLOWER_SHARE_CLAIMABLE = 2;
+    CHARITY_FLOWER_SHARE_CLAIMED = 3;
+}
+
+enum CharityFlowerXhhStatus {
+    CHARITY_FLOWER_XHH_STATUS_UNKNOWN = 0;
+    CHARITY_FLOWER_XHH_NOT_ELIGIBLE = 1;
+    CHARITY_FLOWER_XHH_CLAIMABLE = 2;
+    CHARITY_FLOWER_XHH_CLAIMED = 3;
+}
+
 message CharityFlowerPersonalReward {
-    int64 target = 1;
+    int64 need_personal_score = 1;
     repeated corepb.Item reward = 2;
-    // 进度奖励状态：抓包证实领取成功后从 0 变 1 —— 0=已达成可领取，1=已领取
-    int64 status = 3;
+    bool reached = 3;
+    bool claimed = 4;
 }
 
 message CharityFlowerGlobalReward {
-    int64 target = 1;
+    int64 need_global_score = 1;
     repeated corepb.Item reward = 2;
+    bool reached = 3;
 }
 
-// 单条公益基金捐赠记录（field 18）：date 为 YYYYMMDD 整数，用于判定当日礼包/公益金是否已送出
-message CharityFlowerPublicFundOrder {
-    int64 date = 1;
-    string order_id = 2;
-    string token = 3;
-    int64 status = 4;
+message CharityFlowerXhhSuccessOrder {
+    int64 day = 1;
+    string xhh_code = 2;
+    string xhh_trans_code = 3;
+    int32 xhh_num = 4;
 }
 
 message ActivityBodyCharityFlower {
@@ -274,23 +286,22 @@ message ActivityBodyCharityFlower {
     int64 personal_score = 3;
     int64 global_score = 4;
     int64 max_global_score = 5;
-    int64 seed_reward_status = 6;
-    corepb.Item seed_reward = 7;
+    CharityFlowerShareStatus share_status = 6;
+    repeated corepb.Item share_reward = 7;
     repeated int64 task_ids = 8;
     repeated CharityFlowerPersonalReward personal_rewards = 9;
-    CharityFlowerGlobalReward global_reward = 10;
+    repeated CharityFlowerGlobalReward global_rewards = 10;
     int64 final_pack_threshold = 11;
     repeated corepb.Item final_reward = 12;
     int64 settlement_time = 13;
     bool settled = 14;
     bool final_reward_eligible = 15;
     bool can_donate = 16;
-    int64 flow_status = 17;
-    repeated CharityFlowerPublicFundOrder public_fund_orders = 18;
+    CharityFlowerXhhStatus xhh_status = 17;
+    repeated CharityFlowerXhhSuccessOrder xhh_success_orders = 18;
     bool compliance_agreed = 19;
     string business_id = 20;
-    repeated corepb.Item daily_reward = 21;
-    int64 daily_reward_status = 22;
+    repeated corepb.Item xhh_reward = 21;
 }
 
 message CharityFlowerClaimShareRsp { repeated corepb.Item awards = 1; }
