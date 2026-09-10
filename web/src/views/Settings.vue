@@ -164,6 +164,7 @@ const {
   plantingStrategyOptions,
   bagFallbackStrategyOptions,
   strategyPreviewLabel,
+  availableSeeds,
   loadStrategyData,
   resetStrategyState,
 } = useStrategySettings({
@@ -380,6 +381,7 @@ onMounted(async () => {
           :planting-strategy-options="plantingStrategyOptions"
           :bag-fallback-strategy-options="bagFallbackStrategyOptions"
           :strategy-preview-label="strategyPreviewLabel"
+          :available-seeds="availableSeeds"
           :fertilizer-land-type-options="fertilizerLandTypeOptions"
           :fertilizer-options="fertilizerOptions"
           @save="saveCurrentAccountSettings"

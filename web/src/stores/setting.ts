@@ -105,6 +105,7 @@ export interface SettingsState {
   bagSeedPriority: number[]
   bagSeedKnownIds: number[]
   bagSeedFallbackStrategy: string
+  plantSeedPriority: number[]
   autoAcceptFriendMinLevel: number
   intervals: IntervalsConfig
   friendQuietHours: FriendQuietHoursConfig
@@ -162,6 +163,7 @@ export const useSettingStore = defineStore('setting', () => {
     bagSeedPriority: [],
     bagSeedKnownIds: [],
     bagSeedFallbackStrategy: 'level',
+    plantSeedPriority: [],
     autoAcceptFriendMinLevel: 0,
     intervals: {},
     friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
@@ -194,6 +196,7 @@ export const useSettingStore = defineStore('setting', () => {
       bagSeedPriority: [],
       bagSeedKnownIds: [],
       bagSeedFallbackStrategy: 'level',
+      plantSeedPriority: [],
       autoAcceptFriendMinLevel: 0,
       intervals: {},
       friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
@@ -250,6 +253,7 @@ export const useSettingStore = defineStore('setting', () => {
         settings.value.bagSeedPriority = d.bagSeedPriority ?? []
         settings.value.bagSeedKnownIds = d.bagSeedKnownIds ?? []
         settings.value.bagSeedFallbackStrategy = d.bagSeedFallbackStrategy ?? 'level'
+        settings.value.plantSeedPriority = d.plantSeedPriority ?? []
       }
     }
     finally {
@@ -269,6 +273,7 @@ export const useSettingStore = defineStore('setting', () => {
         bagSeedPriority: newSettings.bagSeedPriority ?? [],
         bagSeedKnownIds: newSettings.bagSeedKnownIds ?? [],
         bagSeedFallbackStrategy: newSettings.bagSeedFallbackStrategy ?? 'level',
+        plantSeedPriority: newSettings.plantSeedPriority ?? [],
         autoAcceptFriendMinLevel: newSettings.autoAcceptFriendMinLevel ?? 0,
         autoCodeRefresh: newSettings.autoCodeRefresh,
         intervals: newSettings.intervals,

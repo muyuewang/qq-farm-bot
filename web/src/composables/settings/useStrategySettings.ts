@@ -40,6 +40,7 @@ export function useStrategySettings({
     bagSeedPriority: [] as number[],
     bagSeedKnownIds: [] as number[],
     bagSeedFallbackStrategy: 'level',
+    plantSeedPriority: [] as number[],
     stealDelaySeconds: 0,
     intervals: { farmMin: 2, farmMax: 5, helpMin: 10, helpMax: 15, stealMin: 10, stealMax: 15 },
     friendQuietHours: { enabled: false, start: '23:00', end: '07:00' },
@@ -52,6 +53,7 @@ export function useStrategySettings({
     { label: '最大净利润/时', value: 'max_profit' },
     { label: '最大普通肥净利润/时', value: 'max_fert_profit' },
     { label: '背包种子优先', value: 'bag_priority' },
+    { label: '优先种植种子', value: 'seed_priority' },
   ]
 
   const bagFallbackStrategyOptions = [
@@ -79,6 +81,18 @@ export function useStrategySettings({
     const available = seeds.value.filter(s => !s.locked && !s.soldOut)
     if (available.length === 0) {
       strategyPreviewLabel.value = '暂无可用种子'
+      return
+    }
+    if (localStrategySettings.value.plantingStrategy === 'seed_priority') {
+      const priorityList = localStrategySettings.value.plantSeedPriority
+      if (!priorityList || priorityList.length === 0) {
+        strategyPreviewLabel.value = '未设置优先种子，将回退等级策略'
+        return
+      }
+      const seed = available.find(s => Number(s.seedId) === Number(priorityList[0]))
+      strategyPreviewLabel.value = seed
+        ? `${seed.requiredLevel}级 ${seed.name}`
+        : '优先种子不可购买，将回退等级策略'
       return
     }
     if (strategy === 'level') {
@@ -126,6 +140,7 @@ export function useStrategySettings({
         bagSeedPriority: settings.value.bagSeedPriority ?? [],
         bagSeedKnownIds: settings.value.bagSeedKnownIds ?? [],
         bagSeedFallbackStrategy: settings.value.bagSeedFallbackStrategy ?? 'level',
+        plantSeedPriority: settings.value.plantSeedPriority ?? [],
         stealDelaySeconds: settings.value.stealDelaySeconds ?? 0,
         intervals: settings.value.intervals,
         friendQuietHours: settings.value.friendQuietHours,
@@ -177,6 +192,7 @@ export function useStrategySettings({
     plantingStrategyOptions,
     bagFallbackStrategyOptions,
     strategyPreviewLabel,
+    availableSeeds: seeds,
     syncLocalStrategySettings,
     loadStrategyData,
     saveStrategySettings,
