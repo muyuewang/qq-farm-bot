@@ -304,6 +304,218 @@ async function getPetDiaryActivity() {
   return normalizePetDiary(group, bagItems, shopData, warnings);
 }
 
+// 串行化活动写操作，避免并发重复消耗
+let mutationLock = Promise.resolve();
+function serializePetDiaryMutation(task) {
+  const run = mutationLock.then(() => task());
+  mutationLock = run.catch(() => null);
+  return run;
+}
+
+function bagBalanceMap(bagItems) {
+  const map = new Map();
+  for (const item of list(bagItems)) {
+    const id = toNum(item?.id);
+    if (id > 0) map.set(id, (map.get(id) || 0) + Math.max(0, toNum(item?.count)));
+  }
+  return map;
+}
+
+function costsSatisfied(costs, bagMap, times = 1) {
+  if (!costs.length) return false;
+  const totals = new Map();
+  for (const cost of costs) {
+    const id = toNum(cost.itemId ?? cost.id);
+    const count = toNum(cost.count);
+    if (id <= 0 || id === DIAMOND_ID || count <= 0) return false;
+    totals.set(id, (totals.get(id) || 0) + count * times);
+  }
+  return [...totals].every(([id, amount]) => (bagMap.get(id) || 0) >= amount);
+}
+
+function extractRewards(replySelector) {
+  return list(replySelector?.rewards || replySelector?.awards).map(item => normalizeItem(item));
+}
+
+async function operatePetDiary(action, input = {}) {
+  const known = new Set([
+    'initialize', 'feed', 'draw', 'story', 'refreshCharm', 'equipCharm',
+    'openTreasure', 'compensation', 'claimDog', 'skipBattle', 'seeds', 'exchange',
+  ]);
+  if (!known.has(action)) throw new Error(`未知萌宠操作: ${action}`);
+
+  return serializePetDiaryMutation(async () => {
+    const group = await getPetDiaryGroup();
+    const nowSec = Math.floor(Date.now() / 1000);
+    const children = list(group.children);
+    const petNode = children.find(node => toNum(node?.head?.id) === PET_ID);
+    const seedsNode = children.find(node => toNum(node?.head?.id) === SEEDS_ID);
+    if (action !== 'exchange' && !isActiveWindow(petNode?.head, nowSec)) {
+      throw new Error('萌宠成长日记当前不在活动时间内');
+    }
+
+    const state = petNode?.pet_treasure_hunt || {};
+    const nurture = state.nurture || {};
+    const feed = state.feed || {};
+    const hunt = state.hunt || {};
+    const battle = state.battle || {};
+    const pool = state.pool || {};
+    const plunder = state.plunder || {};
+
+    let bagMap = new Map();
+    try {
+      bagMap = bagBalanceMap(getBagItems(await getBag()));
+    } catch {
+      // 无法读背包时继续，服务端仍会校验
+    }
+
+    let activityId = PET_ID;
+    let command;
+    let selector;
+    let params = {};
+
+    if (action === 'initialize') {
+      if (nurture.cg_played === true) throw new Error('已领养比熊，请刷新状态');
+      [command, selector] = OPERATIONS.initialize;
+    } else if (action === 'feed') {
+      if (toNum(nurture.stage) !== 1 || toNum(feed.feed_count) >= toNum(base.daily_feed_limit)) {
+        throw new Error('当前不可投喂');
+      }
+      const costs = parseFeedCosts();
+      if (!costsSatisfied(costs, bagMap)) throw new Error('萌宠元气糕不足，请先种植活动作物');
+      [command, selector] = OPERATIONS.feed;
+    } else if (action === 'draw') {
+      if (toNum(nurture.stage) !== 2 || toNum(hunt.treasure_count) >= toNum(base.daily_treasure_limit)) {
+        throw new Error('当前不可寻宝');
+      }
+      const costs = list(hunt.treasure_cost).map(item => normalizeItem(item));
+      if (!costsSatisfied(costs, bagMap)) throw new Error('寻宝消耗材料不足');
+      [command, selector] = OPERATIONS.draw;
+    } else if (action === 'story') {
+      const order = toNum(input.order);
+      if (!order) throw new Error('缺少手记编号');
+      if (!list(state.story?.stories).some(s => toNum(s.order) === order && s.unlocked === true && s.claimed !== true)) {
+        throw new Error('手记尚未解锁或已领取');
+      }
+      [command, selector] = OPERATIONS.story;
+      params = { order };
+    } else if (action === 'seeds') {
+      const seedRewards = list(seedsNode?.mega_event?.rewards);
+      if (!isActiveWindow(seedsNode?.head, nowSec)
+        || !seedRewards.some(r => r.claimable === true && r.claimed !== true)) {
+        throw new Error('当前没有可领取的种子礼包');
+      }
+      activityId = SEEDS_ID;
+      [command, selector] = OPERATIONS.seeds;
+    } else if (action === 'claimDog') {
+      if (toNum(nurture.stage) !== 2 || nurture.dog_granted === true) {
+        throw new Error('比熊尚未成年或已经领取');
+      }
+      [command, selector] = OPERATIONS.claimDog;
+    } else if (action === 'refreshCharm') {
+      if (toNum(battle.charm_free_refresh_count) >= toNum(charmRefresh.free_refresh_daily_limit)) {
+        throw new Error('免费刷新已用完；为避免自动消耗钻石，已停用付费刷新');
+      }
+      [command, selector] = OPERATIONS.refreshCharm;
+    } else if (action === 'equipCharm') {
+      const charmId = toNum(input.charmId);
+      if (!charmId) throw new Error('缺少锦囊编号');
+      if (battle.charm_pick_used === true || !list(battle.charm_daily_pool).includes(charmId)) {
+        throw new Error('该锦囊不可选择或今日已经选择');
+      }
+      [command, selector] = OPERATIONS.equipCharm;
+      params = { charm_ids: [charmId] };
+    } else if (action === 'openTreasure') {
+      const ready = list(pool.treasures).some(t => (
+        toNum(t.status) === 3
+        || (toNum(t.status) === 2 && toNum(t.end_at) > 0 && toNum(t.end_at) <= nowSec)
+      ));
+      if (!ready) throw new Error('还没有完成护送的宝藏');
+      [command, selector] = OPERATIONS.openTreasure;
+    } else if (action === 'compensation') {
+      if (toNum(plunder.plunder_compensation_count) <= 0) throw new Error('当前没有可领取的夺宝补偿');
+      [command, selector] = OPERATIONS.compensation;
+    } else if (action === 'skipBattle') {
+      if (typeof input.skip !== 'boolean') throw new Error('跳过动画设置无效');
+      [command, selector] = OPERATIONS.skipBattle;
+      params = { skip: input.skip };
+    } else if (action === 'exchange') {
+      activityId = SHOP_ID;
+      const goodsId = toNum(input.goodsId);
+      const count = Math.max(1, toNum(input.count) || 1);
+      if (!goodsId) throw new Error('缺少商品编号');
+      [command, selector] = OPERATIONS.exchange;
+      const shopReply = await operatePetDiaryCommand(SHOP_ID, 7, null, {});
+      if (!isActiveWindow(shopReply?.data?.head, nowSec)) throw new Error('拾物小铺当前不可兑换');
+      const goods = list(shopReply?.data?.shop?.goods).find(g => toNum(g.id) === goodsId);
+      if (!goods) throw new Error('服务端目录未发现该商品');
+      const costs = list(goods.cost).map(item => normalizeItem(item));
+      if (toNum(goods.diamond_cost_count) > 0 || costs.some(c => c.itemId === DIAMOND_ID)) {
+        throw new Error('该商品可能消耗钻石，已阻止兑换');
+      }
+      const limit = toNum(goods.purchase_limit);
+      const purchased = toNum(goods.purchased_count);
+      if (limit > 0 && purchased + count > limit) throw new Error('兑换数量超过剩余限购次数');
+      if (!costsSatisfied(costs, bagMap, count)) throw new Error('兑换余额不足');
+      params = { goods_id: goodsId, count };
+    }
+
+    const reply = await operatePetDiaryCommand(activityId, command, selector, params);
+    if (toNum(reply.activity_id) !== activityId || toNum(reply.operate_type) !== command) {
+      throw new Error('活动响应不匹配，请刷新后查看结果');
+    }
+    const result = selector ? reply[selector] : reply;
+    let activity = null;
+    let refreshError = '';
+    try {
+      activity = await getPetDiaryActivity();
+    } catch (err) {
+      refreshError = `操作已成功，刷新失败：${err.message}`;
+    }
+
+    return {
+      ok: true,
+      action,
+      rewards: extractRewards(result),
+      costs: list(result?.costs).map(item => normalizeItem(item)),
+      message: action === 'battle' && result && result.won === false
+        ? '本次夺宝未获胜，已按规则结算'
+        : '操作成功',
+      activity,
+      refreshError,
+    };
+  });
+}
+
+async function getPetDiaryRecords(kind = 'interact') {
+  const isPlunder = kind === 'plunder';
+  const selector = isPlunder ? 'pet_treasure_hunt_get_plundered_log' : 'pet_treasure_hunt_get_log';
+  const command = isPlunder ? OPERATIONS.plunderedLogs[0] : OPERATIONS.logs[0];
+  const reply = await operatePetDiaryCommand(PET_ID, command, selector);
+  const logs = list(reply?.[selector]?.logs);
+  if (!isPlunder) {
+    return logs.map(entry => ({
+      time: toNum(entry.ts) * 1000,
+      type: toNum(entry.type),
+      costs: list(entry.costs).map(item => normalizeItem(item)),
+      rewards: list(entry.rewards).map(item => normalizeItem(item)),
+      dogId: toNum(entry.dog_id),
+    }));
+  }
+  return logs.map(entry => ({
+    time: toNum(entry.ts) * 1000,
+    attackerGid: toNum(entry.attacker_gid),
+    name: String(entry.attacker_name || ''),
+    won: entry.attacker_won === true,
+    treasureId: String(entry.treasure_id || ''),
+    challengeId: toNum(entry.challenge_item_id),
+    level: toNum(entry.attacker_level),
+    lost: list(entry.lost_items).map(item => normalizeItem(item)),
+    injected: list(entry.injected_items).map(item => normalizeItem(item)),
+    fake: entry.is_fake === true,
+  }));
+}
+
 module.exports = {
   GROUP_ID,
   PET_ID,
@@ -312,6 +524,8 @@ module.exports = {
   OPERATIONS,
   getPetDiaryActivity,
   getPetDiaryGroup,
+  operatePetDiary,
   operatePetDiaryCommand,
+  getPetDiaryRecords,
   normalizePetDiary,
 };

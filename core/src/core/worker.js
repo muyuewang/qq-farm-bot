@@ -1642,6 +1642,18 @@ async function handleApiCall(msg) {
                 result = await getPetDiaryActivity();
                 break;
             }
+
+            case 'operatePetDiary': {
+                const { operatePetDiary } = require('../services/pet-diary-service');
+                result = await operatePetDiary(args[0], args[1] || {});
+                break;
+            }
+
+            case 'getPetDiaryRecords': {
+                const { getPetDiaryRecords } = require('../services/pet-diary-service');
+                result = await getPetDiaryRecords(args[0]);
+                break;
+            }
             case 'buyRainPoemCollectionBottle': {
                 const { buyRainPoemCollectionBottle } = require('../services/activity');
                 result = await buyRainPoemCollectionBottle();

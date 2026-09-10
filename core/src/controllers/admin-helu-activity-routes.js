@@ -58,6 +58,27 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  app.post('/api/activity/pet-diary/operate', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '萌宠成长日记操作失败: 账号未运行')) return;
+      const action = String(req.body?.action || '').trim();
+      const input = req.body && typeof req.body === 'object' ? req.body.input || req.body : {};
+      res.json(await provider.operatePetDiary(accountId, action, input));
+    } catch (err) { sendProviderError(res, err); }
+  });
+
+  app.get('/api/activity/pet-diary/records', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取萌宠记录失败: 账号未运行')) return;
+      const kind = String(req.query.kind || 'interact');
+      res.json({ ok: true, records: await provider.getPetDiaryRecords(accountId, kind) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.post('/api/activity/rain-poem/bottle/buy', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;

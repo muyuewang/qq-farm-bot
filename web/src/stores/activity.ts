@@ -480,6 +480,21 @@ export const useActivityStore = defineStore('activity', () => {
     finally { petDiaryLoading.value = false }
   }
 
+  async function operatePetDiary(accountId: string, action: string, input: Record<string, unknown> = {}) {
+    petDiaryLoading.value = true
+    try {
+      const { data } = await api.post('/api/activity/pet-diary/operate', { action, input }, {
+        headers: { 'x-account-id': accountId },
+      })
+      if (data.ok && data.activity && isCurrentAccount(String(accountId)))
+        petDiaryActivity.value = data.activity
+      else if (data.ok && isCurrentAccount(String(accountId)))
+        await fetchPetDiaryActivity(accountId)
+      return data
+    }
+    finally { petDiaryLoading.value = false }
+  }
+
   async function buildQixiBridge(accountId: string) {
     qixiBuildLoading.value = true
     try {
@@ -714,6 +729,7 @@ export const useActivityStore = defineStore('activity', () => {
     fetchRainPoemActivity,
     fetchCharityFlowerActivity,
     fetchPetDiaryActivity,
+    operatePetDiary,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,

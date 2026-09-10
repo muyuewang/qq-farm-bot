@@ -232,6 +232,8 @@ function createDataProvider(deps) {
         useQixiDew: (ref, options) => callWorkerApi(resolveAccountId(ref), 'useQixiDew', options),
         getRainPoemActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getRainPoemActivity'),
         getPetDiaryActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryActivity'),
+        operatePetDiary: (ref, action, input) => callWorkerApi(resolveAccountId(ref), 'operatePetDiary', action, input),
+        getPetDiaryRecords: (ref, kind) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryRecords', kind),
         buyRainPoemCollectionBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'buyRainPoemCollectionBottle'),
         collectRainPoemWeather: (ref) => callWorkerApi(resolveAccountId(ref), 'collectRainPoemWeather'),
         useRainPoemSummonBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'useRainPoemSummonBottle'),

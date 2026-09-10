@@ -1,10 +1,24 @@
 <script setup lang="ts">
 import type { PetDiaryActivityData } from '@/stores/activity'
-import { computed } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
+import { useAccountStore } from '@/stores/account'
+import { useActivityStore } from '@/stores/activity'
+import { useToastStore } from '@/stores/toast'
+import { storeToRefs } from 'pinia'
 
 const props = defineProps<{ activity?: PetDiaryActivityData | null, loading?: boolean }>()
-defineEmits<{ refresh: [] }>()
+const emit = defineEmits<{
+  refresh: []
+}>()
+
+const accountStore = useAccountStore()
+const activityStore = useActivityStore()
+const toast = useToastStore()
+const { currentAccountId } = storeToRefs(accountStore)
+
+const busyAction = ref('')
+const shopExchangeCount = reactive<Record<number, number>>({})
 
 const growthPercent = computed(() => {
   const adultGrowth = props.activity?.nurture.adultGrowth || 0
@@ -17,6 +31,7 @@ const unlockedStories = computed(() => props.activity?.stories.filter(item => it
 const claimedStories = computed(() => props.activity?.stories.filter(item => item.claimed).length || 0)
 const inTransitTreasures = computed(() => props.activity?.treasures.filter(item => item.status === 2).length || 0)
 const claimableTreasures = computed(() => props.activity?.treasures.filter(item => item.status === 3).length || 0)
+const claimableStory = computed(() => props.activity?.stories.find(item => item.unlocked && !item.claimed) || null)
 
 function balanceOf(itemId: number) {
   return props.activity?.balances.find(item => item.itemId === itemId)?.count || 0
@@ -51,6 +66,36 @@ function formatFullDateTime(ms?: number) {
     minute: '2-digit',
     hour12: false,
   }).format(new Date(ms))
+}
+
+async function runAction(action: string, input: Record<string, unknown> = {}, label = '') {
+  if (!currentAccountId.value || busyAction.value)
+    return
+  busyAction.value = action
+  try {
+    const data = await activityStore.operatePetDiary(String(currentAccountId.value), action, input)
+    if (data?.ok) {
+      const rewardText = (data.rewards || []).map((item: any) => `${item.itemId}×${item.count}`).join('、')
+      toast.success(data.refreshError
+        ? `${label || '操作'}成功，但刷新失败：${data.refreshError}`
+        : `${label || '操作'}成功${rewardText ? `：${rewardText}` : ''}`)
+      if (!data.activity)
+        emit('refresh')
+    }
+    else {
+      toast.error(data?.error || `${label || '操作'}失败`)
+    }
+  }
+  catch (error: any) {
+    toast.error(error?.response?.data?.error || error?.message || `${label || '操作'}失败`)
+  }
+  finally {
+    busyAction.value = ''
+  }
+}
+
+function exchangeCount(goodsId: number) {
+  return Math.max(1, Number(shopExchangeCount[goodsId] || 1))
 }
 </script>
 
@@ -147,6 +192,38 @@ function formatFullDateTime(ms?: number) {
               {{ activity?.nurture.canFeed ? '可投喂' : '暂不可投喂' }}
             </span>
           </div>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <BaseButton
+              v-if="activity && !activity.nurture.initialized"
+              size="sm"
+              variant="primary"
+              :loading="busyAction === 'initialize'"
+              :disabled="!!busyAction || !activity.active"
+              @click="runAction('initialize', {}, '领养')"
+            >
+              领养比熊
+            </BaseButton>
+            <BaseButton
+              v-if="activity?.nurture.canFeed"
+              size="sm"
+              variant="primary"
+              :loading="busyAction === 'feed'"
+              :disabled="!!busyAction"
+              @click="runAction('feed', {}, '投喂')"
+            >
+              投喂一次
+            </BaseButton>
+            <BaseButton
+              v-if="activity?.nurture.adult && !activity.nurture.dogGranted"
+              size="sm"
+              variant="primary"
+              :loading="busyAction === 'claimDog'"
+              :disabled="!!busyAction"
+              @click="runAction('claimDog', {}, '领取比熊')"
+            >
+              领取永久比熊
+            </BaseButton>
+          </div>
         </div>
       </article>
 
@@ -183,16 +260,67 @@ function formatFullDateTime(ms?: number) {
             <div class="mt-0.5 font-medium">{{ activity?.charms.freeRefreshRemaining || 0 }}</div>
           </div>
         </div>
-        <div class="mt-3 flex flex-wrap gap-2 text-xs">
-          <span class="rounded-full bg-gray-100 px-2.5 py-1 dark:bg-gray-700" :class="activity?.hunt.canDraw ? 'text-cyan-700 dark:text-cyan-300' : 'text-gray-500'">
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs dark:bg-gray-700" :class="activity?.hunt.canDraw ? 'text-cyan-700 dark:text-cyan-300' : 'text-gray-500'">
             {{ activity?.hunt.canDraw ? '可寻宝' : '暂不可寻宝' }}
           </span>
-          <span class="rounded-full bg-gray-100 px-2.5 py-1 dark:bg-gray-700" :class="activity?.hunt.canPlunder ? 'text-rose-700 dark:text-rose-300' : 'text-gray-500'">
+          <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs dark:bg-gray-700" :class="activity?.hunt.canPlunder ? 'text-rose-700 dark:text-rose-300' : 'text-gray-500'">
             {{ activity?.hunt.canPlunder ? '可夺宝' : '暂不可夺宝' }}
           </span>
-          <span class="rounded-full bg-gray-100 px-2.5 py-1 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
             跳过战斗动画 {{ activity?.skipBattle ? '开' : '关' }}
           </span>
+        </div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <BaseButton
+            v-if="activity?.hunt.canDraw"
+            size="sm"
+            variant="primary"
+            :loading="busyAction === 'draw'"
+            :disabled="!!busyAction"
+            @click="runAction('draw', {}, '寻宝')"
+          >
+            寻宝一次
+          </BaseButton>
+          <BaseButton
+            v-if="claimableTreasures > 0"
+            size="sm"
+            variant="primary"
+            :loading="busyAction === 'openTreasure'"
+            :disabled="!!busyAction"
+            @click="runAction('openTreasure', {}, '领取宝藏')"
+          >
+            领取宝藏（{{ claimableTreasures }}）
+          </BaseButton>
+          <BaseButton
+            v-if="(activity?.compensationCount || 0) > 0"
+            size="sm"
+            variant="secondary"
+            :loading="busyAction === 'compensation'"
+            :disabled="!!busyAction"
+            @click="runAction('compensation', {}, '领取补偿')"
+          >
+            领取夺宝补偿
+          </BaseButton>
+          <BaseButton
+            v-if="activity?.charms.canRefresh"
+            size="sm"
+            variant="secondary"
+            :loading="busyAction === 'refreshCharm'"
+            :disabled="!!busyAction"
+            @click="runAction('refreshCharm', {}, '刷新锦囊')"
+          >
+            免费刷新锦囊
+          </BaseButton>
+          <BaseButton
+            size="sm"
+            variant="outline"
+            :loading="busyAction === 'skipBattle'"
+            :disabled="!!busyAction"
+            @click="runAction('skipBattle', { skip: !activity?.skipBattle }, '跳过动画')"
+          >
+            {{ activity?.skipBattle ? '关闭跳过动画' : '开启跳过动画' }}
+          </BaseButton>
         </div>
       </article>
     </div>
@@ -206,6 +334,17 @@ function formatFullDateTime(ms?: number) {
           </h3>
           <span class="text-xs text-gray-500">解锁 {{ unlockedStories }} · 已领 {{ claimedStories }}</span>
         </header>
+        <div v-if="claimableStory" class="mb-3">
+          <BaseButton
+            size="sm"
+            variant="primary"
+            :loading="busyAction === 'story'"
+            :disabled="!!busyAction"
+            @click="runAction('story', { order: claimableStory.order }, '领取手记')"
+          >
+            领取手记 {{ claimableStory.order }}
+          </BaseButton>
+        </div>
         <div v-if="!activity?.stories.length" class="py-6 text-center text-sm text-gray-400">
           暂无手记数据
         </div>
@@ -241,6 +380,17 @@ function formatFullDateTime(ms?: number) {
             {{ activity?.seeds.canClaim ? '有可领取奖励' : '暂无可领取' }}
           </span>
         </header>
+        <div v-if="activity?.seeds.canClaim" class="mb-3">
+          <BaseButton
+            size="sm"
+            variant="primary"
+            :loading="busyAction === 'seeds'"
+            :disabled="!!busyAction"
+            @click="runAction('seeds', {}, '领取种子礼包')"
+          >
+            一键领取种子礼包
+          </BaseButton>
+        </div>
         <div class="space-y-2">
           <div
             v-for="day in activity?.seeds.days || []"
@@ -289,6 +439,26 @@ function formatFullDateTime(ms?: number) {
             <div>消耗：{{ costText(goods.costs) }}</div>
             <div>限购：{{ goods.remaining === null ? '不限' : `${goods.remaining} 剩余` }}</div>
           </div>
+          <div v-if="goods.exchangeable" class="mt-2 flex items-center gap-2">
+            <input
+              v-model.number="shopExchangeCount[goods.id]"
+              type="number"
+              min="1"
+              class="h-8 w-16 rounded border border-gray-200 bg-white px-2 text-xs dark:border-gray-600 dark:bg-gray-800"
+            >
+            <BaseButton
+              size="sm"
+              variant="primary"
+              :loading="busyAction === 'exchange'"
+              :disabled="!!busyAction"
+              @click="runAction('exchange', { goodsId: goods.id, count: exchangeCount(goods.id) }, '兑换')"
+            >
+              兑换
+            </BaseButton>
+          </div>
+          <div v-else-if="goods.usesDiamond" class="mt-2 text-[11px] text-rose-500">
+            可能消耗钻石，已禁用自动兑换
+          </div>
         </div>
       </div>
     </article>
@@ -319,7 +489,7 @@ function formatFullDateTime(ms?: number) {
     </article>
 
     <p class="text-xs text-gray-400">
-      活动时间：{{ formatFullDateTime(activity?.startTime) }} — {{ formatFullDateTime(activity?.endTime) }}。本页仅展示服务端状态；投喂、寻宝、兑换等操作请在设置中配置自动化，或在游戏内完成。
+      活动时间：{{ formatFullDateTime(activity?.startTime) }} — {{ formatFullDateTime(activity?.endTime) }}。可在此页领养、投喂、寻宝、领取手记/种子/宝藏和兑换非钻石商品。
     </p>
   </section>
 </template>
