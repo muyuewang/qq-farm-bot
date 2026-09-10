@@ -10,6 +10,13 @@ export const CHARITY_FLOWER_ACTIVITY_WINDOW = {
   updatedMs: 1788220800 * 1000,
 }
 
+// 萌宠成长日记 S3：2026-09-01 00:00:00 ~ 2026-09-30 23:59:59（Asia/Shanghai）
+export const PET_DIARY_ACTIVITY_WINDOW = {
+  startMs: 1788192000 * 1000,
+  endMs: 1790783999 * 1000,
+  updatedMs: 1788220800 * 1000,
+}
+
 export function isWithinActivityWindowMs(window: { startMs: number, endMs: number }, nowMs = Date.now()) {
   return nowMs >= window.startMs && nowMs <= window.endMs
 }

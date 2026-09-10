@@ -49,6 +49,15 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  app.get('/api/activity/pet-diary', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取萌宠成长日记失败: 账号未运行')) return;
+      res.json({ ok: true, activity: await provider.getPetDiaryActivity(accountId) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.post('/api/activity/rain-poem/bottle/buy', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
