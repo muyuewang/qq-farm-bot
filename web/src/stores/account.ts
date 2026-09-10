@@ -1,7 +1,8 @@
 import { useStorage } from '@vueuse/core'
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import api from '@/api'
+import { useUserStore } from '@/stores/user'
 
 export interface Account {
   id: string
@@ -80,6 +81,35 @@ export const useAccountStore = defineStore('account', () => {
   const currentAccount = computed(() =>
     accounts.value.find(a => String(a.id) === currentAccountId.value),
   )
+
+  /**
+   * 设置页「仅自己 / 全部账号」与顶部账号菜单共用的可见列表。
+   * 仅管理员需要过滤；普通用户接口已只返回本人账号。
+   */
+  const visibleAccounts = computed(() => {
+    if (showAllAccounts.value)
+      return accounts.value
+    const userStore = useUserStore()
+    if (!userStore.isAdmin)
+      return accounts.value
+    const own = String(userStore.username || '').trim().toLowerCase()
+    if (!own)
+      return accounts.value
+    return accounts.value.filter((acc) => {
+      const owner = String(acc?.username || '').trim().toLowerCase()
+      return !owner || owner === own
+    })
+  })
+
+  watch([visibleAccounts, currentAccountId], ([list, currentId]) => {
+    if (!Array.isArray(list) || list.length === 0)
+      return
+    if (list.some(acc => String(acc.id) === String(currentId)))
+      return
+    const first = list[0]
+    if (first)
+      currentAccountId.value = String(first.id)
+  })
 
   async function fetchAccounts() {
     loading.value = true
@@ -173,6 +203,7 @@ export const useAccountStore = defineStore('account', () => {
     accounts,
     currentAccountId,
     currentAccount,
+    visibleAccounts,
     showAllAccounts,
     loading,
     logs,

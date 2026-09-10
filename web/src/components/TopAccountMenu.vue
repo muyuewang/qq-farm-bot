@@ -11,7 +11,7 @@ import { useStatusStore } from '@/stores/status'
 
 const accountStore = useAccountStore()
 const statusStore = useStatusStore()
-const { accounts, currentAccount } = storeToRefs(accountStore)
+const { visibleAccounts, currentAccount } = storeToRefs(accountStore)
 const { currentStatusReady, status } = storeToRefs(statusStore)
 
 const showAccountDropdown = ref(false)
@@ -284,9 +284,9 @@ async function handleAccountSaved() {
         :style="{ top: dropdownPos.top + 'px', left: dropdownPos.left + 'px', width: dropdownPos.width + 'px' }"
       >
         <div class="custom-scrollbar max-h-72 overflow-y-auto">
-          <template v-if="accounts.length > 0">
+          <template v-if="visibleAccounts.length > 0">
             <button
-              v-for="acc in accounts"
+              v-for="acc in visibleAccounts"
               :key="acc.id || acc.uin"
               class="w-full flex items-center gap-3 px-4 py-2 transition-colors hover:bg-gray-100/60 dark:hover:bg-gray-700/50"
               :style="{ backgroundColor: currentAccount?.id === acc.id ? 'color-mix(in srgb, var(--theme-primary) 10%, transparent)' : undefined }"

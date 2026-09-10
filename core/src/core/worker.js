@@ -823,7 +823,6 @@ async function runHelpTick(autoConfig) {
         CONFIG.helpCheckIntervalMin || 30000,
         CONFIG.helpCheckIntervalMax || 35000
     );
-    const lowFrequencyDelay = Math.max(10 * 60 * 1000, nextDelay);
 
     try {
         await runWithRequestPriority('friend', async () => {
@@ -839,7 +838,8 @@ async function runHelpTick(autoConfig) {
             });
         }
     } finally {
-        nextHelpRunAt = Date.now() + lowFrequencyDelay;
+        // 必须跟随账号设置的帮助巡查间隔，不能强制 10 分钟下限
+        nextHelpRunAt = Date.now() + Math.max(1000, Number(nextDelay) || 30000);
         helpTaskRunning = false;
     }
 }

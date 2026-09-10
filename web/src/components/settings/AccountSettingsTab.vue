@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { storeToRefs } from 'pinia'
+import { computed } from 'vue'
 import AccountModal from '@/components/AccountModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import { getPlatformClass, getPlatformLabel } from '@/stores/account'
-import { computed } from 'vue'
+import { getPlatformClass, getPlatformLabel, useAccountStore } from '@/stores/account'
 
 const props = defineProps<{
   accounts: any[]
@@ -28,11 +29,15 @@ const props = defineProps<{
   currentUserUsername: string
 }>()
 
-const filteredAccounts = computed(() => {
-  if (props.showAllAccounts) return props.accounts
-  if (props.userIsAdmin) return props.accounts.filter((acc: any) => acc.username === props.currentUserUsername)
-  return props.accounts
-})
+const accountStore = useAccountStore()
+const { visibleAccounts: filteredAccounts } = storeToRefs(accountStore)
+
+const hasFilteredOutAccounts = computed(() =>
+  !props.showAllAccounts
+  && props.userIsAdmin
+  && props.accounts.length > 0
+  && filteredAccounts.value.length === 0,
+)
 
 const emit = defineEmits<{
   add: []
@@ -84,6 +89,7 @@ function accountAvatar(acc: any) {
           <span class="sm:hidden">刷新Code</span>
         </BaseButton>
         <BaseButton
+          v-if="userIsAdmin"
           variant="outline"
           size="sm"
           @click="emit('toggleAccountFilter')"
@@ -135,6 +141,23 @@ function accountAvatar(acc: any) {
         @click="emit('add')"
       >
         立即添加
+      </BaseButton>
+    </div>
+
+    <div v-else-if="hasFilteredOutAccounts" class="rounded-lg bg-white py-10 text-center shadow dark:bg-gray-800">
+      <div i-carbon-filter class="mb-3 inline-block text-3xl text-gray-400" />
+      <p class="mb-1 text-gray-600 font-medium dark:text-gray-300">
+        当前筛选没有匹配账号
+      </p>
+      <p class="mb-4 text-sm text-gray-400">
+        已切到「仅自己」，但账号归属与当前管理员用户名不一致。
+      </p>
+      <BaseButton
+        variant="outline"
+        size="sm"
+        @click="emit('toggleAccountFilter')"
+      >
+        查看全部账号
       </BaseButton>
     </div>
 
