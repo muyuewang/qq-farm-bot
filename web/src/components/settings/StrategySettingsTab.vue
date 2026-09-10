@@ -67,6 +67,17 @@ const emit = defineEmits<{
 
 const settings = defineModel<StrategySettings>('settings', { required: true })
 
+const showSeedPicker = computed(() =>
+  settings.value.plantingStrategy === 'seed_priority'
+  || (settings.value.plantingStrategy === 'bag_priority' && settings.value.bagSeedFallbackStrategy === 'seed_priority'),
+)
+
+const seedPickerLabel = computed(() =>
+  settings.value.plantingStrategy === 'seed_priority'
+    ? '优先种植种子'
+    : '第二优先种子',
+)
+
 const seedPriorityOptions = computed(() => {
   const seeds = (props.availableSeeds || []).filter(s => !s.locked && !s.soldOut)
   return seeds.map(s => ({ label: `${s.name} (Lv.${s.requiredLevel})`, value: s.seedId }))
@@ -115,10 +126,10 @@ function isBagFallbackStrategySelected(value: string | number) {
           :options="plantingStrategyOptions"
         />
         <BaseSelect
-          v-if="settings.plantingStrategy === 'seed_priority'"
+          v-if="showSeedPicker"
           :model-value="settings.plantSeedPriority?.[0] ?? undefined"
           :options="seedPriorityOptions"
-          label="优先种植种子"
+          :label="seedPickerLabel"
           placeholder="点击选择种子..."
           @update:model-value="(v: string | number | undefined) => v != null ? selectSeedPriority(v) : null"
         />

@@ -62,6 +62,7 @@ export function useStrategySettings({
     { label: '最大普通肥经验/时', value: 'max_fert_exp' },
     { label: '最大净利润/时', value: 'max_profit' },
     { label: '最大普通肥净利润/时', value: 'max_fert_profit' },
+    { label: '优先种植种子', value: 'seed_priority' },
   ]
 
   let strategyPreviewRequestId = 0
@@ -83,7 +84,9 @@ export function useStrategySettings({
       strategyPreviewLabel.value = '暂无可用种子'
       return
     }
-    if (localStrategySettings.value.plantingStrategy === 'seed_priority') {
+    if (localStrategySettings.value.plantingStrategy === 'seed_priority'
+      || (localStrategySettings.value.plantingStrategy === 'bag_priority'
+        && localStrategySettings.value.bagSeedFallbackStrategy === 'seed_priority')) {
       const priorityList = localStrategySettings.value.plantSeedPriority
       if (!priorityList || priorityList.length === 0) {
         strategyPreviewLabel.value = '未设置优先种子，将回退等级策略'
