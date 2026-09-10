@@ -282,6 +282,24 @@ function normalizePetDiary(group, bagItems, shopData, warnings = []) {
     skipBattle: battle.is_skip_battle_cg === true,
     shop: goods,
     shopActive: shopNode ? isActiveWindow(shopNode.head, nowSec) : false,
+    solarTerms: null,
+  };
+}
+
+async function loadPetDiarySolarTerms(startTimeMs, endTimeMs) {
+  const { getSolarTermsInfo } = require('./activity');
+  const solar = await getSolarTermsInfo();
+  const terms = list(solar?.terms).filter((term) => {
+    const start = Number(term?.startTime) || 0;
+    const end = Number(term?.endTime) || 0;
+    if (!start && !end) return true;
+    return end * 1000 >= startTimeMs && start * 1000 <= endTimeMs;
+  });
+  return {
+    claimableCount: terms.filter(term => term.claimable).length,
+    currentTerm: terms.find(term => term.claimable) || terms.find(term => term.status === 3) || terms[0] || null,
+    tipsText: String(solar?.tipsText || ''),
+    terms,
   };
 }
 
@@ -301,7 +319,14 @@ async function getPetDiaryActivity() {
   } catch (err) {
     warnings.push(`背包读取失败：${err.message}`);
   }
-  return normalizePetDiary(group, bagItems, shopData, warnings);
+  const activity = normalizePetDiary(group, bagItems, shopData, warnings);
+  try {
+    activity.solarTerms = await loadPetDiarySolarTerms(activity.startTime, activity.endTime);
+  } catch (err) {
+    warnings.push(`节令小礼：${err.message}`);
+    activity.warnings = warnings;
+  }
+  return activity;
 }
 
 // 串行化活动写操作，避免并发重复消耗
@@ -340,7 +365,7 @@ function extractRewards(replySelector) {
 async function operatePetDiary(action, input = {}) {
   const known = new Set([
     'initialize', 'feed', 'draw', 'story', 'refreshCharm', 'equipCharm',
-    'openTreasure', 'compensation', 'claimDog', 'skipBattle', 'seeds', 'exchange',
+    'openTreasure', 'compensation', 'claimDog', 'skipBattle', 'seeds', 'exchange', 'solar',
   ]);
   if (!known.has(action)) throw new Error(`未知萌宠操作: ${action}`);
 
@@ -458,6 +483,25 @@ async function operatePetDiary(action, input = {}) {
       if (limit > 0 && purchased + count > limit) throw new Error('兑换数量超过剩余限购次数');
       if (!costsSatisfied(costs, bagMap, count)) throw new Error('兑换余额不足');
       params = { goods_id: goodsId, count };
+    } else if (action === 'solar') {
+      const { claimSolarTermsReward } = require('./activity');
+      const result = await claimSolarTermsReward(toNum(input.termId) || 0);
+      let activity = null;
+      let refreshError = '';
+      try {
+        activity = await getPetDiaryActivity();
+      } catch (err) {
+        refreshError = `领取已成功，刷新失败：${err.message}`;
+      }
+      return {
+        ok: true,
+        action: 'solar',
+        rewards: list(result?.rewards).map(item => normalizeItem(item)),
+        costs: [],
+        message: '节令小礼领取成功',
+        activity,
+        refreshError,
+      };
     }
 
     const reply = await operatePetDiaryCommand(activityId, command, selector, params);

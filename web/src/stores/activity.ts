@@ -170,6 +170,26 @@ export interface PetDiaryActivityData {
     exchangeable: boolean
   }>
   shopActive: boolean
+  solarTerms?: {
+    claimableCount: number
+    tipsText?: string
+    currentTerm?: {
+      id: number
+      title?: string
+      status?: number
+      claimable?: boolean
+    } | null
+    terms: Array<{
+      id: number
+      title?: string
+      status?: number
+      statusLabel?: string
+      claimable?: boolean
+      startTime?: number
+      endTime?: number
+      rewards?: PetDiaryActivityCost[]
+    }>
+  } | null
 }
 
 export interface HeluSolarTerm {
