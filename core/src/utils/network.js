@@ -835,7 +835,18 @@ let currentConnection = null;
 let wsErrorState = { code: 0, at: 0, message: '' };
 
 function buildLoginDeviceInfo(deviceProtocol) {
-    const device = resolveDeviceFingerprint(deviceProtocol);
+    const custom = deviceProtocol && deviceProtocol.enabled ? deviceProtocol : null;
+    if (!custom) {
+        return {
+            client_version: CONFIG.clientVersion,
+            sys_software: DEFAULT_DEVICE_FINGERPRINT.sysSoftware,
+            network: 'wifi',
+            memory: DEFAULT_DEVICE_FINGERPRINT.memory,
+            device_id: DEFAULT_DEVICE_FINGERPRINT.deviceId,
+        };
+    }
+
+    const device = resolveDeviceFingerprint(custom);
     return {
         client_version: CONFIG.clientVersion,
         sys_software: device.sysSoftware,
