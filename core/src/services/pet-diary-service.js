@@ -101,6 +101,13 @@ function normalizeTreasure(value) {
     plunderCount: toNum(value?.plunder_count),
     maxPlunderCount: toNum(value?.max_plunder_count),
     sourceCharmIds: list(value?.source_charm_ids).map(toNum),
+    previews: list(value?.battle_previews).map(p => ({
+      challengeId: toNum(p?.challenge_item_id),
+      canStart: p?.canStart === true || p?.can_start === true,
+      maxProfit: normalizeItem(p?.max_profit),
+      maxLoss: normalizeItem(p?.max_loss),
+      plunderableCount: toNum(p?.plunderable_count),
+    })),
   };
 }
 
@@ -366,6 +373,7 @@ async function operatePetDiary(action, input = {}) {
   const known = new Set([
     'initialize', 'feed', 'draw', 'story', 'refreshCharm', 'equipCharm',
     'openTreasure', 'compensation', 'claimDog', 'skipBattle', 'seeds', 'exchange', 'solar',
+    'battle', 'markStories',
   ]);
   if (!known.has(action)) throw new Error(`未知萌宠操作: ${action}`);
 
@@ -460,6 +468,34 @@ async function operatePetDiary(action, input = {}) {
     } else if (action === 'compensation') {
       if (toNum(plunder.plunder_compensation_count) <= 0) throw new Error('当前没有可领取的夺宝补偿');
       [command, selector] = OPERATIONS.compensation;
+    } else if (action === 'battle') {
+      if (hunt.can_play_plunder !== true || toNum(battle.battle_count) >= toNum(fight.daily_battle_limit)) {
+        throw new Error('当前不可夺宝');
+      }
+      const gid = toNum(input.gid);
+      const challengeId = toNum(input.challengeId);
+      const treasureId = String(input.treasureId || '');
+      if (!gid) throw new Error('缺少好友 GID');
+      if (![80101, 80102, 80103].includes(challengeId)) throw new Error('挑战书类型无效');
+      const friend = await getPetDiaryFriend(gid);
+      const treasure = list(friend.treasures).find(t => String(t.id) === treasureId);
+      if (!treasure || toNum(treasure.status) !== 2
+        || !list(treasure.previews).some(p => toNum(p.challengeId) === challengeId && p.canStart === true)) {
+        throw new Error('好友宝藏状态已变化，请重新查看');
+      }
+      if (!costsSatisfied([{ itemId: challengeId, count: 1 }], bagMap)) {
+        throw new Error('对应挑战书不足');
+      }
+      [command, selector] = OPERATIONS.battle;
+      params = { defender_gid: gid, treasure_id: treasureId, challenge_item_id: challengeId };
+    } else if (action === 'markStories') {
+      const orders = list(input.orders).map(toNum).filter(Boolean);
+      if (!orders.length) throw new Error('手记编号无效');
+      if (orders.some(order => !list(state.story?.stories).some(s => toNum(s.order) === order && s.unlocked === true))) {
+        throw new Error('手记编号无效');
+      }
+      [command, selector] = OPERATIONS.markStories;
+      params = { orders };
     } else if (action === 'skipBattle') {
       if (typeof input.skip !== 'boolean') throw new Error('跳过动画设置无效');
       [command, selector] = OPERATIONS.skipBattle;
@@ -560,6 +596,21 @@ async function getPetDiaryRecords(kind = 'interact') {
   }));
 }
 
+async function getPetDiaryFriend(gidInput) {
+  const gid = toNum(gidInput);
+  if (gid <= 0) throw new Error('好友 GID 无效');
+  const reply = await operatePetDiaryCommand(PET_ID, OPERATIONS.friendInfo[0], OPERATIONS.friendInfo[1], {
+    friend_gid: gid,
+  });
+  const result = reply?.pet_treasure_hunt_get_friend_activity_info;
+  if (toNum(result?.gid) !== gid) throw new Error('好友响应不匹配');
+  return {
+    gid,
+    treasures: list(result.info?.treasures).map(normalizeTreasure),
+    charms: list(result.info?.defender_charm_ids).map(toNum),
+  };
+}
+
 module.exports = {
   GROUP_ID,
   PET_ID,
@@ -568,6 +619,7 @@ module.exports = {
   OPERATIONS,
   getPetDiaryActivity,
   getPetDiaryGroup,
+  getPetDiaryFriend,
   operatePetDiary,
   operatePetDiaryCommand,
   getPetDiaryRecords,

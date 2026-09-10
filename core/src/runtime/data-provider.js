@@ -234,6 +234,7 @@ function createDataProvider(deps) {
         getPetDiaryActivity: (ref) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryActivity'),
         operatePetDiary: (ref, action, input) => callWorkerApi(resolveAccountId(ref), 'operatePetDiary', action, input),
         getPetDiaryRecords: (ref, kind) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryRecords', kind),
+        getPetDiaryFriend: (ref, gid) => callWorkerApi(resolveAccountId(ref), 'getPetDiaryFriend', gid),
         buyRainPoemCollectionBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'buyRainPoemCollectionBottle'),
         collectRainPoemWeather: (ref) => callWorkerApi(resolveAccountId(ref), 'collectRainPoemWeather'),
         useRainPoemSummonBottle: (ref) => callWorkerApi(resolveAccountId(ref), 'useRainPoemSummonBottle'),

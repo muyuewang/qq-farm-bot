@@ -146,11 +146,19 @@ export interface PetDiaryActivityData {
     count: number
     originalCount?: number
     protectedCount?: number
+    maxCount?: number
     status: number
     startTime?: number
     endTime?: number
     plunderCount?: number
     maxPlunderCount?: number
+    previews?: Array<{
+      challengeId: number
+      canStart?: boolean
+      maxProfit?: PetDiaryActivityCost
+      maxLoss?: PetDiaryActivityCost
+      plunderableCount?: number
+    }>
   }>
   compensationCount: number
   battleCount: number
@@ -515,6 +523,14 @@ export const useActivityStore = defineStore('activity', () => {
     finally { petDiaryLoading.value = false }
   }
 
+  async function fetchPetDiaryFriend(accountId: string, gid: number) {
+    const { data } = await api.get('/api/activity/pet-diary/friend', {
+      params: { gid },
+      headers: { 'x-account-id': accountId },
+    })
+    return data
+  }
+
   async function buildQixiBridge(accountId: string) {
     qixiBuildLoading.value = true
     try {
@@ -750,6 +766,7 @@ export const useActivityStore = defineStore('activity', () => {
     fetchCharityFlowerActivity,
     fetchPetDiaryActivity,
     operatePetDiary,
+    fetchPetDiaryFriend,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,

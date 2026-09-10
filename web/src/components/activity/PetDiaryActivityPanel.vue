@@ -19,6 +19,21 @@ type TabKey = 'home' | 'stories' | 'shop' | 'solar' | 'treasure'
 const activeTab = ref<TabKey>('home')
 const busyAction = ref('')
 const shopExchangeCount = reactive<Record<number, number>>({})
+const friendGid = ref<number | ''>('')
+const friendTreasures = ref<any[]>([])
+const friendCharms = ref<number[]>([])
+const friendLoading = ref(false)
+const battleForm = reactive({
+  gid: '' as string | number,
+  treasureId: '',
+  challengeId: 80101 as number,
+})
+
+const challengeOptions = [
+  { value: 80101, label: '初级挑战书 80101' },
+  { value: 80102, label: '中级挑战书 80102' },
+  { value: 80103, label: '高级挑战书 80103' },
+]
 
 const tabs: Array<{ key: TabKey, label: string, icon: string }> = [
   { key: 'home', label: '比熊之家', icon: 'i-carbon-pet' },
@@ -114,6 +129,37 @@ function treasureStatusLabel(status: number) {
   if (status === 3) return '可领取'
   if (status === 4) return '已领取'
   return `状态${status}`
+}
+
+async function loadFriendTreasures() {
+  if (!currentAccountId.value || friendLoading.value)
+    return
+  const gid = Number(friendGid.value)
+  if (gid <= 0) {
+    toast.error('请输入有效好友 GID')
+    return
+  }
+  friendLoading.value = true
+  try {
+    const data = await activityStore.fetchPetDiaryFriend(String(currentAccountId.value), gid)
+    if (data?.ok && data.friend) {
+      friendTreasures.value = data.friend.treasures || []
+      friendCharms.value = data.friend.charms || []
+      battleForm.gid = gid
+      toast.success(`已读取好友 ${gid} 的宝藏 ${friendTreasures.value.length} 份`)
+    }
+    else {
+      friendTreasures.value = []
+      toast.error(data?.error || '读取好友宝藏失败')
+    }
+  }
+  catch (error: any) {
+    friendTreasures.value = []
+    toast.error(error?.response?.data?.error || error?.message || '读取好友宝藏失败')
+  }
+  finally {
+    friendLoading.value = false
+  }
 }
 </script>
 
@@ -528,6 +574,98 @@ function treasureStatusLabel(status: number) {
             <template v-if="treasure.endTime"> · 结束 {{ formatDateTime(treasure.endTime) }}</template>
             · 被挑战 {{ treasure.plunderCount }}/{{ treasure.maxPlunderCount }}
           </div>
+        </div>
+      </div>
+
+      <div class="mb-5 rounded-lg border border-rose-100 bg-rose-50/40 p-3 dark:border-rose-900 dark:bg-rose-950/20">
+        <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">
+          好友夺宝
+          <span class="ml-2 text-xs font-normal text-gray-500">今日 {{ activity?.battleCount || 0 }} / {{ activity?.battleLimit || 0 }}</span>
+        </h4>
+        <p class="mb-2 text-xs text-gray-500">消耗一张挑战书参与夺宝，收益与可用挑战书以好友当前宝藏为准。</p>
+        <div class="flex flex-wrap items-end gap-2">
+          <label class="text-xs text-gray-600 dark:text-gray-300">
+            好友 GID
+            <input
+              v-model.number="friendGid"
+              type="number"
+              min="1"
+              placeholder="输入 GID"
+              class="mt-1 block h-9 w-36 rounded border border-gray-200 bg-white px-2 text-sm dark:border-gray-600 dark:bg-gray-800"
+            >
+          </label>
+          <BaseButton
+            size="sm"
+            variant="secondary"
+            :loading="friendLoading"
+            :disabled="!!busyAction || !activity?.hunt.canPlunder"
+            @click="loadFriendTreasures"
+          >
+            查看好友宝藏
+          </BaseButton>
+        </div>
+
+        <div v-if="friendTreasures.length" class="mt-3 space-y-2">
+          <div
+            v-for="item in friendTreasures.filter(t => t.status === 2)"
+            :key="item.id"
+            class="rounded-md border border-gray-100 bg-white/80 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900/40"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                物品 {{ item.itemId }} × {{ item.count }}
+                <span class="ml-2 text-xs text-gray-500">可夺 {{ item.maxCount - item.protectedCount }}</span>
+              </div>
+              <span class="text-xs text-gray-500">被挑战 {{ item.plunderCount }}/{{ item.maxPlunderCount }}</span>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <select
+                v-model="battleForm.challengeId"
+                class="h-9 rounded border border-gray-200 bg-white px-2 text-xs dark:border-gray-600 dark:bg-gray-800"
+              >
+                <option v-for="opt in challengeOptions" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
+                </option>
+              </select>
+              <BaseButton
+                size="sm"
+                variant="primary"
+                :loading="busyAction === 'battle'"
+                :disabled="!!busyAction"
+                @click="runAction('battle', {
+                  gid: Number(battleForm.gid) || Number(friendGid),
+                  treasureId: item.id,
+                  challengeId: battleForm.challengeId,
+                }, '夺宝')"
+              >
+                发起夺宝
+              </BaseButton>
+            </div>
+          </div>
+          <div v-if="!friendTreasures.some(t => t.status === 2)" class="text-xs text-gray-400">
+            这位好友当前没有可挑战的护送中宝藏。
+          </div>
+        </div>
+
+        <div v-if="friendCharms.length" class="mt-2 text-xs text-gray-500">
+          对方锦囊：{{ friendCharms.map(id => activity?.charms.all.find(c => c.id === id)?.name || id).join('、') }}
+        </div>
+      </div>
+
+      <div v-if="activity?.charms.pool?.length && !activity.charms.picked" class="mb-4">
+        <h4 class="mb-2 text-sm font-semibold text-gray-900 dark:text-white">今日可选锦囊</h4>
+        <div class="flex flex-wrap gap-2">
+          <BaseButton
+            v-for="charm in activity.charms.pool"
+            :key="charm.id"
+            size="sm"
+            variant="outline"
+            :loading="busyAction === 'equipCharm'"
+            :disabled="!!busyAction"
+            @click="runAction('equipCharm', { charmId: charm.id }, '选择锦囊')"
+          >
+            {{ charm.name }}
+          </BaseButton>
         </div>
       </div>
 

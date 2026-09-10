@@ -1654,6 +1654,12 @@ async function handleApiCall(msg) {
                 result = await getPetDiaryRecords(args[0]);
                 break;
             }
+
+            case 'getPetDiaryFriend': {
+                const { getPetDiaryFriend } = require('../services/pet-diary-service');
+                result = await getPetDiaryFriend(args[0]);
+                break;
+            }
             case 'buyRainPoemCollectionBottle': {
                 const { buyRainPoemCollectionBottle } = require('../services/activity');
                 result = await buyRainPoemCollectionBottle();

@@ -79,6 +79,17 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  app.get('/api/activity/pet-diary/friend', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取好友萌宠失败: 账号未运行')) return;
+      const gid = Number(req.query.gid) || 0;
+      if (gid <= 0) return res.status(400).json({ ok: false, error: '缺少有效好友 GID' });
+      res.json({ ok: true, friend: await provider.getPetDiaryFriend(accountId, gid) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.post('/api/activity/rain-poem/bottle/buy', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
