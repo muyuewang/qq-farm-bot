@@ -852,7 +852,8 @@ let nextStealRunAt = 0;
 async function runStealTick(autoConfig) {
     if (stealTaskRunning || friendSyncPaused) return;
     if (!autoConfig.friend_steal) {
-        nextStealRunAt = Date.now() + (15 * 60 * 1000);
+        const disabledDelay = randomIntervalMs(CONFIG.stealCheckIntervalMin || 25000, CONFIG.stealCheckIntervalMax || 30000);
+        nextStealRunAt = Date.now() + disabledDelay;
         return;
     }
     const deferMs = getBusinessDeferMs('friend');
@@ -862,7 +863,7 @@ async function runStealTick(autoConfig) {
     }
     stealTaskRunning = true;
 
-    let nextDelay = 15 * 60 * 1000;
+    let nextDelay = randomIntervalMs(CONFIG.stealCheckIntervalMin || 25000, CONFIG.stealCheckIntervalMax || 30000);
 
     try {
         nextDelay = await runWithRequestPriority('friend', () => runScheduledStealCheck());
@@ -875,7 +876,7 @@ async function runStealTick(autoConfig) {
             });
         }
     } finally {
-        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || 15 * 60 * 1000);
+        nextStealRunAt = Date.now() + Math.max(1000, Number(nextDelay) || randomIntervalMs(CONFIG.stealCheckIntervalMin || 25000, CONFIG.stealCheckIntervalMax || 30000));
         stealTaskRunning = false;
     }
 }

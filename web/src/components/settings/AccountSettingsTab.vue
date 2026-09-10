@@ -3,8 +3,9 @@ import AccountModal from '@/components/AccountModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { getPlatformClass, getPlatformLabel } from '@/stores/account'
+import { computed } from 'vue'
 
-defineProps<{
+const props = defineProps<{
   accounts: any[]
   accountsLoading: boolean
   currentAccountId: string | number | null | undefined
@@ -25,6 +26,11 @@ defineProps<{
   defaultPlanApplyingId: string
   showAllAccounts: boolean
 }>()
+
+const filteredAccounts = computed(() => {
+  if (props.showAllAccounts) return props.accounts
+  return props.accounts.filter((acc: any) => acc.running)
+})
 
 const emit = defineEmits<{
   add: []
@@ -132,7 +138,7 @@ function accountAvatar(acc: any) {
 
     <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-3 sm:grid-cols-2 xl:grid-cols-4">
       <div
-        v-for="acc in accounts"
+        v-for="acc in filteredAccounts"
         :key="acc.id"
         class="cursor-pointer border rounded-lg bg-white p-3 shadow transition-all duration-200 dark:bg-gray-800 sm:p-4"
         :class="String(currentAccountId) === String(acc.id)

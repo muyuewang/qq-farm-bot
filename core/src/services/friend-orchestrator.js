@@ -517,11 +517,17 @@ async function checkFriends(options = {}) {
   }
 }
 
+function getConfiguredStealDelayMs() {
+  const min = Math.max(1000, Number(CONFIG.stealCheckIntervalMin) || 25000);
+  const max = Math.max(min, Number(CONFIG.stealCheckIntervalMax) || 30000);
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 async function runScheduledStealCheck() {
   const accountId = process.env.FARM_ACCOUNT_ID || '';
   const userState = getUserState();
   if (!isAutomationOn('friend') || !isAutomationOn('friend_steal') || !isConnected()) {
-    return getNextStealDelayMs();
+    return getConfiguredStealDelayMs();
   }
   if (isCheckingFriends || !userState.gid || inFriendQuietHours()) {
     return 60 * 1000;
@@ -593,7 +599,7 @@ async function runScheduledStealCheck() {
   } finally {
     isCheckingFriends = false;
   }
-  return getNextStealDelayMs();
+  return getConfiguredStealDelayMs();
 }
 
 // ===== Friend check loop =====
