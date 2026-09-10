@@ -12,8 +12,10 @@ import { useAutomationSettings } from '@/composables/settings/useAutomationSetti
 import { useStrategySettings } from '@/composables/settings/useStrategySettings'
 import { useUserSettings } from '@/composables/settings/useUserSettings'
 import { useSettingStore } from '@/stores/setting'
+import { useUserStore } from '@/stores/user'
 
 const settingStore = useSettingStore()
+const userStore = useUserStore()
 const route = useRoute()
 
 type SettingsTabKey = 'account' | 'account-config' | 'notification'
@@ -347,6 +349,7 @@ onMounted(async () => {
           :default-plan-setting-id="defaultPlanSettingId"
           :default-plan-applying-id="defaultPlanApplyingId"
           :show-all-accounts="showAllAccounts"
+          :current-user-username="userStore.username"
           @add="openAddModal"
           @clear-stopped="openClearStoppedConfirm"
           @refresh-wx-codes="refreshWxCodesNow"

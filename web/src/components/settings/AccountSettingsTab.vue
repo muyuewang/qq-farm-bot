@@ -25,11 +25,13 @@ const props = defineProps<{
   defaultPlanSettingId: string
   defaultPlanApplyingId: string
   showAllAccounts: boolean
+  currentUserUsername: string
 }>()
 
 const filteredAccounts = computed(() => {
   if (props.showAllAccounts) return props.accounts
-  return props.accounts.filter((acc: any) => acc.running)
+  if (props.userIsAdmin) return props.accounts.filter((acc: any) => acc.username === props.currentUserUsername)
+  return props.accounts
 })
 
 const emit = defineEmits<{
@@ -87,7 +89,7 @@ function accountAvatar(acc: any) {
           @click="emit('toggleAccountFilter')"
         >
           <div class="i-carbon-filter mr-2" />
-          <span class="hidden sm:inline">{{ showAllAccounts ? '显示运行中' : '显示全部' }}</span>
+          <span class="hidden sm:inline">{{ showAllAccounts ? '仅自己' : '全部账号' }}</span>
           <span class="sm:hidden">筛选</span>
         </BaseButton>
         <BaseButton
