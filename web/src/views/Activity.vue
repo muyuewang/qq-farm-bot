@@ -8,10 +8,11 @@ import HeluSolarTermsPanel from '@/components/activity/HeluSolarTermsPanel.vue'
 import QixiActivityPanel from '@/components/activity/QixiActivityPanel.vue'
 import RainPoemActivityPanel from '@/components/activity/RainPoemActivityPanel.vue'
 import CharityFlowerActivityPanel from '@/components/activity/CharityFlowerActivityPanel.vue'
+import PetDiaryActivityPanel from '@/components/activity/PetDiaryActivityPanel.vue'
 import StarRecordPanel from '@/components/activity/StarRecordPanel.vue'
 import api from '@/api'
 import BaseButton from '@/components/ui/BaseButton.vue'
-import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
+import { CHARITY_FLOWER_ACTIVITY_WINDOW, isWithinActivityWindowMs, PET_DIARY_ACTIVITY_WINDOW, RAIN_POEM_ACTIVITY_WINDOW } from '@/constants/activity-windows'
 import { useAccountStore } from '@/stores/account'
 import { useActivityStore } from '@/stores/activity'
 import { useToastStore } from '@/stores/toast'
@@ -93,6 +94,8 @@ const {
   rainPoemLoading,
   charityFlowerActivity,
   charityFlowerLoading,
+  petDiaryActivity,
+  petDiaryLoading,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
@@ -101,6 +104,7 @@ const nowMs = ref(Date.now())
 let nowTimer: ReturnType<typeof window.setInterval> | null = null
 const rainPoemActivityActive = computed(() => isWithinActivityWindowMs(RAIN_POEM_ACTIVITY_WINDOW, nowMs.value))
 const charityFlowerActivityActive = computed(() => isWithinActivityWindowMs(CHARITY_FLOWER_ACTIVITY_WINDOW, nowMs.value))
+const petDiaryActivityActive = computed(() => isWithinActivityWindowMs(PET_DIARY_ACTIVITY_WINDOW, nowMs.value))
 const selectedActivity = ref<string | null>(null)
 const activityStatusFilter = ref<'all' | 'active' | 'upcoming' | 'ended'>('all')
 const activeSection = ref<ActivitySectionKey>('journey')
@@ -190,9 +194,21 @@ const activityCards = computed(() => {
     startTime: RAIN_POEM_ACTIVITY_WINDOW.startMs / 1000,
     endTime: RAIN_POEM_ACTIVITY_WINDOW.endMs / 1000,
     activityIds: [2026070300],
+  }, {
+    id: 2026090100,
+    title: '萌宠成长日记',
+    startTime: PET_DIARY_ACTIVITY_WINDOW.startMs / 1000,
+    endTime: PET_DIARY_ACTIVITY_WINDOW.endMs / 1000,
+    activityIds: [2026090100, 2026090101, 2026090102, 2026090103],
   }]
   return source.map((group) => {
-    const adaptedKey = group.activityIds.includes(2026070300) ? 'rain-poem' as const : group.activityIds.includes(2026090900) ? 'charity-flower' as const : null
+    const adaptedKey = group.activityIds.includes(2026070300)
+      ? 'rain-poem' as const
+      : group.activityIds.includes(2026090900)
+        ? 'charity-flower' as const
+        : group.activityIds.includes(2026090100) || group.activityIds.includes(2026090101)
+          ? 'pet-diary' as const
+          : null
     const window = { startMs: group.startTime * 1000, endMs: group.endTime * 1000 }
     const hue = Math.abs(group.id * 37) % 360
     return {
@@ -201,11 +217,20 @@ const activityCards = computed(() => {
       adaptedKey,
       title: group.title || `活动 ${group.id}`,
       description: adaptedKey
-        ? adaptedKey === 'charity-flower' ? '查看爱心、公益进度与奖励状态' : '查看天气、每日进度与气象研究'
+        ? adaptedKey === 'charity-flower'
+          ? '查看爱心、公益进度与奖励状态'
+          : adaptedKey === 'pet-diary'
+            ? '查看养成、寻宝、手记与拾物小铺状态'
+            : '查看天气、每日进度与气象研究'
         : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
           ? '已读取客户端静态预览，动态规则待服务端开放'
           : '暂未适配详情',
-      image: group.imageUrl || (adaptedKey === 'rain-poem' ? '/activity/rain-poem/day-rain-bg.jpg' : ''),
+      image: group.imageUrl
+        || (adaptedKey === 'rain-poem'
+          ? '/activity/rain-poem/day-rain-bg.jpg'
+          : adaptedKey === 'pet-diary'
+            ? ''
+            : ''),
       window,
       updatedMs: window.startMs,
       status: activityWindowStatus(window),
@@ -344,6 +369,8 @@ async function refreshAll() {
       requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
     if (charityFlowerActivityActive.value)
       requests.push(activityStore.fetchCharityFlowerActivity(String(currentAccountId.value)))
+    if (petDiaryActivityActive.value)
+      requests.push(activityStore.fetchPetDiaryActivity(String(currentAccountId.value)))
     await Promise.all(requests)
   }
 }
@@ -595,6 +622,21 @@ onUnmounted(() => {
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null"><span class="i-carbon-arrow-left" />返回活动列表</button>
       <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" @refresh="refreshAll" />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
+    </div>
+    <div v-else-if="selectedActivityCard?.adaptedKey === 'pet-diary' && selectedActivityCard.status === 'active'" class="space-y-3">
+      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
+        <span class="i-carbon-arrow-left" />
+        返回活动列表
+      </button>
+      <PetDiaryActivityPanel
+        v-if="petDiaryActivityActive && currentAccountId"
+        :activity="petDiaryActivity"
+        :loading="petDiaryLoading"
+        @refresh="refreshAll"
+      />
+      <div v-else-if="petDiaryActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+        {{ L.needAccount }}
+      </div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">
       <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">

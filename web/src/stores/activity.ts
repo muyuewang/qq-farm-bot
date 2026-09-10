@@ -77,6 +77,101 @@ export interface HeluSeasonPassport {
   warning?: string
 }
 
+export interface PetDiaryActivityBalance {
+  itemId: number
+  count: number
+}
+
+export interface PetDiaryActivityCost {
+  itemId: number
+  count: number
+}
+
+export interface PetDiaryActivityData {
+  activityId: number
+  groupId: number
+  title: string
+  active: boolean
+  startTime: number
+  endTime: number
+  serverTime: number
+  rules?: string
+  warnings?: string[]
+  balances: PetDiaryActivityBalance[]
+  nurture: {
+    initialized: boolean
+    adult: boolean
+    growth: number
+    adultGrowth: number
+    dogGranted: boolean
+    stage: number
+    feedCount: number
+    feedLimit: number
+    feedCosts: PetDiaryActivityCost[]
+    canFeed: boolean
+  }
+  hunt: {
+    count: number
+    limit: number
+    total: number
+    luckyStarTotal: number
+    costs: PetDiaryActivityCost[]
+    canDraw: boolean
+    canPlunder: boolean
+  }
+  seeds: {
+    canClaim: boolean
+    days: Array<{ day: number, claimed: boolean, claimable: boolean, rewards: PetDiaryActivityCost[] }>
+  }
+  stories: Array<{
+    order: number
+    unlocked: boolean
+    claimed: boolean
+    animated: boolean
+    photo?: string
+    caption?: string
+  }>
+  charms: {
+    pool: Array<{ id: number, name: string, description?: string }>
+    equipped: Array<{ id: number, name: string }>
+    all: Array<{ id: number, name: string, description?: string }>
+    picked: boolean
+    freeRefreshRemaining: number
+    canRefresh: boolean
+    refreshNote?: string
+  }
+  treasures: Array<{
+    id: string
+    itemId: number
+    count: number
+    originalCount?: number
+    protectedCount?: number
+    status: number
+    startTime?: number
+    endTime?: number
+    plunderCount?: number
+    maxPlunderCount?: number
+  }>
+  compensationCount: number
+  battleCount: number
+  battleLimit: number
+  skipBattle: boolean
+  shop: Array<{
+    id: number
+    name: string
+    order?: number
+    category?: string
+    rewards: PetDiaryActivityCost[]
+    costs: PetDiaryActivityCost[]
+    limit: number
+    purchased: number
+    remaining: number | null
+    usesDiamond: boolean
+    exchangeable: boolean
+  }>
+  shopActive: boolean
+}
+
 export interface HeluSolarTerm {
   id: number
   title: string
@@ -303,6 +398,8 @@ export const useActivityStore = defineStore('activity', () => {
   const rainPoemLoading = ref(false)
   const charityFlowerActivity = ref<CharityFlowerActivityData | null>(null)
   const charityFlowerLoading = ref(false)
+  const petDiaryActivity = ref<PetDiaryActivityData | null>(null)
+  const petDiaryLoading = ref(false)
   const qixiFriends = ref<QixiFriend[]>([])
   const qixiLoading = ref(false)
   const qixiBuildLoading = ref(false)
@@ -327,6 +424,7 @@ export const useActivityStore = defineStore('activity', () => {
     qixiActivity.value = null
     rainPoemActivity.value = null
     charityFlowerActivity.value = null
+    petDiaryActivity.value = null
     qixiFriends.value = []
     heluLoading.value = false
     drawLoading.value = false
@@ -370,6 +468,16 @@ export const useActivityStore = defineStore('activity', () => {
       return data
     }
     finally { charityFlowerLoading.value = false }
+  }
+
+  async function fetchPetDiaryActivity(accountId: string) {
+    petDiaryLoading.value = true
+    try {
+      const { data } = await api.get('/api/activity/pet-diary', { headers: { 'x-account-id': accountId } })
+      if (data.ok && isCurrentAccount(String(accountId))) petDiaryActivity.value = data.activity || null
+      return data
+    }
+    finally { petDiaryLoading.value = false }
   }
 
   async function buildQixiBridge(accountId: string) {
@@ -584,6 +692,8 @@ export const useActivityStore = defineStore('activity', () => {
     rainPoemLoading,
     charityFlowerActivity,
     charityFlowerLoading,
+    petDiaryActivity,
+    petDiaryLoading,
     qixiFriends,
     qixiLoading,
     qixiBuildLoading,
@@ -603,6 +713,7 @@ export const useActivityStore = defineStore('activity', () => {
     fetchQixiActivity,
     fetchRainPoemActivity,
     fetchCharityFlowerActivity,
+    fetchPetDiaryActivity,
     buildQixiBridge,
     useQixiDew,
     sendQixiSachet,

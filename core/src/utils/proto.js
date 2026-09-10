@@ -49,6 +49,7 @@ async function loadProto() {
         getResourcePath('proto', 'acepb.proto'),
         getResourcePath('proto', 'careerpb.proto'),
         getResourcePath('proto', 'paypb.proto'),
+        getResourcePath('proto', 'pet-diary.proto'),
     ], { keepCase: true });
 
     // 网关
@@ -160,6 +161,9 @@ async function loadProto() {
     // 活动
     types.ActivityGetGroupRequest = root.lookupType('gamepb.activitypb.GetGroupRequest');
     types.ActivityGetGroupReply = root.lookupType('gamepb.activitypb.GetGroupReply');
+    types.PetDiaryGetGroupReply = root.lookupType('gamepb.activitypb.PetDiaryGetGroupReply');
+    types.PetDiaryOperateRequest = root.lookupType('gamepb.activitypb.PetDiaryOperateRequest');
+    types.PetDiaryOperateReply = root.lookupType('gamepb.activitypb.PetDiaryOperateReply');
     types.ActivityOperateRequest = root.lookupType('gamepb.activitypb.OperateRequest');
     types.ActivityOperateReply = root.lookupType('gamepb.activitypb.OperateReply');
     types.ActivityRandomShopInfo = root.lookupType('gamepb.activitypb.RandomShopInfo');
