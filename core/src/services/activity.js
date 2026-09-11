@@ -2948,6 +2948,52 @@ async function getNanguaShop() {
   return normalizeNanguaGroup(await getActivityGroup(NANGUA_SHOP_ACTIVITY_ID));
 }
 
+// ==================== 萌宠成长日记（上游 activity-pet-diary 装配） ====================
+
+const { createPetDiaryService } = require('./activity-pet-diary');
+const petDiaryHelpers = require('./activity-center-helpers');
+
+let petDiaryServiceInstance = null;
+
+function getPetDiaryService() {
+  if (petDiaryServiceInstance) return petDiaryServiceInstance;
+  const { getServerTimeSec } = require('../utils/utils');
+  petDiaryServiceInstance = createPetDiaryService({
+    types,
+    sendMsgAsync,
+    getBag,
+    getBagItems,
+    getServerTimeSec,
+    itemDto: petDiaryHelpers.itemDto,
+    int64String: petDiaryHelpers.int64String,
+    int64Number: petDiaryHelpers.int64Number,
+    textContent: petDiaryHelpers.textContent,
+    businessError: petDiaryHelpers.businessError,
+    positiveDecimal: petDiaryHelpers.positiveDecimal,
+    serializeMutation: petDiaryHelpers.serializeMutation,
+    getCurrentSolarTerms: async () => {
+      const info = await getSolarTermsInfo();
+      return {
+        ...info,
+        terms: (Array.isArray(info?.terms) ? info.terms : []).map(term => ({
+          ...term,
+          id: String(term.id),
+          canClaim: term.claimable === true,
+          name: String(term.title || ''),
+          statusCode: String(term.status),
+        })),
+      };
+    },
+    claimSolarTerm: async (termId) => claimSolarTermsReward(Number(termId)),
+  });
+  return petDiaryServiceInstance;
+}
+
+const getPetDiary = () => getPetDiaryService().getPetDiary();
+const operatePetDiary = (action, params, options) => getPetDiaryService().operatePetDiary(action, params, options);
+const getPetDiaryRecords = (kind) => getPetDiaryService().getPetDiaryRecords(kind);
+const getPetDiaryFriend = (gid) => getPetDiaryService().getPetDiaryFriend(gid);
+
 module.exports = {
   NANGUA_ACTIVITY_UID,
   HELU_ACTIVITY_UID,
@@ -3033,4 +3079,8 @@ module.exports = {
   refreshNanguaShop,
   normalizeNanguaGroup,
   normalizeHeluGroup,
+  getPetDiary,
+  operatePetDiary,
+  getPetDiaryRecords,
+  getPetDiaryFriend,
 };

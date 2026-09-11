@@ -58,14 +58,24 @@ function registerAdminHeluActivityRoutes({
     } catch (err) { sendProviderError(res, err); }
   });
 
+  // 萌宠成长日记（S3）完整状态。前端 PetDiaryActivityPanel 使用此接口。
+  app.get('/api/activity/pet-diary/state', async (req, res) => {
+    const accountId = getAuthorizedAccountId(req, res, routeContext);
+    if (!accountId) return;
+    try {
+      if (!requireConnectedAccount(res, provider, accountId, '获取萌宠成长日记失败: 账号未运行')) return;
+      res.json({ ok: true, data: await provider.getPetDiary(accountId) });
+    } catch (err) { sendProviderError(res, err); }
+  });
+
   app.post('/api/activity/pet-diary/operate', async (req, res) => {
     const accountId = getAuthorizedAccountId(req, res, routeContext);
     if (!accountId) return;
     try {
       if (!requireConnectedAccount(res, provider, accountId, '萌宠成长日记操作失败: 账号未运行')) return;
       const action = String(req.body?.action || '').trim();
-      const input = req.body && typeof req.body === 'object' ? req.body.input || req.body : {};
-      res.json(await provider.operatePetDiary(accountId, action, input));
+      const params = req.body?.params || {};
+      res.json({ ok: true, data: await provider.operatePetDiary(accountId, action, params) });
     } catch (err) { sendProviderError(res, err); }
   });
 
@@ -75,7 +85,7 @@ function registerAdminHeluActivityRoutes({
     try {
       if (!requireConnectedAccount(res, provider, accountId, '获取萌宠记录失败: 账号未运行')) return;
       const kind = String(req.query.kind || 'interact');
-      res.json({ ok: true, records: await provider.getPetDiaryRecords(accountId, kind) });
+      res.json({ ok: true, data: await provider.getPetDiaryRecords(accountId, kind) });
     } catch (err) { sendProviderError(res, err); }
   });
 
@@ -86,7 +96,7 @@ function registerAdminHeluActivityRoutes({
       if (!requireConnectedAccount(res, provider, accountId, '获取好友萌宠失败: 账号未运行')) return;
       const gid = Number(req.query.gid) || 0;
       if (gid <= 0) return res.status(400).json({ ok: false, error: '缺少有效好友 GID' });
-      res.json({ ok: true, friend: await provider.getPetDiaryFriend(accountId, gid) });
+      res.json({ ok: true, data: await provider.getPetDiaryFriend(accountId, gid) });
     } catch (err) { sendProviderError(res, err); }
   });
 

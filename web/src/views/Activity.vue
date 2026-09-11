@@ -94,8 +94,6 @@ const {
   rainPoemLoading,
   charityFlowerActivity,
   charityFlowerLoading,
-  petDiaryActivity,
-  petDiaryLoading,
 } = storeToRefs(activityStore)
 
 const SHOW_QIXI_ACTIVITY = false
@@ -215,12 +213,12 @@ const activityCards = computed(() => {
       key: String(group.id),
       activityIds: group.activityIds,
       adaptedKey,
-      title: group.title || `活动 ${group.id}`,
+      title: adaptedKey === 'pet-diary' ? '萌宠成长日记' : (group.title || `活动 ${group.id}`),
       description: adaptedKey
         ? adaptedKey === 'charity-flower'
           ? '查看爱心、公益进度与奖励状态'
           : adaptedKey === 'pet-diary'
-            ? '查看养成、寻宝、手记与拾物小铺状态'
+            ? '查看比熊成长、爪印手记、拾物小铺与宝藏护送'
             : '查看天气、每日进度与气象研究'
         : ACTIVITY_CLIENT_PREVIEWS.some(item => item.title === group.title || item.ids.some(id => group.activityIds.includes(id)))
           ? '已读取客户端静态预览，动态规则待服务端开放'
@@ -229,7 +227,7 @@ const activityCards = computed(() => {
         || (adaptedKey === 'rain-poem'
           ? '/activity/rain-poem/day-rain-bg.jpg'
           : adaptedKey === 'pet-diary'
-            ? ''
+            ? '/activity/pet-diary/scene-home-adult.png'
             : ''),
       window,
       updatedMs: window.startMs,
@@ -369,8 +367,7 @@ async function refreshAll() {
       requests.push(activityStore.fetchRainPoemActivity(String(currentAccountId.value)))
     if (charityFlowerActivityActive.value)
       requests.push(activityStore.fetchCharityFlowerActivity(String(currentAccountId.value)))
-    if (petDiaryActivityActive.value)
-      requests.push(activityStore.fetchPetDiaryActivity(String(currentAccountId.value)))
+    // 萌宠日记由 PetDiaryActivityPanel 自己订阅 usePetDiaryStore
     await Promise.all(requests)
   }
 }
@@ -623,19 +620,16 @@ onUnmounted(() => {
       <CharityFlowerActivityPanel v-if="charityFlowerActivityActive && currentAccountId" :activity="charityFlowerActivity" :loading="charityFlowerLoading" @refresh="refreshAll" />
       <div v-else-if="charityFlowerActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">{{ L.needAccount }}</div>
     </div>
-    <div v-else-if="selectedActivityCard?.adaptedKey === 'pet-diary' && selectedActivityCard.status === 'active'" class="space-y-3">
-      <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
-        <span class="i-carbon-arrow-left" />
-        返回活动列表
-      </button>
-      <PetDiaryActivityPanel
-        v-if="petDiaryActivityActive && currentAccountId"
-        :activity="petDiaryActivity"
-        :loading="petDiaryLoading"
-        @refresh="refreshAll"
-      />
-      <div v-else-if="petDiaryActivityActive && !currentAccountId" class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
-        {{ L.needAccount }}
+    <div v-else-if="selectedActivityCard?.adaptedKey === 'pet-diary' && selectedActivityCard.status === 'active'">
+      <PetDiaryActivityPanel v-if="petDiaryActivityActive && currentAccountId" @back="selectedActivity = null" />
+      <div v-else-if="petDiaryActivityActive && !currentAccountId" class="space-y-3">
+        <button class="inline-flex items-center gap-1.5 text-sm text-gray-500 transition hover:text-gray-900 dark:hover:text-white" @click="selectedActivity = null">
+          <span class="i-carbon-arrow-left" />
+          返回活动列表
+        </button>
+        <div class="rounded-lg bg-white p-10 text-center text-sm text-gray-500 shadow dark:bg-gray-800">
+          {{ L.needAccount }}
+        </div>
       </div>
     </div>
     <div v-else-if="selectedActivityCard" class="space-y-3">

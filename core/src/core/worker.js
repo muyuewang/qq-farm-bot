@@ -297,14 +297,14 @@ const petDiaryBattleEnabled = () => loginReady && !friendSyncPaused
 
 async function runPetDiaryAutomation(flags = {}) {
     const {
-        getPetDiaryActivity,
+        getPetDiary,
         getPetDiaryFriend,
         operatePetDiary,
-    } = require('../services/pet-diary-service');
+    } = require('../services/activity');
     const { getFriendsList } = require('../services/friend-land-analyzer');
     const { getFriendBlacklist } = require('../models/store');
 
-    let pet = await getPetDiaryActivity();
+    let pet = await getPetDiary();
     if (!pet?.active) return;
 
     const step = async (enabled, label, ready, action, input = {}) => {
@@ -361,11 +361,11 @@ async function runPetDiaryAutomation(flags = {}) {
         const blacklist = (getFriendBlacklist(accountId) || []).map(String);
         const runBattles = createPetDiaryBattleAutomation({
             getPet: async () => {
-                const activity = await getPetDiaryActivity();
+                const activity = await getPetDiary();
                 return {
                     ...activity,
                     balances: (activity.balances || []).map(item => ({
-                        id: String(item.itemId),
+                        id: String(item.itemId ?? item.id),
                         count: item.count,
                         known: true,
                     })),
@@ -375,7 +375,7 @@ async function runPetDiaryAutomation(flags = {}) {
             getFriend: gid => getPetDiaryFriend(gid),
             operate: async (action, params) => {
                 const result = await operatePetDiary(action, params);
-                return { ...result, snapshot: result.activity };
+                return { ...result, snapshot: result.snapshot || result.activity };
             },
             enabled: petDiaryBattleEnabled,
             excluded: gid => String(getUserState().gid) === String(gid)
@@ -1773,20 +1773,26 @@ async function handleApiCall(msg) {
                 break;
             }
 
+            case 'getPetDiary': {
+                const { getPetDiary } = require('../services/activity');
+                result = await getPetDiary();
+                break;
+            }
+
             case 'operatePetDiary': {
-                const { operatePetDiary } = require('../services/pet-diary-service');
+                const { operatePetDiary } = require('../services/activity');
                 result = await operatePetDiary(args[0], args[1] || {});
                 break;
             }
 
             case 'getPetDiaryRecords': {
-                const { getPetDiaryRecords } = require('../services/pet-diary-service');
+                const { getPetDiaryRecords } = require('../services/activity');
                 result = await getPetDiaryRecords(args[0]);
                 break;
             }
 
             case 'getPetDiaryFriend': {
-                const { getPetDiaryFriend } = require('../services/pet-diary-service');
+                const { getPetDiaryFriend } = require('../services/activity');
                 result = await getPetDiaryFriend(args[0]);
                 break;
             }
