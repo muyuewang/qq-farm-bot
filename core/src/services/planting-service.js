@@ -68,6 +68,8 @@ function getPlantSizeBySeedId(seedId) {
 
 function isSeedLockedByLevel(seed, userLevel) {
   const requiredLevel = Number(seed && seed.requiredLevel);
+  // 项目约定：配置为 200 级的种子不参与本地种植等级限制，保留原始配置值。
+  if (requiredLevel === 200) return false;
   return Number.isFinite(requiredLevel) && requiredLevel > Number(userLevel || 0);
 }
 
@@ -1097,6 +1099,7 @@ async function plantFromShop(landIds, userState, overrideStrategy, accountId = g
 }
 
 module.exports = {
+  isSeedLockedByLevel,
   encodePlantRequest,
   getPlantSizeBySeedId,
   build2x2LandGroups,
