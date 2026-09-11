@@ -10920,5 +10920,93 @@
     "exp_alter": 4531.2,
     "fruit_root": 0,
     "fruit_alter": 0
+  },
+  {
+    "id": 1021625,
+    "mutant_effect_plant": "5:1121625:1",
+    "name": "枸杞",
+    "seed_id": 21625,
+    "land_level_need": 1,
+    "seasons": 1,
+    "grow_phases": "种子:8640;发芽:8640;小叶子:8640;大叶子:8640;初熟:8640;成熟:0;",
+    "exp": 1680,
+    "special_fruit": "2026090100:1028:35",
+    "size": 1,
+    "harvestRandom": null,
+    "harvestAllSpineRes": null,
+    "harvestAllOffsetPosition": null,
+    "harvestAniName": "anim_harvest_zhenpin",
+    "all_state_spine": null,
+    "mature_effect": "effect/prefab/effect_plant_maturation",
+    "rare_plant_light_pos": null,
+    "exp_root": 1.6,
+    "exp_alter": 991,
+    "fruit_root": 2,
+    "fruit_alter": 36,
+    "fruit": {
+      "id": 41625,
+      "count": 48
+    },
+    "offsetPosition": {
+      "x": 0,
+      "y": 0
+    },
+    "mutantEffectScale": {
+      "x": 1,
+      "y": 1
+    },
+    "harvestOffsetPosition": {
+      "x": -35,
+      "y": 5
+    },
+    "mature_effect_offset": {
+      "x": 0,
+      "y": 0
+    },
+    "asset_name": "Crop_1625"
+  },
+  {
+    "id": 1021072,
+    "mutant_effect_plant": "5:1121072:1",
+    "name": "寒兰",
+    "seed_id": 21072,
+    "land_level_need": 1,
+    "seasons": 1,
+    "grow_phases": "种子:8640;发芽:8640;小叶子:8640;大叶子:8640;初熟:8640;成熟:0;",
+    "exp": 1680,
+    "special_fruit": "2026090100:1028:35",
+    "size": 1,
+    "harvestRandom": null,
+    "harvestAllSpineRes": null,
+    "harvestAllOffsetPosition": null,
+    "harvestAniName": "anim_harvest_zhenpin",
+    "all_state_spine": null,
+    "mature_effect": "effect/prefab/effect_plant_maturation",
+    "rare_plant_light_pos": null,
+    "exp_root": 1.6,
+    "exp_alter": 991,
+    "fruit_root": 2,
+    "fruit_alter": 36,
+    "fruit": {
+      "id": 41072,
+      "count": 48
+    },
+    "offsetPosition": {
+      "x": 0,
+      "y": 0
+    },
+    "mutantEffectScale": {
+      "x": 1,
+      "y": 1
+    },
+    "harvestOffsetPosition": {
+      "x": -35,
+      "y": 5
+    },
+    "mature_effect_offset": {
+      "x": 0,
+      "y": 0
+    },
+    "asset_name": "Crop_1072"
   }
 ]

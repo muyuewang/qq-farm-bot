@@ -292,6 +292,107 @@ function startDailyRoutineTimer() {
 
 // ==================== 活动自动控制 ====================
 
+const petDiaryBattleEnabled = () => loginReady && !friendSyncPaused
+    && getAutomation().pet_diary_battle === true;
+
+async function runPetDiaryAutomation(flags = {}) {
+    const {
+        getPetDiaryActivity,
+        getPetDiaryFriend,
+        operatePetDiary,
+    } = require('../services/pet-diary-service');
+    const { getFriendsList } = require('../services/friend-land-analyzer');
+    const { getFriendBlacklist } = require('../models/store');
+
+    let pet = await getPetDiaryActivity();
+    if (!pet?.active) return;
+
+    const step = async (enabled, label, ready, action, input = {}) => {
+        if (!enabled) return;
+        try {
+            if (typeof ready === 'function' && !ready(pet)) return;
+            const result = await operatePetDiary(action, input);
+            pet = result.activity || pet;
+            log('活动', `自动${label}完成`, {
+                module: 'activity',
+                event: `萌宠${label}`,
+                result: 'success',
+                rewards: (result.rewards || []).length,
+            });
+        } catch (err) {
+            log('活动', `自动${label}失败: ${err.message}`, {
+                module: 'activity',
+                event: `萌宠${label}`,
+                result: 'error',
+            });
+        }
+    };
+
+    await step(flags.adopt, '领养比熊', p => !p.nurture?.initialized, 'initialize');
+    if (flags.feed) {
+        for (let i = 0; i < 8 && pet?.nurture?.canFeed; i++) {
+            await step(true, '投喂', p => p.nurture?.canFeed, 'feed');
+            await new Promise(resolve => setTimeout(resolve, 400));
+        }
+    }
+    await step(flags.seed, '领取种子礼包', p => p.seeds?.canClaim, 'seeds');
+    await step(flags.solar, '领取节令小礼', p => Number(p.solarTerms?.claimableCount || 0) > 0, 'solar');
+    if (flags.story) {
+        const story = (pet.stories || []).find(s => s.unlocked && !s.claimed);
+        if (story) await step(true, '领取手记', null, 'story', { order: story.order });
+    }
+    await step(flags.treasure, '领取宝藏', p => (p.treasures || []).some(t => t.status === 3
+        || (t.status === 2 && t.endTime > 0 && t.endTime <= Date.now())), 'openTreasure');
+    await step(flags.compensation, '领取夺宝补偿', p => Number(p.compensationCount || 0) > 0, 'compensation');
+    if (flags.draw) {
+        for (let i = 0; i < 5 && pet?.hunt?.canDraw; i++) {
+            await step(true, '寻宝', p => p.hunt?.canDraw, 'draw');
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+    if (flags.charm && pet?.charms?.canRefresh && !pet?.charms?.picked
+        && Array.isArray(pet?.charms?.pool) && pet.charms.pool.length > 0) {
+        await step(true, '选择锦囊', null, 'equipCharm', { charmId: pet.charms.pool[0].id });
+    }
+
+    if (flags.battle) {
+        const { createPetDiaryBattleAutomation } = require('../services/pet-diary-battle-automation');
+        const accountId = process.env.FARM_ACCOUNT_ID || '';
+        const blacklist = (getFriendBlacklist(accountId) || []).map(String);
+        const runBattles = createPetDiaryBattleAutomation({
+            getPet: async () => {
+                const activity = await getPetDiaryActivity();
+                return {
+                    ...activity,
+                    balances: (activity.balances || []).map(item => ({
+                        id: String(item.itemId),
+                        count: item.count,
+                        known: true,
+                    })),
+                };
+            },
+            getFriends: () => getFriendsList(),
+            getFriend: gid => getPetDiaryFriend(gid),
+            operate: async (action, params) => {
+                const result = await operatePetDiary(action, params);
+                return { ...result, snapshot: result.activity };
+            },
+            enabled: petDiaryBattleEnabled,
+            excluded: gid => String(getUserState().gid) === String(gid)
+                || blacklist.includes(String(gid)),
+            now: () => Date.now(),
+            pause: () => new Promise(resolve => setTimeout(resolve, 400)),
+            report: (message, detail) => log('活动', `${message}（检查 ${detail.scanned} 人，夺宝 ${detail.battles} 次）`, {
+                module: 'activity',
+                event: '自动好友夺宝',
+                result: detail.error ? 'error' : 'ok',
+                ...detail,
+            }),
+        });
+        await runBattles();
+    }
+}
+
 async function runStarActivityAutoClaims() {
     if (!loginReady || friendSyncPaused || starActivityClaimRunning) return;
 
@@ -313,13 +414,27 @@ async function runStarActivityAutoClaims() {
     const donateCharityLoveEnabled = automation.charity_flower_donate === true;
     const claimCharityRewardsEnabled = automation.charity_flower_reward_claim === true;
     const claimCharityPublicFundEnabled = automation.charity_flower_public_fund_claim === true;
+    const petDiaryAdoptEnabled = automation.pet_diary_adopt === true;
+    const petDiaryFeedEnabled = automation.pet_diary_feed === true;
+    const petDiaryDrawEnabled = automation.pet_diary_draw === true;
+    const petDiaryStoryEnabled = automation.pet_diary_story_claim === true;
+    const petDiarySeedEnabled = automation.pet_diary_seed_claim === true;
+    const petDiarySolarEnabled = automation.pet_diary_solar_claim === true;
+    const petDiaryTreasureEnabled = automation.pet_diary_treasure_open === true;
+    const petDiaryCompensationEnabled = automation.pet_diary_compensation_claim === true;
+    const petDiaryCharmEnabled = automation.pet_diary_charm_equip === true;
+    const petDiaryBattleFlag = automation.pet_diary_battle === true;
+    const petDiaryAnyEnabled = petDiaryAdoptEnabled || petDiaryFeedEnabled || petDiaryDrawEnabled
+        || petDiaryStoryEnabled || petDiarySeedEnabled || petDiarySolarEnabled
+        || petDiaryTreasureEnabled || petDiaryCompensationEnabled || petDiaryCharmEnabled
+        || petDiaryBattleFlag;
     const qixiFriendPriority = Array.isArray(automation.qixi_friend_priority)
         ? automation.qixi_friend_priority.map(Number).filter(gid => gid > 0) : [];
     if (!claimPassport && !claimSolarTerms && !claimRecords && !claimQingmeiSeedsEnabled && !brewQingmeiWineEnabled
         && !useQixiDewEnabled && !buildQixiBridgeEnabled && !giftQixiSachetEnabled
         && !buyRainPoemBottleEnabled && !collectRainPoemWeatherEnabled && !useRainPoemSummonEnabled && !useRainPoemPrankEnabled
         && !unlockRainPoemResearchEnabled && !claimCharityShareEnabled && !donateCharityLoveEnabled
-        && !claimCharityRewardsEnabled && !claimCharityPublicFundEnabled) return;
+        && !claimCharityRewardsEnabled && !claimCharityPublicFundEnabled && !petDiaryAnyEnabled) return;
 
     starActivityClaimRunning = true;
     try {
@@ -635,6 +750,21 @@ async function runStarActivityAutoClaims() {
                     log('活动', `自动解锁气象研究失败: ${err.message}`, { module: 'activity', event: '雨落成诗自动研究', result: 'error', count: unlocked });
                 }
             }
+        }
+
+        if (petDiaryAnyEnabled) {
+            await runPetDiaryAutomation({
+                adopt: petDiaryAdoptEnabled,
+                feed: petDiaryFeedEnabled,
+                draw: petDiaryDrawEnabled,
+                story: petDiaryStoryEnabled,
+                seed: petDiarySeedEnabled,
+                solar: petDiarySolarEnabled,
+                treasure: petDiaryTreasureEnabled,
+                compensation: petDiaryCompensationEnabled,
+                battle: petDiaryBattleFlag,
+                charm: petDiaryCharmEnabled,
+            });
         }
     } catch (err) {
         if (!isTransientNetworkError(err)) {

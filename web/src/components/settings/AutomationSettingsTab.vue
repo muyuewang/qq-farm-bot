@@ -38,6 +38,16 @@ interface AutomationSettings {
     charity_flower_donate: boolean
     charity_flower_reward_claim: boolean
     charity_flower_public_fund_claim: boolean
+    pet_diary_adopt: boolean
+    pet_diary_feed: boolean
+    pet_diary_draw: boolean
+    pet_diary_story_claim: boolean
+    pet_diary_seed_claim: boolean
+    pet_diary_solar_claim: boolean
+    pet_diary_treasure_open: boolean
+    pet_diary_compensation_claim: boolean
+    pet_diary_charm_equip: boolean
+    pet_diary_battle: boolean
     golden_bug_clear: boolean
     fertilizer_gift: boolean
     fertilizer_buy_organic: boolean
@@ -292,6 +302,36 @@ watch(() => props.currentAccountId, loadQixiFriends)
           </div>
           <div v-if="showCharityFlowerActivity" class="border border-rose-200 rounded-lg bg-white px-4 py-3 dark:border-rose-900/50 dark:bg-gray-800">
             <BaseSwitch v-model="settings.automation.charity_flower_public_fund_claim" label="自动领取并送出 1 元公益金（活动期仅一次）" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_adopt" label="萌宠·自动领养比熊" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_feed" label="萌宠·自动投喂" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_draw" label="萌宠·自动寻宝" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_story_claim" label="萌宠·自动领取手记" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_seed_claim" label="萌宠·自动领取种子礼包" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_solar_claim" label="萌宠·自动领取节令小礼" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_treasure_open" label="萌宠·自动领取宝藏" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_compensation_claim" label="萌宠·自动领取夺宝补偿" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_charm_equip" label="萌宠·自动选择锦囊" />
+          </div>
+          <div class="border border-amber-200 rounded-lg bg-white px-4 py-3 dark:border-amber-900/50 dark:bg-gray-800">
+            <BaseSwitch v-model="settings.automation.pet_diary_battle" label="萌宠·自动好友夺宝（会掠夺好友宝藏）" />
           </div>
         </div>
         <div v-if="SHOW_QIXI_ACTIVITY && settings.automation.qixi_sachet_gift" class="mt-3 rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">

@@ -28,6 +28,16 @@ export interface AutomationConfig {
   charity_flower_donate?: boolean
   charity_flower_reward_claim?: boolean
   charity_flower_public_fund_claim?: boolean
+  pet_diary_adopt?: boolean
+  pet_diary_feed?: boolean
+  pet_diary_draw?: boolean
+  pet_diary_story_claim?: boolean
+  pet_diary_seed_claim?: boolean
+  pet_diary_solar_claim?: boolean
+  pet_diary_treasure_open?: boolean
+  pet_diary_compensation_claim?: boolean
+  pet_diary_charm_equip?: boolean
+  pet_diary_battle?: boolean
   sell?: boolean
   fertilizer_gift?: boolean
   fertilizer_buy_organic?: boolean

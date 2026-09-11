@@ -271,6 +271,17 @@ const DEFAULT_AUTOMATION = {
     charity_flower_donate: false,
     charity_flower_reward_claim: false,
     charity_flower_public_fund_claim: false,
+    // 萌宠成长日记（S3）
+    pet_diary_adopt: false,
+    pet_diary_feed: false,
+    pet_diary_draw: false,
+    pet_diary_story_claim: false,
+    pet_diary_seed_claim: false,
+    pet_diary_solar_claim: false,
+    pet_diary_treasure_open: false,
+    pet_diary_compensation_claim: false,
+    pet_diary_charm_equip: false,
+    pet_diary_battle: false,
     fertilizer_gift: false,
     fertilizer_buy_organic: false,
     fertilizer_buy_normal: false,
@@ -313,6 +324,18 @@ const RAIN_POEM_AUTOMATION_KEYS = [
     'rain_poem_prank_use',
     'rain_poem_research_unlock'
 ];
+const PET_DIARY_AUTOMATION_KEYS = [
+    'pet_diary_adopt',
+    'pet_diary_feed',
+    'pet_diary_draw',
+    'pet_diary_story_claim',
+    'pet_diary_seed_claim',
+    'pet_diary_solar_claim',
+    'pet_diary_treasure_open',
+    'pet_diary_compensation_claim',
+    'pet_diary_battle',
+    'pet_diary_charm_equip'
+];
 
 const TIMED_ACTIVITY_AUTOMATION_GROUPS = [
     {
@@ -324,6 +347,11 @@ const TIMED_ACTIVITY_AUTOMATION_GROUPS = [
         startTime: 1787709600,
         endTime: 1788883199,
         keys: RAIN_POEM_AUTOMATION_KEYS
+    },
+    {
+        startTime: 1788192000,
+        endTime: 1790783999,
+        keys: PET_DIARY_AUTOMATION_KEYS
     }
 ];
 

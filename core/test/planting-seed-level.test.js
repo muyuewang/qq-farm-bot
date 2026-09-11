@@ -20,15 +20,13 @@ test('other seed levels retain their exact unlock boundary', () => {
   }
 });
 
-test('configured level-200 seeds stay plantable while lower levels still lock', () => {
+test('bubble cotton candy keeps level 200 while the level 31 pumpkin remains locked', () => {
   const seeds = getAllSeeds();
-  const level200 = seeds.find(seed => Number(seed.requiredLevel) === 200);
-  assert.ok(level200, 'expected at least one configured level-200 seed');
-  assert.equal(isSeedLockedByLevel(level200, 1), false);
-
-  const pumpkin = seeds.find(seed => Number(seed.seedId) === 29998 || Number(seed.requiredLevel) === 31);
-  if (pumpkin) {
-    assert.equal(isSeedLockedByLevel(pumpkin, Number(pumpkin.requiredLevel) - 1), true);
-    assert.equal(isSeedLockedByLevel(pumpkin, Number(pumpkin.requiredLevel)), false);
-  }
+  const bubble = seeds.find(seed => seed.seedId === 29004);
+  assert.equal(bubble.requiredLevel, 200);
+  assert.equal(isSeedLockedByLevel(bubble, 1), false);
+  const pumpkin = seeds.find(seed => seed.seedId === 29998);
+  assert.equal(pumpkin.requiredLevel, 31);
+  assert.equal(isSeedLockedByLevel(pumpkin, 30), true);
+  assert.equal(isSeedLockedByLevel(pumpkin, 31), false);
 });
