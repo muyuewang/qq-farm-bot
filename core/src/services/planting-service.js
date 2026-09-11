@@ -8,6 +8,7 @@ const {
   syncBagSeedPriority,
   getBagSeedFallbackStrategy,
   getPrioritize2x2Crops,
+  getAuto2x2SyncBuy,
   getPlantSeedPriority,
 } = require('../models/store');
 const { getPlantRankings } = require('./analytics');
@@ -26,6 +27,11 @@ const TWO_BY_TWO_RETRY_DELAY_MS = 30_000;
 // 同一批种下的普通作物会因请求间隔产生少量成熟时间偏差。
 // 这类偏差不应让 2x2 预留区向后排漂移；一分钟内视为同时清空。
 const TWO_BY_TWO_CLEAR_TIME_TOLERANCE_SEC = 60;
+// 填格同步：空格等待过短时不种，过长时仍种短周期作物压住闲置
+const TWO_BY_TWO_SYNC_MIN_WAIT_SEC = 90;
+const TWO_BY_TWO_SYNC_MAX_WAIT_SEC = 12 * 3600;
+const TWO_BY_TWO_SYNC_BUY_DAILY_LIMIT = 30;
+const twoByTwoSyncBuyCountByAccount = new Map();
 
 // ─── 种植策略标签 ───
 
@@ -172,6 +178,191 @@ function getEstimatedLandClearAt(land, emptySet) {
   const growSeconds = Math.max(0, toNum(getPlantGrowTime(toNum(plant.id))));
 
   return Math.max(getServerTimeSec(), matureAt) + remainingSeasons * growSeconds;
+}
+
+function getSeedGrowSeconds(seedId) {
+  const grow = Number(getPlantGrowTime(toNum(seedId)));
+  return Number.isFinite(grow) && grow > 0 ? grow : 0;
+}
+
+function pickSyncFillSeed(targetRemainSec, bagSeeds, shopCandidates) {
+  const bag = (bagSeeds || [])
+    .filter(seed => Number(seed?.count) > 0 && Number(seed?.plantSize) === 1)
+    .map(seed => ({ ...seed, growSec: getSeedGrowSeconds(seed.seedId), source: 'bag' }))
+    .filter(seed => seed.growSec > 0 && seed.growSec <= targetRemainSec)
+    .sort((a, b) => b.growSec - a.growSec || a.price - b.price);
+  if (bag.length > 0) return bag[0];
+
+  const shop = (shopCandidates || [])
+    .filter(seed => seed.growSec > 0 && seed.growSec <= targetRemainSec)
+    .sort((a, b) => b.growSec - a.growSec || a.price - b.price);
+  return shop[0] || null;
+}
+
+async function getSyncFillShopCandidates(userLevel) {
+  const seedShopId = await getSeedShopId();
+  let shopInfo;
+  try {
+    shopInfo = await getShopInfo(seedShopId);
+  } catch {
+    return [];
+  }
+  const goodsList = Array.isArray(shopInfo?.goods_list) ? shopInfo.goods_list : [];
+  const now = getServerTimeSec();
+  const candidates = [];
+  for (const goods of goodsList) {
+    if (!goods?.unlocked) continue;
+    const seedId = toNum(goods.item_id);
+    if (seedId <= 0 || getPlantSizeBySeedId(seedId) !== 1) continue;
+    let requiredLevel = 0;
+    let locked = false;
+    for (const cond of (goods.conds || [])) {
+      if (toNum(cond.type) === 1) {
+        requiredLevel = toNum(cond.param);
+        if (userLevel < requiredLevel) {
+          locked = true;
+          break;
+        }
+      }
+    }
+    if (locked) continue;
+    const limitCount = toNum(goods.limit_count);
+    const boughtNum = toNum(goods.bought_num);
+    if (limitCount > 0 && boughtNum >= limitCount) continue;
+    const price = toNum(goods.price);
+    if (price <= 0) continue;
+    const growSec = getSeedGrowSeconds(seedId);
+    if (growSec <= 0) continue;
+    candidates.push({
+      source: 'shop',
+      seedId,
+      goodsId: toNum(goods.id),
+      name: getPlantNameBySeedId(seedId),
+      price,
+      requiredLevel,
+      growSec,
+      checkedAt: now,
+    });
+  }
+  return candidates;
+}
+
+function getTwoByTwoSyncBuyBudget(accountId, userGold) {
+  const key = String(accountId || 'default');
+  const used = twoByTwoSyncBuyCountByAccount.get(key) || 0;
+  const remaining = Math.max(0, TWO_BY_TWO_SYNC_BUY_DAILY_LIMIT - used);
+  return { key, used, remaining };
+}
+
+function markTwoByTwoSyncBuy(accountId, count = 1) {
+  const key = String(accountId || 'default');
+  twoByTwoSyncBuyCountByAccount.set(key, (twoByTwoSyncBuyCountByAccount.get(key) || 0) + Math.max(1, count));
+}
+
+/**
+ * 预留 2x2 里已有空格时：用短周期 1x1 填格，压住闲置。
+ * 背包没有合适时长时，若开启 auto2x2SyncBuy 则自动购买。
+ */
+async function fillWaiting2x2Lands({ reservations, readyKeys, emptySet, lands, userState, accountId, allowBuy }) {
+  const waitingGroups = (reservations || []).filter(group => !readyKeys.has(group.key));
+  if (waitingGroups.length === 0) return;
+
+  const landMap = buildLandMap(lands);
+  const nowSec = getServerTimeSec();
+  const userLevel = Number(userState?.level) || 0;
+  let bagSeeds = [];
+  try {
+    bagSeeds = await getBagSeeds();
+  } catch {
+    bagSeeds = [];
+  }
+  let shopCandidates = [];
+  if (allowBuy) {
+    shopCandidates = await getSyncFillShopCandidates(userLevel);
+  }
+
+  for (const group of waitingGroups) {
+    const emptyLands = group.landIds.filter(id => emptySet.has(id));
+    const occupiedLands = group.landIds.filter(id => !emptySet.has(id));
+    if (emptyLands.length === 0 || occupiedLands.length === 0) continue;
+
+    let clearAt = 0;
+    for (const landId of occupiedLands) {
+      const estimated = getEstimatedLandClearAt(landMap.get(landId), emptySet);
+      if (estimated > clearAt) clearAt = estimated;
+    }
+    if (!clearAt || clearAt === Number.MAX_SAFE_INTEGER) continue;
+    const remainSec = clearAt - nowSec;
+    if (remainSec < TWO_BY_TWO_SYNC_MIN_WAIT_SEC || remainSec > TWO_BY_TWO_SYNC_MAX_WAIT_SEC) continue;
+
+    const budget = getTwoByTwoSyncBuyBudget(accountId);
+    for (const landId of emptyLands) {
+      if (!emptySet.has(landId)) continue;
+      const remainForLand = Math.max(0, clearAt - getServerTimeSec());
+      if (remainForLand < TWO_BY_TWO_SYNC_MIN_WAIT_SEC) break;
+
+      let seed = pickSyncFillSeed(remainForLand, bagSeeds, allowBuy ? shopCandidates : []);
+      if (!seed) continue;
+
+      if (seed.source === 'shop') {
+        if (!allowBuy || budget.remaining <= 0) continue;
+        if (Number(seed.price) > Number(userState?.gold || 0)) continue;
+        try {
+          await buyGoods(seed.goodsId, 1, seed.price);
+          userState.gold = Math.max(0, Number(userState.gold || 0) - Number(seed.price));
+          markTwoByTwoSyncBuy(accountId, 1);
+          budget.remaining -= 1;
+          log('购买', `为 2x2 同步购买 ${seed.name || seed.seedId}种子，花费 ${seed.price} 金币`, {
+            module: 'farm',
+            event: '2x2同步买种',
+            result: 'ok',
+            seedId: seed.seedId,
+            goodsId: seed.goodsId,
+            price: seed.price,
+            landId,
+            remainSec: remainForLand,
+          });
+        } catch (err) {
+          logWarn('购买', `2x2 同步买种失败: ${err.message}`, {
+            module: 'farm',
+            event: '2x2同步买种',
+            result: 'error',
+            seedId: seed.seedId,
+            landId,
+          });
+          continue;
+        }
+      } else {
+        seed.count = Math.max(0, Number(seed.count || 0) - 1);
+      }
+
+      try {
+        const planted = await plantSeeds(seed.seedId, [landId], { maxPlantCount: 1 });
+        if (planted?.planted > 0) {
+          emptySet.delete(landId);
+          log('种植', `2x2 同步填格 ${seed.name || seed.seedId} → 地块#${landId}，约 ${formatGrowTime(seed.growSec)} 成熟（目标 ${formatGrowTime(remainForLand)}）`, {
+            module: 'farm',
+            event: '2x2同步填格',
+            result: 'ok',
+            seedId: seed.seedId,
+            landId,
+            growSec: seed.growSec,
+            remainSec: remainForLand,
+            source: seed.source,
+          });
+        }
+      } catch (err) {
+        logWarn('种植', `2x2 同步填格失败: ${err.message}`, {
+          module: 'farm',
+          event: '2x2同步填格',
+          result: 'error',
+          seedId: seed.seedId,
+          landId,
+        });
+      }
+      await sleep(200, 350);
+    }
+  }
 }
 
 /** 优先选择已完全空闲的组合，并且最多保留一个仍在等待清空的组合。 */
@@ -401,6 +592,19 @@ async function plantPrioritized2x2Crops(emptyLandIds, lands, accountId) {
       }
     }
     await sleep(200, 400);
+  }
+
+  // L3：预留区有空格时，用短周期 1x1 填格（可自动买种），减少闲置
+  if (getAuto2x2SyncBuy(accountId)) {
+    await fillWaiting2x2Lands({
+      reservations,
+      readyKeys: new Set(readyGroups.map(group => group.key)),
+      emptySet,
+      lands,
+      userState,
+      accountId,
+      allowBuy: true,
+    });
   }
 
   if (reservations.length > readyGroups.length) {

@@ -13,6 +13,7 @@ interface SelectOption<T = string | number> {
 interface StrategySettings {
   plantingStrategy: string
   prioritize2x2Crops: boolean
+  auto2x2SyncBuy: boolean
   bagSeedPriority: number[]
   plantSeedPriority: number[]
   bagSeedFallbackStrategy: string

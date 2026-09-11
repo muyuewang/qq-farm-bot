@@ -90,6 +90,7 @@ function summaryTags(key: ModuleKey) {
       props.strategyPreviewLabel || '等待选种',
       automation.value.automation.sell ? '卖果实' : '不卖果实',
       strategy.value.prioritize2x2Crops ? '优先 2x2' : '常规占地',
+      strategy.value.auto2x2SyncBuy ? '2×2同步买种' : '不买种填格',
       `巡田 ${intervalTag(strategy.value.intervals.farmMin, strategy.value.intervals.farmMax)}`,
     ]
   }
@@ -365,11 +366,15 @@ watch(() => props.currentAccountId, loadQixiFriends)
                 </div>
                 <div class="grid gap-3 sm:grid-cols-2">
                   <BaseSwitch v-model="strategy.prioritize2x2Crops" label="优先种植 2×2 作物" />
+                  <BaseSwitch v-model="strategy.auto2x2SyncBuy" label="2×2 同步填格（可自动买种）" />
                   <BaseSwitch v-model="automation.automation.sell" label="卖果实" />
                   <BaseSwitch v-model="automation.automation.golden_bug_clear" label="祛除黄金虫" />
                   <BaseSwitch v-model="automation.automation.farm_push" label="推送触发巡田" />
                   <BaseSwitch v-model="automation.automation.skip_own_weed_bug" label="保留自己农场的草虫" />
                 </div>
+                <p v-if="strategy.auto2x2SyncBuy" class="text-xs text-amber-600 dark:text-amber-400">
+                  预留 2×2 区有空格时，会种生长时长最接近「该区最晚成熟时间」的 1×1 作物；背包没有合适的会自动购买（每日最多 30 次，仅用金币）。
+                </p>
               </section>
 
               <section class="border border-gray-100 rounded-lg p-4 dark:border-gray-700">

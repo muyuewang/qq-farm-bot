@@ -37,6 +37,7 @@ export function useStrategySettings({
   const localStrategySettings = ref({
     plantingStrategy: 'max_exp',
     prioritize2x2Crops: false,
+    auto2x2SyncBuy: false,
     bagSeedPriority: [] as number[],
     bagSeedKnownIds: [] as number[],
     bagSeedFallbackStrategy: 'level',
@@ -140,6 +141,7 @@ export function useStrategySettings({
       localStrategySettings.value = JSON.parse(JSON.stringify({
         plantingStrategy: settings.value.plantingStrategy,
         prioritize2x2Crops: settings.value.prioritize2x2Crops === true,
+        auto2x2SyncBuy: settings.value.auto2x2SyncBuy === true,
         bagSeedPriority: settings.value.bagSeedPriority ?? [],
         bagSeedKnownIds: settings.value.bagSeedKnownIds ?? [],
         bagSeedFallbackStrategy: settings.value.bagSeedFallbackStrategy ?? 'level',

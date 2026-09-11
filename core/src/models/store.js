@@ -417,6 +417,7 @@ const DEFAULT_ACCOUNT_CONFIG = {
     },
     plantingStrategy: 'max_exp',
     prioritize2x2Crops: false,
+    auto2x2SyncBuy: false,
     friendBadRetryDate: '',
     intervals: DEFAULT_INTERVALS,
     friendQuietHours: DEFAULT_QUIET_HOURS,
@@ -662,6 +663,7 @@ function cloneAccountConfig(config = DEFAULT_ACCOUNT_CONFIG) {
         plantingStrategy: ALLOWED_PLANTING_STRATEGIES.includes(String(config.plantingStrategy || ''))
             ? String(config.plantingStrategy) : DEFAULT_ACCOUNT_CONFIG.plantingStrategy,
         prioritize2x2Crops: config.prioritize2x2Crops === true,
+        auto2x2SyncBuy: config.auto2x2SyncBuy === true,
         plantBlacklist: plantBlacklist.map(Number).filter(n => Number.isFinite(n) && n > 0),
         stealDelaySeconds: Math.max(0, Math.min(60, Number(config.stealDelaySeconds) || 1)),
         fertilizerBuyOrganicCount: Math.max(0, Math.min(999, Number(config.fertilizerBuyOrganicCount) || 1)),
@@ -778,6 +780,9 @@ function normalizeAccountConfig(raw, fallbackConfig = accountFallbackConfig) {
     if (input.prioritize2x2Crops !== undefined && input.prioritize2x2Crops !== null) {
         cfg.prioritize2x2Crops = input.prioritize2x2Crops === true;
     }
+    if (input.auto2x2SyncBuy !== undefined && input.auto2x2SyncBuy !== null) {
+        cfg.auto2x2SyncBuy = input.auto2x2SyncBuy === true;
+    }
     cfg.friendBadRetryDate = /^\d{4}-\d{2}-\d{2}$/.test(String(input.friendBadRetryDate || ''))
         ? String(input.friendBadRetryDate) : '';
 
@@ -877,6 +882,7 @@ function pickDefaultPlanConfig(raw) {
         autoCodeRefresh: { ...cfg.autoCodeRefresh },
         plantingStrategy: cfg.plantingStrategy,
         prioritize2x2Crops: cfg.prioritize2x2Crops === true,
+        auto2x2SyncBuy: cfg.auto2x2SyncBuy === true,
         intervals: { ...cfg.intervals },
         friendQuietHours: { ...cfg.friendQuietHours },
         stealDelaySeconds: cfg.stealDelaySeconds,
@@ -1211,6 +1217,7 @@ function getConfigSnapshot(accountId) {
         autoCodeRefresh: { ...cfg.autoCodeRefresh },
         plantingStrategy: cfg.plantingStrategy,
         prioritize2x2Crops: cfg.prioritize2x2Crops === true,
+        auto2x2SyncBuy: cfg.auto2x2SyncBuy === true,
         friendBadRetryDate: String(cfg.friendBadRetryDate || ''),
         intervals: { ...cfg.intervals },
         friendQuietHours: { ...cfg.friendQuietHours },
@@ -1269,6 +1276,9 @@ function applyConfigSnapshot(patch = {}, opts = {}) {
     }
     if (patch.prioritize2x2Crops !== undefined && patch.prioritize2x2Crops !== null) {
         cfg.prioritize2x2Crops = patch.prioritize2x2Crops === true;
+    }
+    if (patch.auto2x2SyncBuy !== undefined && patch.auto2x2SyncBuy !== null) {
+        cfg.auto2x2SyncBuy = patch.auto2x2SyncBuy === true;
     }
     if (patch.friendBadRetryDate !== undefined && patch.friendBadRetryDate !== null) {
         const retryDate = String(patch.friendBadRetryDate || '');
@@ -1399,6 +1409,10 @@ function getPlantingStrategy(accountId) {
 
 function getPrioritize2x2Crops(accountId) {
     return getAccountConfigSnapshot(accountId).prioritize2x2Crops === true;
+}
+
+function getAuto2x2SyncBuy(accountId) {
+    return getAccountConfigSnapshot(accountId).auto2x2SyncBuy === true;
 }
 
 function getFriendBadRetryDate(accountId) {
@@ -2008,6 +2022,7 @@ module.exports = {
     isAutomationOn,
     getPlantingStrategy,
     getPrioritize2x2Crops,
+    getAuto2x2SyncBuy,
     getFriendBadRetryDate,
     getBagSeedPriority,
     getPlantSeedPriority,
