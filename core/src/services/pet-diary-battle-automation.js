@@ -20,7 +20,22 @@ function createPetDiaryBattleAutomation({ getPet, getFriends, getFriend, operate
         let battles = 0;
         try {
             let pet = await getPet();
-            if (!ready(pet)) return;
+            if (!ready(pet)) {
+                const bag = pet?.balances || [];
+                const book = bag.filter(item => ['80101', '80102', '80103'].includes(String(item.id))
+                    && Number(item.count) > 0);
+                report('自动夺宝本轮跳过', {
+                    scanned,
+                    battles,
+                    active: pet?.active === true,
+                    canPlunder: pet?.hunt?.canPlunder === true,
+                    battleCount: pet?.battleCount,
+                    battleLimit: pet?.battleLimit,
+                    challengeBooks: book.map(item => `${item.id}x${item.count}`).join(',') || 'none',
+                    inWindow: pet ? now() >= pet.startTime && now() <= pet.endTime : false,
+                });
+                return;
+            }
             const friends = [...new Map((await getFriends()).map(f => [String(f.gid), f])).values()];
             if (!friends.length) {
                 report('好友缓存为空，等待共享好友列表下次刷新', { scanned, battles });

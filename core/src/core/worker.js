@@ -312,7 +312,7 @@ async function runPetDiaryAutomation(flags = {}) {
         try {
             if (typeof ready === 'function' && !ready(pet)) return;
             const result = await operatePetDiary(action, input);
-            pet = result.activity || pet;
+            pet = result.snapshot || result.activity || pet;
             log('活动', `自动${label}完成`, {
                 module: 'activity',
                 event: `萌宠${label}`,
@@ -360,17 +360,8 @@ async function runPetDiaryAutomation(flags = {}) {
         const accountId = process.env.FARM_ACCOUNT_ID || '';
         const blacklist = (getFriendBlacklist(accountId) || []).map(String);
         const runBattles = createPetDiaryBattleAutomation({
-            getPet: async () => {
-                const activity = await getPetDiary();
-                return {
-                    ...activity,
-                    balances: (activity.balances || []).map(item => ({
-                        id: String(item.itemId ?? item.id),
-                        count: item.count,
-                        known: true,
-                    })),
-                };
-            },
+            // 上游 balances 用 itemDto 的 id；battle 模块按 String(item.id) 识别挑战书
+            getPet: () => getPetDiary(),
             getFriends: () => getFriendsList(),
             getFriend: gid => getPetDiaryFriend(gid),
             operate: async (action, params) => {
