@@ -950,6 +950,7 @@ function claimCardByUA(ua, username = null) {
     const selectedCard = normalizeCardForResponse(availableCards[randomIdx]);
 
     // 记录领取
+    // 注意：此处不能把 usedBy 标成已用，否则注册接口会判定「卡密已被使用」
     const uaHash = crypto.createHash('sha256').update(ua).digest('hex');
     cardClaimRecords.push({
         uaHash,

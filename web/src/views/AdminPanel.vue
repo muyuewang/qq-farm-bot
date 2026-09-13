@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { AdminTabKey } from '@/components/admin/AdminPanelTabs.vue'
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '@/api'
 import AdminAlertModal from '@/components/admin/AdminAlertModal.vue'
 import AdminCardConfirmModals from '@/components/admin/AdminCardConfirmModals.vue'
@@ -27,9 +28,12 @@ import { useToastStore } from '@/stores/toast'
 const toast = useToastStore()
 
 const savedAdminTab = localStorage.getItem('admin-active-tab')
-const activeTab = ref<AdminTabKey>(['card', 'user', 'log', 'system'].includes(savedAdminTab || '')
-  ? savedAdminTab as AdminTabKey
-  : 'card')
+const routeQueryTab = String((useRoute().query?.tab) || '')
+const activeTab = ref<AdminTabKey>(['card', 'user', 'log', 'system'].includes(routeQueryTab)
+  ? routeQueryTab as AdminTabKey
+  : ['card', 'user', 'log', 'system'].includes(savedAdminTab || '')
+    ? savedAdminTab as AdminTabKey
+    : 'card')
 
 watch(activeTab, (newTab) => {
   localStorage.setItem('admin-active-tab', newTab)
@@ -58,6 +62,43 @@ function showAlert(message: string, type: 'primary' | 'danger' = 'primary') {
     isAlert: true,
   }
   modalVisible.value = true
+}
+
+const announcementContent = ref('')
+const announcementShowOnce = ref(true)
+const announcementSaving = ref(false)
+
+async function loadAnnouncement() {
+  try {
+    const { data } = await api.get('/api/admin/announcement')
+    if (data.ok && data.data) {
+      announcementContent.value = data.data.content || ''
+      announcementShowOnce.value = data.data.showOnce !== false
+    }
+  }
+  catch { /* ignore */ }
+}
+
+async function saveAnnouncement() {
+  if (announcementSaving.value)
+    return
+  announcementSaving.value = true
+  try {
+    const { data } = await api.post('/api/admin/announcement', {
+      content: announcementContent.value,
+      showOnce: announcementShowOnce.value,
+    })
+    if (data.ok)
+      showAlert('公告已保存')
+    else
+      showAlert(data.error || '公告保存失败', 'danger')
+  }
+  catch (error: any) {
+    showAlert(error?.response?.data?.error || error?.message || '公告保存失败', 'danger')
+  }
+  finally {
+    announcementSaving.value = false
+  }
 }
 
 const {
@@ -286,6 +327,7 @@ onMounted(() => {
   loadSystemConfig()
   loadCaptureConfig()
   fetchDeviceProtocol()
+  loadAnnouncement()
 })
 </script>
 
@@ -381,13 +423,35 @@ onMounted(() => {
               系统配置
             </h3>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              统一管理连接参数、设备协议和抓包服务。
+              统一管理连接参数、设备协议、抓包服务和系统公告。
             </p>
           </div>
           <BaseButton size="sm" :loading="anySystemSaving" @click="saveSystemSettings">
             保存系统配置
           </BaseButton>
         </div>
+
+        <section class="border border-gray-200 rounded-xl bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div class="mb-3">
+            <h4 class="text-base text-gray-900 font-semibold dark:text-gray-100">系统公告</h4>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">保存后登录页和面板会弹出公告；开启「仅显示一次」时用户点过「我知道了」就不再弹。</p>
+          </div>
+          <textarea
+            v-model="announcementContent"
+            rows="4"
+            class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+            placeholder="输入公告内容，留空表示关闭公告"
+          />
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <input v-model="announcementShowOnce" type="checkbox">
+              仅显示一次
+            </label>
+            <BaseButton size="sm" variant="primary" :loading="announcementSaving" @click="saveAnnouncement">
+              保存公告
+            </BaseButton>
+          </div>
+        </section>
 
         <AdminSystemPanel
           v-model:local-system-config="localSystemConfig"

@@ -1786,9 +1786,10 @@ function markAnnouncementRead(username) {
 function shouldShowAnnouncement(username) {
     const announcement = getAnnouncement();
     if (!announcement.content) return false;
-    if (!username) return false;
+    // 未登录访客用 guest 记录，避免公告永远不显示
+    const user = username || 'guest';
     if (!announcement.showOnce) return true;
-    return getAnnouncementReadRecord(username) < announcement.updatedAt;
+    return getAnnouncementReadRecord(user) < announcement.updatedAt;
 }
 
 function getSuperAdminAnnouncement() {

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
+import AnnouncementPopup from '@/components/AnnouncementPopup.vue'
 import LoginModals from '@/components/login/LoginModals.vue'
 import PasswordStrengthMeter from '@/components/login/PasswordStrengthMeter.vue'
 import UpdateLogModal from '@/components/login/UpdateLogModal.vue'
@@ -658,6 +659,7 @@ async function fetchGameVersion() {
     />
 
     <UpdateLogModal :show="showUpdateLog" @close="showUpdateLog = false" />
+    <AnnouncementPopup />
   </div>
 </template>
 

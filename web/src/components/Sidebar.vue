@@ -179,7 +179,7 @@ const showThemeDropdown = ref(false)
 const showUserPanel = ref(false)
 
 function navigateToSystemSettings() {
-  router.push('/settings?tab=system')
+  router.push('/admin?tab=system')
   if (window.innerWidth < 1024)
     appStore.closeSidebar()
 }
